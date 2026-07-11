@@ -1,0 +1,82 @@
+---
+title: Custom Providers
+---
+
+# Custom Providers
+
+A module's `providers=[...]` list accepts more than a plain `@Injectable()`
+class — the same `useValue`/`useClass`/`useFactory` shapes Nest's custom
+providers support, expressed as plain dicts (Austial has no decorators-only
+metaprogramming trick for this, so a dict with a `"provide"` key is the
+literal provider definition).
+
+## Value providers — `useValue`
+
+Bind a token to a fixed, already-constructed value — handy for constants,
+mocks, or third-party client instances:
+
+```python
+providers=[
+    {"provide": "API_KEY", "useValue": "super-secret"},
+]
+```
+
+```python
+from austial import Inject
+
+
+@Injectable()
+class ExternalApiService:
+    def __init__(self, api_key: str = Inject("API_KEY")):
+        self._api_key = api_key
+```
+
+## Class providers — `useClass`
+
+Bind a token to a class the container should instantiate (resolving *its*
+constructor dependencies as usual) — useful for swapping implementations
+per environment:
+
+```python
+providers=[
+    {"provide": CacheService, "useClass": RedisCacheService},
+]
+```
+
+Any consumer that type-hints `CacheService` receives a `RedisCacheService`
+instance instead.
+
+## Factory providers — `useFactory`
+
+Bind a token to the return value of a function, optionally with its own
+injected dependencies via `inject=[...]`:
+
+```python
+providers=[
+    {
+        "provide": "DATABASE_URL",
+        "useFactory": lambda config: config.get("DATABASE_URL", "sqlite+aiosqlite:///./app.db"),
+        "inject": [ConfigService],
+    },
+]
+```
+
+The factory function is called with each of `inject`'s tokens resolved and
+passed positionally, in order — this is exactly how
+`DatabaseModule.for_root_async(use_factory=, inject=)` and
+`ConfigModule.for_root()` build their own providers under the hood (see
+[Dynamic Modules](/fundamentals/dynamic-modules) and
+[Database](/techniques/database)).
+
+## Non-class tokens
+
+Any hashable value works as a `"provide"` token — a string (as above), or
+a dedicated sentinel constant, exactly like Nest's `InjectionToken`-less
+string/symbol tokens:
+
+```python
+DATABASE_ENGINE = "DATABASE_ENGINE"
+DATABASE_SESSION_FACTORY = "DATABASE_SESSION_FACTORY"
+```
+
+is precisely the pattern `austial.database` uses internally.

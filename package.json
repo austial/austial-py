@@ -1,0 +1,28 @@
+{
+  "name": "austial-py-doc",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Documentation site for Austial -- a NestJS-style web framework for Python built on FastAPI.",
+  "scripts": {
+    "dev": "next",
+    "build": "next build --webpack",
+    "postbuild": "pagefind --site .next/server/app --output-path public/_pagefind",
+    "start": "next start",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "next": "16.2.10",
+    "nextra": "^4.6.1",
+    "nextra-theme-docs": "^4.6.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "pagefind": "^1.3.0"
+  },
+  "overrides": {
+    "zod": "4.3.6"
+  }
+}

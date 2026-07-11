@@ -1,0 +1,85 @@
+---
+title: Pipes
+---
+
+# Pipes
+
+A pipe transforms or validates input data before it reaches a route handler
+— the same two use cases Nest pipes cover.
+
+## The `PipeTransform` interface
+
+```python
+from austial.common.pipes import ArgumentMetadata, PipeTransform
+
+
+class ParseIntPipe(PipeTransform):
+    def transform(self, value, metadata: ArgumentMetadata):
+        try:
+            return int(value)
+        except (TypeError, ValueError) as exc:
+            raise BadRequestException(f"{metadata.data} must be an integer") from exc
+```
+
+`ArgumentMetadata` mirrors Nest's:
+
+```python
+@dataclass
+class ArgumentMetadata:
+    type: Literal["body", "query", "param", "custom"]
+    data: str | None       # the parameter name
+    metatype: type | None  # the parameter's runtime type
+```
+
+## The built-in `ValidationPipe`
+
+```python
+from austial.common.pipes import ValidationPipe
+
+app.use_global_pipes(ValidationPipe())
+```
+
+`ValidationPipe` re-validates pydantic-model values (already parsed by
+FastAPI against your type hints) and, on failure, raises a
+`BadRequestException` shaped as:
+
+```json
+{
+  "statusCode": 400,
+  "message": ["field required: name"],
+  "error": "Bad Request"
+}
+```
+
+Since FastAPI already parses and type-checks request bodies against your
+pydantic `BaseModel` DTOs before your handler runs, `ValidationPipe`'s main
+job is normalizing *how* a validation failure is reported — into the same
+Nest-shaped error body every other exception produces, rather than
+FastAPI's native `422` shape.
+
+Every project scaffolded by `austial new` registers it globally in
+`src/main.py` by default.
+
+## Applying pipes
+
+Globally (as above), or scoped to a controller/handler with `@UsePipes`:
+
+```python
+from austial import UsePipes
+
+
+@Post()
+@UsePipes(ValidationPipe())
+async def create(self, dto: CreateCatDto = Body()) -> Cat:
+    ...
+```
+
+## Pipeline position
+
+```
+guards -> pipes -> interceptors (wrapping) -> handler -> exception filters
+```
+
+Pipes run after guards have authorized the request, but before interceptors
+wrap the handler call — so a pipe can reject a request (by raising) before
+any interceptor logic (like response transformation or timing) ever runs.

@@ -1,0 +1,75 @@
+---
+title: Dynamic Modules
+---
+
+# Dynamic Modules
+
+A dynamic module is a module whose metadata (`imports`/`controllers`/
+`providers`/`exports`) is computed at runtime by a factory method instead of
+being fixed at decoration time — Austial's equivalent of Nest's
+`Module.forRoot()`/`forRootAsync()` convention. `ConfigModule.for_root()`
+and `DatabaseModule.for_root_async()` are both built this way.
+
+## Writing a dynamic module
+
+```python
+from austial.core.dynamic_module import DynamicModule
+
+
+class CacheModule:
+    @staticmethod
+    def for_root(*, ttl_seconds: int = 60) -> DynamicModule:
+        return DynamicModule(
+            module=CacheModule,
+            providers=[
+                {"provide": "CACHE_TTL", "useValue": ttl_seconds},
+                CacheService,
+            ],
+            exports=[CacheService],
+        )
+```
+
+```python
+@Module(imports=[CacheModule.for_root(ttl_seconds=300)])
+class AppModule:
+    pass
+```
+
+`DynamicModule` is a plain dataclass with the same shape as `@Module`'s
+metadata (`module`, `imports`, `controllers`, `providers`, `exports`) --
+the module scanner treats a `DynamicModule` instance in an `imports=[...]`
+list exactly like a decorated module class, registering its
+`controllers`/`providers` and recursing into its own `imports`.
+
+## Real examples in the framework
+
+```python
+@Module()
+class ConfigModule:
+    @staticmethod
+    def for_root(env_file: str = ".env", *, is_global: bool = True) -> DynamicModule:
+        ...
+```
+
+```python
+@Module()
+class DatabaseModule:
+    @staticmethod
+    def for_root_async(*, use_factory, inject=()) -> DynamicModule:
+        ...
+```
+
+See [Configuration](/techniques/configuration) and
+[Database](/techniques/database) for what each of these actually
+provisions.
+
+## Async dynamic modules
+
+There's no separate `forRootAsync` mechanism to learn beyond what
+[factory providers](/fundamentals/custom-providers) already give you --
+`DatabaseModule.for_root_async(use_factory=, inject=)` builds its engine
+lazily via a `useFactory` provider under the hood, resolved the first time
+something actually depends on the database engine/session-factory tokens.
+There's no meaningful difference between a "sync" and "async" dynamic
+module in Austial beyond whether the values you're providing need other
+injected dependencies to compute.

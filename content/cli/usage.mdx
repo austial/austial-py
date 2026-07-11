@@ -1,0 +1,85 @@
+---
+title: Usage
+---
+
+# CLI Usage
+
+## `austial new`
+
+```bash
+austial new <name> [--directory/-d PATH] [--skip-install] [--skip-git] [--link PATH]
+```
+
+| Flag | Effect |
+|---|---|
+| `--directory`, `-d` | Scaffold into a specific path instead of `./<name>` |
+| `--skip-install` | Don't run `uv sync` after scaffolding |
+| `--skip-git` | Don't run `git init` after scaffolding |
+| `--link PATH` | Add an editable `[tool.uv.sources]` entry pointing `austial` at a local framework checkout, instead of resolving it from PyPI |
+
+```bash
+austial new my-app
+```
+
+generates a full project (see [First Steps](/first-steps) for the
+resulting file tree), then — unless skipped — runs `git init -q` and
+`uv sync`.
+
+Use `--link` when you're developing the framework itself and want a
+throwaway project that resolves `austial` from your local clone instead of
+the published package:
+
+```bash
+git clone https://github.com/austial/austial-py
+cd austial-py && uv sync
+uv run austial new ../my-app --link .
+```
+
+This writes into the generated `pyproject.toml`:
+
+```toml
+[tool.uv.sources]
+austial = { path = "/path/to/austial-py", editable = true }
+```
+
+so `uv sync` inside `my-app` resolves `austial` from your checkout instead
+of PyPI — edits to the framework are picked up immediately without
+reinstalling.
+
+## `austial generate` / `austial g`
+
+```bash
+austial generate <module|controller|service|resource> <name>
+austial g <module|controller|service|resource> <name>       # short alias
+```
+
+```bash
+austial generate module cats        # src/modules/cats/cats_module.py
+austial generate controller cats    # src/modules/cats/cats_controller.py
+austial generate service cats       # src/modules/cats/cats_service.py
+austial generate resource cats      # full CRUD module
+austial g resource cats             # same, short alias
+```
+
+Must be run from inside an existing project (or a subdirectory of one) --
+the CLI walks up looking for `src/app_module.py` to find the project root,
+raising an error if none is found. See
+[Generating Resources](/cli/generating) for what each schematic actually
+writes to disk, including how `resource` patches `app_module.py`
+automatically.
+
+## `austial serve`
+
+```bash
+austial serve [--host 0.0.0.0] [--port 8000] [--reload/--no-reload]
+```
+
+Equivalent to:
+
+```bash
+uv run uvicorn src.main:app --reload
+```
+
+`--reload` is **on by default** (matching `nest start --watch`'s
+always-on-during-development feel) — pass `--no-reload` to disable it for
+a production-like local run.

@@ -1,0 +1,144 @@
+---
+title: Testing
+---
+
+# Testing
+
+`austial.testing` mirrors `@nestjs/testing`'s `Test.createTestingModule` --
+a way to build a real, fully-wired application (real DI, real routing) from
+an ad-hoc set of controllers/providers, without needing your full
+`AppModule` or a running server.
+
+## Unit tests — resolving a provider directly
+
+```python
+import pytest
+
+from austial.testing import Test
+
+from .cats_module import CatsModule
+from .cats_service import CatsService
+
+
+@pytest.mark.asyncio
+async def test_creates_and_lists_cats():
+    module = await Test.create_testing_module(imports=[CatsModule]).compile()
+    service = module.get(CatsService)
+
+    service.create(CreateCatDto(name="Whiskers"))
+
+    assert len(service.find_all()) == 1
+```
+
+`Test.create_testing_module(imports=, controllers=, providers=)` synthesizes
+an anonymous root module from whatever you pass, scans it into a fresh DI
+container, and `.compile()`s it into a `TestingModule`. `module.get(Token)`
+resolves anything registered in that graph — the same singleton-by-default
+behavior as a real running app (resolve the same token twice, get the same
+instance back).
+
+## E2E tests — hitting real HTTP routes
+
+```python
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from austial.testing import Test
+
+from .cats_controller import CatsController
+from .cats_service import CatsService
+
+
+@pytest.mark.asyncio
+async def test_full_request_lifecycle():
+    module = await Test.create_testing_module(
+        controllers=[CatsController], providers=[CatsService]
+    ).compile()
+    app = module.create_austial_application()
+    await app.init()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        create_response = await client.post("/cats", json={"name": "Whiskers"})
+        assert create_response.status_code == 201
+
+        list_response = await client.get("/cats")
+        assert len(list_response.json()) == 1
+```
+
+`module.create_austial_application()` builds a real `AustialApplication`
+(no middleware bindings) around the same `FastAPI` app your production code
+would run through — routing, guards, pipes, interceptors, and exception
+filters all execute exactly as they would in production.
+`await app.init()` builds the routes (idempotent — safe even if you never
+call `listen()`), and `httpx.ASGITransport` lets `AsyncClient` talk to it
+in-process, with **no real network socket** involved.
+
+## Defining throwaway fixtures inline
+
+Because `create_testing_module` accepts any controller/provider classes
+directly, framework-level tests (and your own integration tests) don't need
+a full sample app to exercise the request lifecycle — define a
+`WidgetsController`/`WidgetsService`/`ApiKeyGuard` right in the test file
+if that's all a given test needs:
+
+```python
+from pydantic import BaseModel
+
+from austial import Body, Controller, Get, Injectable, NotFoundException, Post
+from austial.testing import Test
+
+
+class Widget(BaseModel):
+    id: int
+    name: str
+
+
+class CreateWidgetDto(BaseModel):
+    name: str
+
+
+@Injectable()
+class WidgetsService:
+    def __init__(self):
+        self._items: list[Widget] = []
+        self._next_id = 1
+
+    def create(self, dto: CreateWidgetDto) -> Widget:
+        widget = Widget(id=self._next_id, name=dto.name)
+        self._next_id += 1
+        self._items.append(widget)
+        return widget
+
+
+@Controller("widgets")
+class WidgetsController:
+    def __init__(self, service: WidgetsService):
+        self.service = service
+
+    @Post()
+    async def create(self, dto: CreateWidgetDto = Body()) -> Widget:
+        return self.service.create(dto)
+```
+
+## Asserting the Nest-shaped error body
+
+Since [exception filters](/overview/exception-filters) always produce the
+same `statusCode`/`message`/`error`/`timestamp`/`path` shape, testing error
+paths is just JSON assertions:
+
+```python
+response = await client.get("/widgets/999")
+assert response.status_code == 404
+body = response.json()
+assert body["statusCode"] == 404
+assert "timestamp" in body
+assert body["path"] == "/widgets/999"
+```
+
+## Naming convention
+
+Test files use Nest's `*.spec.ts` convention translated to Python:
+`*_spec.py` (e.g. `cats_service_spec.py`, `app_e2e_spec.py`). A project
+scaffolded by `austial new` configures `pytest` to discover this pattern
+automatically via `[tool.pytest.ini_options]` in `pyproject.toml`.

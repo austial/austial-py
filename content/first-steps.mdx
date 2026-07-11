@@ -1,0 +1,153 @@
+---
+title: First Steps
+---
+
+import { Tabs } from "nextra/components";
+
+# First Steps
+
+In this section you'll install the Austial CLI, scaffold a new project, and
+get it running with auto-reload. Austial requires **Python 3.11+** and uses
+[uv](https://github.com/astral-sh/uv) for dependency management, the same
+way a Nest project uses `npm`/`pnpm`.
+
+## Installation
+
+<Tabs items={["uv", "pipx", "pip"]}>
+  <Tabs.Tab>
+    ```bash
+    uv tool install austial
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    pipx install austial
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    pip install austial
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+This installs the `austial` console script — the CLI equivalent of `@nestjs/cli`.
+
+## Scaffolding a new project
+
+```bash
+austial new my-app
+cd my-app
+uv sync
+cp .env.example .env
+uv run austial serve
+```
+
+`austial new` scaffolds a small "hello world" app, running on
+`http://localhost:8000` with auto-reload, exposing:
+
+- `GET /` — a root health-check style greeting
+- `GET /health` — a public Terminus-style health check
+- `GET /health/protected` — the same check, gated behind an `ApiKeyGuard`
+- `/docs` — FastAPI's Swagger UI, free from FastAPI since every route is
+  registered as a real `APIRouter`
+
+## Project structure
+
+```
+my-app/
+├── pyproject.toml          # dependencies=["austial>=..."], dev extras, ruff/mypy config
+├── .env.example             # PORT=8000 / API_KEY=changeme
+├── .pre-commit-config.yaml   # ruff + mypy + pytest hooks, same as this framework's own repo
+├── src/
+│   ├── main.py                # AustialFactory.create(AppModule) -> app.listen(8000)
+│   ├── app_module.py            # root @Module(...): imports, controllers, providers, configure()
+│   ├── app_controller.py         # GET / -> {"message": "Hello from my-app, built with Austial!"}
+│   ├── app_service.py
+│   └── modules/
+│       └── health/
+│           ├── health_module.py
+│           ├── health_controller.py     # GET /health, GET /health/protected
+│           ├── health_service.py         # HealthCheckService + MemoryHealthIndicator
+│           ├── health_dto.py
+│           └── guards/api_key_guard.py    # ApiKeyGuard(CanActivate)
+└── tests/
+    ├── unit/health_service_spec.py
+    └── e2e/app_e2e_spec.py
+```
+
+This is the same one-folder-per-feature layout Nest uses under `src/`,
+just with underscore-suffixed file names instead of dots (see
+[the note on file names](/#a-note-on-file-names)).
+
+## Running the app
+
+```bash
+uv run austial serve
+```
+
+is equivalent to:
+
+```bash
+uv run uvicorn src.main:app --reload
+```
+
+`austial serve` just locates your project root (by walking up for
+`src/app_module.py`), puts it on `sys.path`, and calls
+`uvicorn.run("src.main:app", reload=True)` for you.
+
+## The bootstrap file
+
+Every Austial app boots from `src/main.py`, the direct analogue of Nest's
+`main.ts`:
+
+```python
+from austial import AustialFactory
+from austial.common.exceptions import AllExceptionsFilter
+from austial.common.pipes import ValidationPipe
+
+from .app_module import AppModule
+
+
+def _build():
+    app = AustialFactory.create(AppModule, title="my-app")
+    app.use_global_pipes(ValidationPipe())
+    app.use_global_filters(AllExceptionsFilter())
+    app.enable_cors()
+    return app
+
+
+app = _build()
+
+
+async def bootstrap() -> None:
+    await app.listen(8000)
+```
+
+`AustialFactory.create(AppModule)` walks the `@Module` import graph starting
+at `AppModule`, registers every provider/controller into one DI container,
+wires up any middleware declared via `configure()`, and returns an
+`AustialApplication` -- a thin wrapper around a real `fastapi.FastAPI`
+instance. Because it's ASGI-callable itself (`app(scope, receive, send)`),
+`uvicorn src.main:app` works directly, exactly like a Nest app boots off
+its compiled Express/Fastify instance.
+
+## Developing without installing from PyPI
+
+If you're contributing to the framework itself rather than consuming it,
+point a new project at your local checkout instead:
+
+```bash
+git clone https://github.com/austial/austial-py
+cd austial-py && uv sync
+uv run austial new ../my-app --link .
+```
+
+`--link` adds an editable `[tool.uv.sources]` entry so `uv sync` resolves
+`austial` from your local checkout instead of PyPI.
+
+## Next steps
+
+Continue to [Controllers](/overview/controllers) to see how routing works,
+or jump to the [CLI](/cli/overview) reference to see the full
+`generate`/`g` schematic list.

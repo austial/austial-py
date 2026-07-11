@@ -1,0 +1,54 @@
+---
+title: Circular Dependency
+---
+
+# Circular Dependency
+
+A circular dependency occurs when two providers depend on each other:
+`ServiceA` needs `ServiceB` in its constructor, and `ServiceB` needs
+`ServiceA` in its. Austial's container detects this during resolution
+instead of recursing forever:
+
+```python
+@Injectable()
+class ServiceA:
+    def __init__(self, b: "ServiceB"):
+        self.b = b
+
+
+@Injectable()
+class ServiceB:
+    def __init__(self, a: ServiceA):
+        self.a = a
+```
+
+Resolving either one raises `CircularDependencyError` describing the cycle,
+instead of an unbounded recursion / stack overflow.
+
+## Avoiding it
+
+The same three escape hatches Nest recommends all apply:
+
+1. **Redesign** — a circular dependency is usually a sign two providers
+   should be merged, or that shared logic belongs in a third provider both
+   depend on. This is the preferred fix.
+2. **Lazy resolution via a token** — inject a factory/callable instead of
+   the concrete type directly, deferring resolution until it's actually
+   called rather than at construction time.
+3. **`Optional_()`** — if one side of the relationship is genuinely
+   optional, mark it as such so the container returns `None` instead of
+   raising:
+
+   ```python
+   from austial import Optional_
+
+
+   @Injectable()
+   class ServiceA:
+       def __init__(self, b: "ServiceB" = Optional_()):
+           self.b = b
+   ```
+
+Prefer option 1 whenever possible — circular dependencies between services
+are usually a design smell worth addressing directly rather than working
+around.

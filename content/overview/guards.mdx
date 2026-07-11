@@ -1,0 +1,92 @@
+---
+title: Guards
+---
+
+# Guards
+
+A guard determines whether a given request will be handled by the route
+handler or not, based on certain conditions (permissions, roles, API keys,
+ACLs, ...) — precisely Nest's `CanActivate`.
+
+## The `CanActivate` interface
+
+```python
+from austial import CanActivate, ExecutionContext
+
+
+class ApiKeyGuard(CanActivate):
+    async def can_activate(self, context: ExecutionContext) -> bool:
+        request = context.switch_to_http().get_request()
+        return request.headers.get("x-api-key") == "expected-value"
+```
+
+`ExecutionContext` gives a guard access to the current request and the
+handler/controller about to run:
+
+```python
+class ExecutionContext:
+    def switch_to_http(self) -> "ExecutionContext": ...
+    def get_request(self) -> Request
+    def get_class(self) -> type      # the controller class
+    def get_handler(self) -> Any     # the handler method
+```
+
+If `can_activate` returns a falsy value, Austial short-circuits the
+pipeline and raises `ForbiddenException("Forbidden resource")` — a
+`403`, formatted through the same [exception filter](/overview/exception-filters)
+chain as everything else.
+
+## Applying guards
+
+```python
+from austial import Controller, Get, UseGuards
+
+from .api_key_guard import ApiKeyGuard
+
+
+@Controller("health")
+class HealthController:
+    @Get("protected")
+    @UseGuards(ApiKeyGuard)
+    async def protected(self):
+        return {"status": "ok"}
+```
+
+Stack `@UseGuards` on the controller class to protect every route in it,
+or on a single handler for one route only — guards attached at multiple
+levels combine, same as Nest.
+
+```python
+@Controller("cats")
+@UseGuards(ApiKeyGuard)   # applies to every route below
+class CatsController:
+    ...
+```
+
+## Binding guards outside a controller
+
+`ApiKeyGuard` itself is just an `@Injectable()`-free plain class here, but
+nothing stops it from being a real provider with injected dependencies
+(a `ConfigService` to read the expected key from, for example) — the
+container resolves guard classes the same way it resolves controllers and
+services.
+
+```python
+class ApiKeyGuard(CanActivate):
+    def __init__(self, config: ConfigService):
+        self._expected = config.get("API_KEY", "changeme")
+
+    async def can_activate(self, context: ExecutionContext) -> bool:
+        request = context.switch_to_http().get_request()
+        return request.headers.get("x-api-key") == self._expected
+```
+
+## Pipeline position
+
+```
+guards -> pipes -> interceptors (wrapping) -> handler -> exception filters
+```
+
+Guards run **first** — before any pipe validates input or any interceptor
+wraps the call — so unauthorized requests never reach handler logic (or
+pay the cost of body validation).

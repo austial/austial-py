@@ -1,0 +1,98 @@
+---
+title: Database
+---
+
+# Database
+
+`austial.database` provides an async SQLAlchemy integration analogous to
+`@nestjs/typeorm`'s `TypeOrmModule.forRootAsync()` — a `DatabaseModule`
+dynamic module that provisions an async engine and session factory as
+injectable tokens, defaulting to a local SQLite file so it works with zero
+external setup.
+
+## Setup
+
+Simple, static connection URL:
+
+```python
+from austial import Module
+from austial.database import DatabaseModule
+
+
+@Module(imports=[DatabaseModule.for_root("sqlite+aiosqlite:///./austial.db")])
+class AppModule:
+    pass
+```
+
+Connection URL resolved at runtime from other providers (the common case --
+reading it out of `ConfigService`), mirroring `TypeOrmModule.forRootAsync`:
+
+```python
+from austial.config import ConfigService
+from austial.database import DatabaseModule
+
+
+@Module(
+    imports=[
+        DatabaseModule.for_root_async(
+            use_factory=lambda config: config.get(
+                "DATABASE_URL", "sqlite+aiosqlite:///./austial.db"
+            ),
+            inject=[ConfigService],
+        ),
+    ]
+)
+class AppModule:
+    pass
+```
+
+`use_factory` is called with each of `inject`'s tokens resolved and passed
+positionally, and must return the SQLAlchemy connection URL string. The
+engine itself (`create_async_engine(url, **engine_kwargs)`) is then built
+lazily, the first time anything actually depends on it.
+
+## Injecting a session
+
+`DatabaseModule` exports two string tokens instead of classes (there's no
+single "the" session/engine type to hang a type hint off of), so inject
+them with `Inject(...)`:
+
+```python
+from austial import Inject
+from austial.database import DATABASE_SESSION_FACTORY
+
+
+@Injectable()
+class CatsRepository:
+    def __init__(self, session_factory=Inject(DATABASE_SESSION_FACTORY)):
+        self._session_factory = session_factory
+
+    async def find_all(self):
+        async with self._session_factory() as session:
+            result = await session.execute(select(CatModel))
+            return result.scalars().all()
+```
+
+`DATABASE_SESSION_FACTORY` resolves to an
+`sqlalchemy.ext.asyncio.async_sessionmaker` (`expire_on_commit=False`);
+call it to open a session, same as using SQLAlchemy directly -- Austial
+doesn't wrap or hide the underlying SQLAlchemy APIs, it just wires the
+engine/session-factory lifecycle into the DI container for you.
+
+`DATABASE_ENGINE` is exported too, for anything that needs the raw
+`AsyncEngine` directly (running raw SQL, managing connection-pool settings,
+etc.):
+
+```python
+from austial.database import DATABASE_ENGINE
+```
+
+## Swapping in a real database
+
+Nothing about `DatabaseModule` is SQLite-specific beyond the default URL --
+point `use_factory`/`for_root` at any SQLAlchemy-async-compatible URL
+(Postgres via `asyncpg`, MySQL via `aiomysql`, ...) and everything else
+(session injection, health checks) keeps working unchanged. See
+[Health Checks](/techniques/health-checks) for how
+`DatabaseHealthIndicator` uses this same session factory to verify
+connectivity.

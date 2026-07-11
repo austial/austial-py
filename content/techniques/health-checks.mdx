@@ -1,0 +1,134 @@
+---
+title: Health Checks
+---
+
+# Health Checks (Terminus)
+
+`austial.terminus` is a Terminus-style health-check module (Nest's
+`@nestjs/terminus`) — an aggregator that runs a set of health indicator
+checks in parallel intent and returns a single, consistently-shaped result.
+
+## `HealthCheckService`
+
+```python
+from austial.terminus import HealthCheckService, MemoryHealthIndicator
+
+
+@Injectable()
+class HealthService:
+    def __init__(
+        self,
+        health_check_service: HealthCheckService,
+        memory: MemoryHealthIndicator,
+    ):
+        self.health_check_service = health_check_service
+        self.memory = memory
+
+    async def check(self):
+        return await self.health_check_service.check([
+            lambda: self.memory.check_heap("memory_heap", 300 * 1024 * 1024),
+        ])
+```
+
+```python
+@Controller("health")
+class HealthController:
+    def __init__(self, health_service: HealthService):
+        self.health_service = health_service
+
+    @Get()
+    async def check(self):
+        return await self.health_service.check()
+```
+
+## Response shape
+
+```json
+{
+  "status": "ok",
+  "info": {
+    "memory_heap": { "status": "up" }
+  },
+  "error": {},
+  "details": {
+    "memory_heap": { "status": "up" }
+  }
+}
+```
+
+- `status` is `"ok"` if every indicator passed, `"error"` if any failed.
+- `info` collects passing indicators' results; `error` collects failing
+  ones; `details` always contains the union of both — same four-key shape
+  `@nestjs/terminus` returns.
+
+## Built-in indicators
+
+### `MemoryHealthIndicator`
+
+```python
+async def check_heap(self, key: str, threshold_bytes: int) -> HealthIndicatorResult: ...
+```
+
+Reads process RSS via `resource.getrusage(RUSAGE_SELF).ru_maxrss` and
+raises `HealthCheckError` if it exceeds `threshold_bytes`.
+
+### `DatabaseHealthIndicator`
+
+```python
+from austial.database import DATABASE_SESSION_FACTORY
+from austial.terminus import DatabaseHealthIndicator
+
+
+@Injectable()
+class DatabaseHealthIndicator(HealthIndicator):
+    def __init__(self, session_factory=Inject(DATABASE_SESSION_FACTORY)):
+        self._session_factory = session_factory
+
+    async def ping_check(self, key: str) -> HealthIndicatorResult: ...
+```
+
+Runs `SELECT 1` through the injected session factory (see
+[Database](/techniques/database)) and raises `HealthCheckError` if the
+connection fails — plug it straight into `check([...])` alongside memory:
+
+```python
+result = await self.health_check_service.check([
+    lambda: self.memory.check_heap("memory_heap", 300 * 1024 * 1024),
+    lambda: self.database.ping_check("database"),
+])
+```
+
+## Writing a custom indicator
+
+```python
+from austial.terminus import HealthCheckError, HealthIndicator, HealthIndicatorResult
+
+
+class DiskHealthIndicator(HealthIndicator):
+    async def check_disk(self, key: str, path: str, threshold_percent: float) -> HealthIndicatorResult:
+        usage = shutil.disk_usage(path)
+        used_percent = usage.used / usage.total * 100
+        is_healthy = used_percent < threshold_percent
+        result = self.get_status(key, is_healthy, {"used_percent": round(used_percent, 1)})
+        if not is_healthy:
+            raise HealthCheckError("Disk usage too high", result)
+        return result
+```
+
+`HealthIndicator.get_status(key, is_healthy, data)` builds the
+`{key: {"status": "up" | "down", **data}}` shape both the built-in
+indicators and `HealthCheckService.check()` expect — return it directly
+when healthy, or attach it to a raised `HealthCheckError` when not.
+
+## Guarding a health endpoint
+
+Public health checks are common, but so are gated ones (internal
+dashboards, deploy tooling). Combine with a [guard](/overview/guards) the
+same way `austial new` scaffolds it out of the box:
+
+```python
+@Get("protected")
+@UseGuards(ApiKeyGuard)
+async def protected(self):
+    return await self.health_service.check()
+```

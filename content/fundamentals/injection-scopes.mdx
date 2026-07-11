@@ -1,0 +1,48 @@
+---
+title: Injection Scopes
+---
+
+# Injection Scopes
+
+```python
+from austial import Injectable, Scope
+```
+
+| Scope | Behavior |
+|---|---|
+| `Scope.DEFAULT` | **Singleton** (default). One instance shared across the whole application lifetime. |
+| `Scope.TRANSIENT` | A brand-new instance is constructed every time the provider is resolved. |
+
+```python
+@Injectable(scope=Scope.DEFAULT)     # same as plain @Injectable()
+class CatsService:
+    ...
+
+@Injectable(scope=Scope.TRANSIENT)
+class RequestIdGenerator:
+    def __init__(self):
+        self.id = uuid4()
+```
+
+Every place `RequestIdGenerator` is a constructor dependency gets its own
+fresh instance; every place `CatsService` is a dependency shares the exact
+same object.
+
+```python
+a = container.resolve(RequestIdGenerator)
+b = container.resolve(RequestIdGenerator)
+assert a is not b   # transient: different instances
+
+x = container.resolve(CatsService)
+y = container.resolve(CatsService)
+assert x is y       # default: singleton
+```
+
+## No request scope (yet)
+
+Nest also offers `Scope.REQUEST` — a fresh instance per inbound HTTP
+request, letting a provider safely hold per-request state (like the
+current user) as instance attributes. Austial does not implement this yet;
+if you need per-request state today, read it off the `Request` object
+directly (via a guard, interceptor, or `Req` param) rather than expecting a
+request-scoped provider to carry it for you.

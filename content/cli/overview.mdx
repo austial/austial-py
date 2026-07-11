@@ -1,0 +1,39 @@
+---
+title: Overview
+---
+
+# CLI Overview
+
+The `austial` CLI is the direct analogue of `@nestjs/cli`: it scaffolds
+brand-new projects and generates artifacts into an existing one, the same
+two jobs `nest new`/`nest generate` do.
+
+## Installation
+
+```bash
+uv tool install austial
+# or: pipx install austial / pip install austial
+```
+
+## Commands at a glance
+
+| Command | Nest equivalent | Purpose |
+|---|---|---|
+| `austial new <name>` | `nest new <name>` | Scaffold a brand-new project |
+| `austial generate <schematic> <name>` (alias `austial g`) | `nest generate` (`nest g`) | Add an artifact to an existing project |
+| `austial serve` | `nest start --watch` | Run the app with auto-reload |
+
+## Schematics
+
+`austial generate`/`austial g` supports four schematics:
+
+| Schematic | Generates |
+|---|---|
+| `module` | A bare `@Module()` |
+| `controller` | A bare `@Controller()` with a `find_all` stub |
+| `service` | A bare `@Injectable()` |
+| `resource` | Module + full CRUD controller + service + DTOs + entity, patched into `app_module.py` |
+
+See [Usage](/cli/usage) for `new`/`serve` flags, and
+[Generating Resources](/cli/generating) for exactly what each schematic
+produces on disk.

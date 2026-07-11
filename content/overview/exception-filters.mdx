@@ -1,0 +1,122 @@
+---
+title: Exception Filters
+---
+
+# Exception Filters
+
+Austial ships a built-in exceptions layer that converts thrown exceptions
+into a consistent, Nest-shaped JSON error response — no `try/except` in
+every handler required.
+
+## The default error response
+
+Any unhandled exception becomes:
+
+```json
+{
+  "statusCode": 404,
+  "message": "Widget #999 not found",
+  "error": "Not Found",
+  "timestamp": "2026-07-12T10:15:00.000000+00:00",
+  "path": "/widgets/999"
+}
+```
+
+`statusCode`/`message`/`error`/`timestamp`/`path` — the same shape Nest's
+default exception filter produces.
+
+## Built-in HTTP exceptions
+
+```python
+from austial import NotFoundException
+
+raise NotFoundException(f"Cat #{id} not found")
+```
+
+| Class | Status |
+|---|---|
+| `BadRequestException` | 400 |
+| `UnauthorizedException` | 401 |
+| `ForbiddenException` | 403 |
+| `NotFoundException` | 404 |
+| `MethodNotAllowedException` | 405 |
+| `ConflictException` | 409 |
+| `UnprocessableEntityException` | 422 |
+| `TooManyRequestsException` | 429 |
+| `InternalServerErrorException` | 500 |
+| `NotImplementedException` | 501 |
+| `ServiceUnavailableException` | 503 |
+
+Every subclass takes the same constructor: `(message: str | dict | None = None)`.
+Pass a string for a plain `message`, or a dict to control the body more
+precisely:
+
+```python
+raise BadRequestException({"message": ["name is required"], "error": "Bad Request"})
+```
+
+Any of these raised from inside a handler (or from a guard/pipe/interceptor)
+is automatically caught and turned into the JSON shape above with the
+matching status code — you never construct the response yourself.
+
+## Writing a custom filter
+
+```python
+from austial.common.filters import ArgumentsHost, Catch, ExceptionFilter
+from fastapi.responses import JSONResponse
+
+
+@Catch(NotFoundException)
+class NotFoundFilter(ExceptionFilter):
+    async def catch(self, exception: NotFoundException, host: ArgumentsHost) -> JSONResponse:
+        request = host.get_request()
+        return JSONResponse(
+            status_code=404,
+            content={
+                "statusCode": 404,
+                "message": str(exception),
+                "path": request.url.path,
+                "hint": "Check the ID and try again.",
+            },
+        )
+```
+
+`@Catch(*exceptions)` declares which exception types a filter handles;
+`@Catch()` with no arguments catches everything, exactly like Nest's
+`@Catch()`.
+
+## Applying filters
+
+```python
+app.use_global_filters(AllExceptionsFilter())
+```
+
+registers a filter application-wide — this is what every generated
+project's `src/main.py` does with the built-in `AllExceptionsFilter`.
+`@UseFilters(*filters)` attaches filters to a single controller or handler
+instead, the same controller/handler-scoped pattern as guards, pipes, and
+interceptors:
+
+```python
+from austial import UseFilters
+
+
+@Controller("cats")
+@UseFilters(NotFoundFilter())
+class CatsController:
+    ...
+```
+
+## Dispatch order
+
+When multiple filters are registered, Austial walks them in order and uses
+the first one whose `@Catch(...)` types match the raised exception
+(an empty `@Catch()` always matches). If none match, the exception
+re-raises — this is why `AllExceptionsFilter` (registered with an empty
+`@Catch()`) is the sane default to always have installed as a catch-all,
+the same role Nest's built-in filter plays.
+
+Validation errors raised by FastAPI itself (`RequestValidationError`) and
+any other uncaught exception are automatically funneled through the same
+filter chain, so a forgotten `try/except` still produces the Nest-shaped
+error body instead of a raw traceback.

@@ -1,0 +1,200 @@
+---
+title: Generating Resources
+---
+
+# Generating Resources
+
+Every schematic writes into `src/modules/<snake_case_name>/`, following the
+same one-folder-per-feature convention the rest of the framework uses (see
+[Modules](/overview/modules)).
+
+## `module` / `controller` / `service`
+
+The three bare schematics are intentionally minimal — a starting point, not
+a full feature:
+
+```bash
+austial generate module cats
+```
+```python
+# src/modules/cats/cats_module.py
+@Module()
+class CatsModule:
+    pass
+```
+
+```bash
+austial generate controller cats
+```
+```python
+# src/modules/cats/cats_controller.py
+@Controller("cats")
+class CatsController:
+    @Get()
+    async def find_all(self):
+        return []
+```
+
+```bash
+austial generate service cats
+```
+```python
+# src/modules/cats/cats_service.py
+@Injectable()
+class CatsService:
+    pass
+```
+
+Running `module` for a name also patches the nearest `app_module.py`,
+inserting both the import line and the class into the `imports=[...]`
+array — see [App module patching](#app-module-patching) below.
+
+## `resource` — full CRUD
+
+```bash
+austial generate resource cats
+```
+
+generates a complete feature module:
+
+```
+src/modules/cats/
+├── __init__.py
+├── cats_module.py
+├── cats_controller.py
+├── cats_service.py
+├── entities/cats_entity.py
+└── dto/
+    ├── create_cats_dto.py
+    └── update_cats_dto.py
+```
+
+`entities/cats_entity.py` — a plain pydantic model standing in for your
+domain entity:
+
+```python
+from pydantic import BaseModel
+
+
+class Cat(BaseModel):
+    id: int
+    name: str
+```
+
+`dto/create_cats_dto.py` / `dto/update_cats_dto.py`:
+
+```python
+class CreateCatDto(BaseModel):
+    name: str
+
+
+class UpdateCatDto(BaseModel):
+    name: str | None = None
+```
+
+`cats_service.py` — an in-memory CRUD store, meant to be swapped for
+[`austial.database`](/techniques/database) once you're ready:
+
+```python
+@Injectable()
+class CatService:
+    def __init__(self):
+        self._items: list[Cat] = []
+        self._next_id = 1
+
+    def create(self, dto: CreateCatDto) -> Cat:
+        item = Cat(id=self._next_id, **dto.model_dump())
+        self._next_id += 1
+        self._items.append(item)
+        return item
+
+    def find_all(self) -> list[Cat]:
+        return self._items
+
+    def find_one(self, id: int) -> Cat:
+        for item in self._items:
+            if item.id == id:
+                return item
+        raise NotFoundException(f"Cat #{id} not found")
+
+    def update(self, id: int, dto: UpdateCatDto) -> Cat:
+        item = self.find_one(id)
+        updated = item.model_copy(update=dto.model_dump(exclude_unset=True))
+        self._items[self._items.index(item)] = updated
+        return updated
+
+    def remove(self, id: int) -> None:
+        self._items.remove(self.find_one(id))
+```
+
+`cats_controller.py` — full CRUD routes, wired to the service above:
+
+```python
+@Controller("cats")
+class CatController:
+    def __init__(self, service: CatService):
+        self.service = service
+
+    @Post()
+    async def create(self, dto: CreateCatDto = Body()) -> Cat:
+        return self.service.create(dto)
+
+    @Get()
+    async def find_all(self) -> list[Cat]:
+        return self.service.find_all()
+
+    @Get(":id")
+    async def find_one(self, id: int) -> Cat:
+        return self.service.find_one(id)
+
+    @Patch(":id")
+    async def update(self, id: int, dto: UpdateCatDto = Body()) -> Cat:
+        return self.service.update(id, dto)
+
+    @Delete(":id")
+    async def remove(self, id: int) -> dict:
+        self.service.remove(id)
+        return {"deleted": True}
+```
+
+`cats_module.py`:
+
+```python
+@Module(controllers=[CatController], providers=[CatService])
+class CatModule:
+    pass
+```
+
+<div style={{ opacity: 0.8, fontSize: "0.9em" }}>
+Note: the generator uses the name you type directly for class naming
+(via `to_pascal_case`) — it doesn't singularize/pluralize automatically.
+`austial generate resource cats` produces `CatController`/`CatService`/`Cat`
+because that's what a straightforward pascal-case of "cats" minus its
+trailing `s` looks like in the generator's naming convention; check the
+generated names before committing, the same way you'd sanity-check any
+`nest g resource` output.
+</div>
+
+## App module patching
+
+`module` and `resource` both call the same text-based patcher
+(`register_module`) against your project's `src/app_module.py`:
+
+1. Inserts `from src.modules.cats.cats_module import CatModule` into the
+   existing same-package import block, re-sorted alphabetically.
+2. Appends `CatModule` into the `imports=[...]` array literal on the
+   `@Module(...)` decorator.
+
+It's idempotent — running the same generator twice, or against an
+already-imported module, is a no-op rather than a duplicate entry. If your
+`app_module.py` has been hand-edited into a shape the patcher can't
+recognize (no clear `imports=[...]` array to append to), it leaves the file
+untouched rather than guessing — add the import/array entry by hand in
+that case.
+
+## File-already-exists guard
+
+Every generator refuses to overwrite an existing file by default (mirroring
+`nest g`'s "already exists" prompt, minus the interactive prompt — Austial
+just skips and reports it) — delete or rename the existing file first if
+you intend to regenerate it.

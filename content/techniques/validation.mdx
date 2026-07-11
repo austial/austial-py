@@ -1,0 +1,81 @@
+---
+title: Validation
+---
+
+# Validation
+
+Austial's validation story leans entirely on FastAPI/pydantic — DTOs are
+just pydantic `BaseModel` classes, type-hinted as a handler's `= Body()`
+parameter, exactly the shape you'd already reach for in plain FastAPI.
+
+## Defining a DTO
+
+```python
+from pydantic import BaseModel
+
+
+class CreateCatDto(BaseModel):
+    name: str
+
+
+class UpdateCatDto(BaseModel):
+    name: str | None = None
+```
+
+```python
+@Post()
+async def create(self, dto: CreateCatDto = Body()) -> Cat:
+    return self.service.create(dto)
+```
+
+FastAPI parses and validates the incoming JSON body against `CreateCatDto`
+before your handler is even called — a request missing `name`, or with the
+wrong type, never reaches `create()`.
+
+## `ValidationPipe`
+
+```python
+from austial.common.pipes import ValidationPipe
+
+app.use_global_pipes(ValidationPipe())
+```
+
+Registering `ValidationPipe` globally (as every `austial new` project does
+by default in `src/main.py`) ensures validation failures come back in the
+same Nest-shaped error body as every other exception in the app:
+
+```json
+{
+  "statusCode": 400,
+  "message": ["field required: name"],
+  "error": "Bad Request"
+}
+```
+
+See [Pipes](/overview/pipes) for the full `PipeTransform` reference if you
+need custom transformation/validation logic beyond what pydantic gives you
+for free.
+
+## Nested and reused DTOs
+
+Because DTOs are plain pydantic models, everything pydantic supports —
+nested models, `Field(...)` constraints, custom validators, `model_config`
+— works exactly as it does in a plain FastAPI app:
+
+```python
+from pydantic import BaseModel, Field
+
+
+class Address(BaseModel):
+    street: str
+    city: str
+
+
+class CreateCustomerDto(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    address: Address
+```
+
+There's no separate Austial-specific validation DSL to learn on top of
+this — the framework's job stops at wiring pydantic's own validation into
+the Nest-shaped error response format.

@@ -1,0 +1,72 @@
+---
+title: Configuration
+---
+
+# Configuration
+
+`austial.config` provides Nest's `@nestjs/config`-equivalent: a
+`ConfigModule.for_root()` dynamic module that loads a `.env` file and
+exposes its values (plus the rest of the process environment) through an
+injectable `ConfigService`.
+
+## Setup
+
+```python
+from austial import Module
+from austial.config import ConfigModule
+
+
+@Module(imports=[ConfigModule.for_root()])
+class AppModule:
+    pass
+```
+
+`ConfigModule.for_root(env_file=".env", is_global=True)`:
+
+- loads `env_file` via `python-dotenv`'s `load_dotenv(env_file, override=False)`
+  (a missing file or missing `python-dotenv` is a no-op, not an error),
+- builds one `ConfigService` snapshotting `os.environ`,
+- is registered `@Global()` by default (`is_global=True`), so you don't need
+  to re-import `ConfigModule` in every feature module that wants
+  `ConfigService`.
+
+## Using `ConfigService`
+
+```python
+from austial import Injectable
+from austial.config import ConfigService
+
+
+@Injectable()
+class ApiKeyGuard:
+    def __init__(self, config: ConfigService):
+        self._expected = config.get("API_KEY", "changeme")
+```
+
+```python
+class ConfigService:
+    def get(self, key: str, default: Any = None) -> Any: ...
+    def get_or_throw(self, key: str) -> Any: ...   # raises KeyError if the key is missing
+```
+
+`get_or_throw` is the equivalent of Nest's `configService.getOrThrow()` --
+use it for configuration that has no sane default (a secret key, an
+external API URL) so a missing value fails fast at startup-adjacent code
+rather than silently falling through as `None`.
+
+## `.env` files
+
+A scaffolded project ships a `.env.example` — copy it to `.env` before
+running:
+
+```bash
+cp .env.example .env
+```
+
+```env
+PORT=8000
+API_KEY=changeme
+```
+
+`.env` is git-ignored by default; `.env.example` is the checked-in template
+documenting which variables a deployment needs to set.

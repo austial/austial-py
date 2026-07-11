@@ -1,0 +1,92 @@
+---
+title: Custom Decorators
+---
+
+# Custom Decorators
+
+Austial is built around a single mechanism — a metadata bag attached to
+every decorated class or function (`austial.core.metadata.set_metadata` /
+`get_metadata`) — the exact analogue of Nest's `Reflect.defineMetadata` and
+`@nestjs/core`'s `Reflector`. Every framework decorator (`@Module`,
+`@Controller`, the route decorators, `@UseGuards`, `@Injectable`, ...) is
+built on top of it, and it's directly available to you for your own
+decorators, guards, and interceptors.
+
+## `set_metadata` / `get_metadata`
+
+```python
+from austial.core.metadata import get_metadata, set_metadata
+
+ROLES_KEY = "roles"
+
+
+def Roles(*roles: str):
+    def decorator(target):
+        set_metadata(ROLES_KEY, list(roles), target)
+        return target
+
+    return decorator
+```
+
+```python
+@Controller("cats")
+class CatsController:
+    @Get()
+    @Roles("admin", "moderator")
+    async def find_all(self):
+        ...
+```
+
+This is the same shape as Nest's `SetMetadata(key, value)` — a decorator
+factory that stamps metadata onto whatever it's applied to (class or
+method).
+
+## Reading metadata with `Reflector`
+
+`austial.core.reflector.Reflector` is the read-side counterpart, injectable
+anywhere the container resolves dependencies — most commonly inside a
+guard:
+
+```python
+from austial import CanActivate, ExecutionContext
+from austial.core.reflector import Reflector
+
+from .roles_decorator import ROLES_KEY
+
+
+class RolesGuard(CanActivate):
+    def __init__(self, reflector: Reflector):
+        self._reflector = reflector
+
+    async def can_activate(self, context: ExecutionContext) -> bool:
+        required_roles = self._reflector.get(ROLES_KEY, context.get_handler())
+        if not required_roles:
+            return True   # no @Roles(...) on this handler -> no restriction
+
+        request = context.get_request()
+        user_roles = request.headers.get("x-roles", "").split(",")
+        return any(role in user_roles for role in required_roles)
+```
+
+```python
+@Get()
+@Roles("admin")
+@UseGuards(RolesGuard)
+async def find_all(self):
+    ...
+```
+
+`Reflector` also exposes `get_all_and_merge`/`get_all_and_override` for
+reading the same metadata key stamped at both the controller and handler
+level and combining them — the same helpers Nest's `Reflector` provides for
+composing class-level and method-level metadata.
+
+## Where this is used internally
+
+Every `@Use*` decorator (`@UseGuards`, `@UsePipes`, `@UseInterceptors`,
+`@UseFilters`), `@HttpCode`, `@Header`, and `@Catch` are themselves thin
+wrappers around `set_metadata`/`get_metadata` with a dedicated key
+(`GUARDS_METADATA`, `PIPES_METADATA`, `INTERCEPTORS_METADATA`,
+`FILTERS_METADATA`, `CATCH_METADATA` in `austial/core/metadata.py`) — so a
+custom decorator you write with the same primitives is a first-class
+citizen, not a workaround.

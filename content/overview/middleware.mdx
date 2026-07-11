@@ -1,0 +1,86 @@
+---
+title: Middleware
+---
+
+# Middleware
+
+Middleware is a function (here, a class implementing `.use()`) called
+**before** the route handler, sitting in front of the whole
+guards/pipes/interceptors/handler/filters pipeline — same position it
+occupies in Nest, Express, and every other web framework middleware chain.
+
+## Writing middleware
+
+```python
+from collections.abc import Awaitable, Callable
+
+from fastapi import Request, Response
+
+from austial.common.middleware import NestMiddleware
+
+
+class LoggingMiddleware(NestMiddleware):
+    async def use(
+        self,
+        request: Request,
+        call_next: Callable[[], Awaitable[Response]],
+    ) -> Response:
+        print(f"[Request] {request.method} {request.url.path}")
+        response = await call_next()
+        print(f"[Response] {response.status_code}")
+        return response
+```
+
+`call_next()` invokes the rest of the pipeline (the next middleware, or the
+route handler if this is the last one) and returns its `Response` — call it
+exactly once, same contract as Nest's `next()`.
+
+Austial ships this exact pattern built in: `austial.common.middleware.LoggingMiddleware`,
+which logs `{METHOD} {path} {status_code} - {duration}ms` through the
+framework's own `Logger`.
+
+## Applying middleware
+
+Middleware is wired up in a module's `configure()` method using a
+`MiddlewareConsumer`, exactly like Nest's `MiddlewareConsumer`:
+
+```python
+from austial import Module
+from austial.common.middleware import LoggingMiddleware, MiddlewareConsumer
+
+
+@Module(...)
+class AppModule:
+    def configure(self, consumer: MiddlewareConsumer) -> None:
+        consumer.apply(LoggingMiddleware).for_routes("*")
+```
+
+```python
+consumer.apply(LoggingMiddleware, AuthMiddleware).for_routes("/cats")
+```
+
+`for_routes(...)` accepts one or more route patterns:
+
+| Pattern | Matches |
+|---|---|
+| `"*"` or `"(.*)"` | every route |
+| `"/cats"` | an exact path |
+| `"/cats/*"` | any path prefixed with `/cats/` |
+
+`AustialFactory.create()` resolves every module's `configure()` after
+scanning the module graph, collects all `MiddlewareBinding`s, and installs
+a single dispatcher that chains matched middlewares' `use()` calls in
+declaration order — one real Starlette `BaseHTTPMiddleware` under the hood,
+so this composes cleanly with anything else mounted on the underlying
+FastAPI app via `app.get_http_adapter()`.
+
+## Where middleware sits in the pipeline
+
+```
+middleware -> guards -> pipes -> interceptors (wrapping) -> handler -> exception filters
+```
+
+Because middleware runs before routing is even resolved, it can't access
+route-specific metadata the way a guard can via `ExecutionContext` — use a
+[guard](/overview/guards) instead when you need to know *which* controller
+or handler is about to run.

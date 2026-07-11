@@ -1,0 +1,151 @@
+---
+title: Providers
+---
+
+# Providers
+
+Providers are the core concept in Austial, exactly as in Nest. Services,
+repositories, factories, helpers — anything that can be injected as a
+dependency is a provider. The main idea is that a provider can be
+**injected** as a dependency, meaning objects can create various
+relationships with each other, and the "wiring up" of these objects can
+largely be delegated to Austial's DI container.
+
+## A basic provider
+
+```python
+from austial import Injectable, NotFoundException
+
+
+@Injectable()
+class CatsService:
+    def __init__(self) -> None:
+        self._cats: list[Cat] = []
+        self._next_id = 1
+
+    def create(self, dto: CreateCatDto) -> Cat:
+        cat = Cat(id=self._next_id, **dto.model_dump())
+        self._next_id += 1
+        self._cats.append(cat)
+        return cat
+
+    def find_all(self) -> list[Cat]:
+        return self._cats
+
+    def find_one(self, id: int) -> Cat:
+        for cat in self._cats:
+            if cat.id == id:
+                return cat
+        raise NotFoundException(f"Cat #{id} not found")
+```
+
+`@Injectable()` marks a class as manageable by the DI container. Register
+it on a module's `providers=[...]` and it becomes available for
+constructor injection anywhere within that module's dependency graph:
+
+```python
+@Module(controllers=[CatsController], providers=[CatsService])
+class CatsModule:
+    pass
+```
+
+## Dependency injection
+
+Austial's container resolves `__init__` type hints recursively — no
+decorators or tokens required for the common case:
+
+```python
+@Controller("cats")
+class CatsController:
+    def __init__(self, cats_service: CatsService):
+        self.cats_service = cats_service
+```
+
+When `CatsController` is instantiated, the container inspects
+`CatsService`'s own constructor, resolves *its* dependencies first, and so
+on — the same recursive resolution Nest's Angular-derived injector
+performs. Providers are **singletons by default**: the first `resolve()`
+builds and caches the instance; every subsequent resolution (including
+across different controllers/services within the same app) returns that
+same cached object.
+
+```python
+first = container.resolve(CatsService)
+second = container.resolve(CatsService)
+assert first is second
+```
+
+## Injection scope
+
+```python
+from austial import Injectable, Scope
+
+
+@Injectable(scope=Scope.TRANSIENT)
+class RequestIdGenerator:
+    ...
+```
+
+| Scope | Behavior |
+|---|---|
+| `Scope.DEFAULT` | Singleton — one instance for the lifetime of the application (default). |
+| `Scope.TRANSIENT` | A new instance is built every time it's resolved. |
+
+Austial does not currently implement Nest's `Scope.REQUEST` (a fresh
+instance per inbound request) — see
+[Injection Scopes](/fundamentals/injection-scopes) for details.
+
+## Injecting by token instead of type
+
+Not every dependency is a class you can type-hint against — a database
+session factory, a connection string, a raw value. For those, use
+`Inject(token)` as an explicit default, the same way Nest's `@Inject()`
+parameter decorator works:
+
+```python
+from austial import Inject
+from austial.database import DATABASE_SESSION_FACTORY
+
+
+@Injectable()
+class DatabaseHealthIndicator(HealthIndicator):
+    def __init__(self, session_factory=Inject(DATABASE_SESSION_FACTORY)):
+        self._session_factory = session_factory
+```
+
+`Optional_()` marks a dependency as optional — if it can't be resolved,
+the container passes `None` instead of raising:
+
+```python
+from austial import Optional_
+
+
+@Injectable()
+class MetricsService:
+    def __init__(self, statsd_client=Optional_()):
+        self.statsd_client = statsd_client
+```
+
+## Custom providers
+
+Beyond a plain class, a module's `providers=[...]` list also accepts
+Nest-style provider dicts for `useValue`/`useClass`/`useFactory` --
+see [Custom Providers](/fundamentals/custom-providers) for the full
+reference, and [Dynamic Modules](/fundamentals/dynamic-modules) for how
+`ConfigModule.for_root()`/`DatabaseModule.for_root_async()` are built on top
+of the same mechanism.
+
+## Provider registration errors
+
+If a provider isn't registered anywhere reachable from the module graph and
+can't be auto-registered (i.e. it's not a plain type), resolving it raises
+`ProviderNotFoundError`, with a message deliberately styled after Nest's own:
+
+```
+Nest can't resolve dependency 'CatsService'. Is it registered in a module's
+`providers=[...]`?
+```
+
+A dependency cycle (`A` needs `B`, `B` needs `A`) raises
+`CircularDependencyError` instead of recursing forever — see
+[Circular Dependency](/fundamentals/circular-dependency).

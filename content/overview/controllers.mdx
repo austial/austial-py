@@ -1,0 +1,170 @@
+---
+title: Controllers
+---
+
+# Controllers
+
+Controllers are responsible for handling incoming requests and returning
+responses to the client — exactly their role in Nest. A controller's
+purpose is to receive requests and delegate business logic to a
+**provider** (see [Providers](/overview/providers)).
+
+## Routing
+
+`@Controller()` attaches a route prefix; the HTTP-verb decorators
+(`@Get`, `@Post`, `@Put`, `@Patch`, `@Delete`, `@Options`, `@Head`) attach a
+sub-path and register the method as a route handler:
+
+```python
+from austial import Controller, Get, Post
+
+
+@Controller("cats")
+class CatsController:
+    def __init__(self, cats_service: CatsService):
+        self.cats_service = cats_service
+
+    @Get()
+    async def find_all(self) -> list[Cat]:
+        return self.cats_service.find_all()
+
+    @Post()
+    async def create(self, dto: CreateCatDto = Body()) -> Cat:
+        return self.cats_service.create(dto)
+```
+
+`@Controller("cats")` + `@Get()` maps to `GET /cats`, `@Post()` maps to
+`POST /cats` — same prefix-plus-suffix composition Nest uses.
+
+## Route parameters
+
+Austial route strings use Nest/Express's `:paramName` syntax. A decoration-time
+regex rewrites `:id` into FastAPI's `{id}` before FastAPI ever sees the path,
+so the following reads identically to its Nest counterpart:
+
+```python
+@Get(":id")
+async def find_one(self, id: int) -> Cat:
+    return self.cats_service.find_one(id)
+```
+
+```python
+@Get("users/:userId/posts/:postId")
+async def find_post(self, user_id: int, post_id: int):
+    ...
+```
+
+Because Python has no parameter *decorators*, request data is bound the same
+way FastAPI already does it — through type-hinted parameters, optionally
+given an explicit default from `austial`'s param helpers:
+
+```python
+from austial import Body, Headers, Param, Query
+
+
+@Get(":id")
+async def find_one(
+    self,
+    id: int = Param(),                 # equivalent to plain `id: int`
+    verbose: bool = Query(default=False),
+    x_request_id: str | None = Headers("x-request-id"),
+):
+    ...
+
+@Post()
+async def create(self, dto: CreateCatDto = Body()) -> Cat:
+    ...
+```
+
+| Decorator/helper | Binds to | Nest equivalent |
+|---|---|---|
+| `Param(name=None, ...)` | path parameter | `@Param()` |
+| `Query(name=None, default=None, ...)` | query string | `@Query()` |
+| `Body(default=..., embed=False, ...)` | request body (usually a pydantic `BaseModel`) | `@Body()` |
+| `Headers(name=None, default=None, ...)` | request header | `@Headers()` |
+| `Req` / `Res` | raw `fastapi.Request` / `fastapi.Response` | `@Req()` / `@Res()` |
+
+In practice, plain type-hinted path params (`id: int`) already resolve
+correctly via FastAPI's own inference from `{id}` in the path — `Param()` is
+there for Nest-style explicitness. `Body()` is the one you'll reach for
+most, since it's what turns a plain constructor parameter into an
+explicitly-bound request body.
+
+## Status codes and headers
+
+```python
+from austial import HttpCode, Header
+
+
+@Post()
+@HttpCode(202)
+@Header("X-Powered-By", "Austial")
+async def create(self, dto: CreateCatDto = Body()) -> Cat:
+    ...
+```
+
+Without `@HttpCode`, Austial mirrors Nest's defaults: `POST` handlers return
+`201 Created`, every other verb returns `200 OK`.
+
+## Guards, pipes, interceptors on a controller
+
+Any of `@UseGuards`, `@UsePipes`, `@UseInterceptors`, `@UseFilters` can be
+stacked on a controller class (applies to every route in it) or on an
+individual handler (applies to that route only):
+
+```python
+from austial import Controller, Get, UseGuards, UseInterceptors
+
+from .api_key_guard import ApiKeyGuard
+from austial.common.interceptors import TransformInterceptor
+
+
+@Controller("cats")
+@UseGuards(ApiKeyGuard)          # every route in this controller requires the guard
+class CatsController:
+    @Get(":id")
+    @UseInterceptors(TransformInterceptor())   # only this route wraps its response
+    async def find_one(self, id: int):
+        ...
+```
+
+See [Guards](/overview/guards), [Pipes](/overview/pipes),
+[Interceptors](/overview/interceptors) and
+[Exception Filters](/overview/exception-filters) for what each of these
+actually do in the request pipeline.
+
+## Full CRUD example
+
+This is exactly what `austial generate resource cats` scaffolds for you
+(see [CLI: Generating Resources](/cli/generating)):
+
+```python
+from austial import Body, Controller, Delete, Get, Injectable, Patch, Post
+
+
+@Controller("cats")
+class CatController:
+    def __init__(self, service: CatService):
+        self.service = service
+
+    @Post()
+    async def create(self, dto: CreateCatDto = Body()) -> Cat:
+        return self.service.create(dto)
+
+    @Get()
+    async def find_all(self) -> list[Cat]:
+        return self.service.find_all()
+
+    @Get(":id")
+    async def find_one(self, id: int) -> Cat:
+        return self.service.find_one(id)
+
+    @Patch(":id")
+    async def update(self, id: int, dto: UpdateCatDto = Body()) -> Cat:
+        return self.service.update(id, dto)
+
+    @Delete(":id")
+    async def remove(self, id: int) -> dict:
+        self.service.remove(id)
+        return {"deleted": True}
+```

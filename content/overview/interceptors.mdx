@@ -1,0 +1,87 @@
+---
+title: Interceptors
+---
+
+# Interceptors
+
+An interceptor wraps a route handler's execution, letting you run logic
+before *and* after the handler runs — transform the response, add timing,
+log calls, cache results. There's no RxJS here: `CallHandler.handle()` is
+a plain async continuation rather than an Observable, but the shape of the
+pattern is identical to Nest's `NestInterceptor`.
+
+## The `NestInterceptor` interface
+
+```python
+from austial import CallHandler, ExecutionContext, NestInterceptor
+
+
+class TimingInterceptor(NestInterceptor):
+    async def intercept(self, context: ExecutionContext, next: CallHandler):
+        start = time.perf_counter()
+        result = await next.handle()          # runs the handler (and any inner interceptors)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        print(f"{context.get_handler().__name__} took {elapsed_ms:.1f}ms")
+        return result
+```
+
+`next.handle()` is the continuation — call it to run the rest of the
+pipeline and get the handler's return value; skip calling it to short-circuit
+entirely and return something else instead (a cached value, for example).
+
+## The built-in `TransformInterceptor`
+
+```python
+from austial.common.interceptors import TransformInterceptor
+```
+
+```python
+class TransformInterceptor(NestInterceptor):
+    async def intercept(self, context: ExecutionContext, next: CallHandler):
+        result = await next.handle()
+        return {"data": result, "timestamp": datetime.now(UTC).isoformat()}
+```
+
+Wraps every response in Nest's familiar `{ data, timestamp }` envelope:
+
+```python
+@Get(":id")
+@UseInterceptors(TransformInterceptor())
+async def find_one(self, id: int):
+    return self.cats_service.find_one(id)
+```
+
+```json
+{
+  "data": { "id": 1, "name": "Whiskers" },
+  "timestamp": "2026-07-12T10:15:00.000000+00:00"
+}
+```
+
+## Applying interceptors
+
+Same controller/handler scoping as guards and pipes:
+
+```python
+@Controller("cats")
+@UseInterceptors(LoggingInterceptor())   # every route
+class CatsController:
+    @Get(":id")
+    @UseInterceptors(TransformInterceptor())   # this route only, stacks with the class-level one
+    async def find_one(self, id: int):
+        ...
+```
+
+When multiple interceptors apply, the first-declared interceptor is
+outermost — it's the first to run on the way in, and the last to see the
+result on the way out, just like nested middleware.
+
+## Pipeline position
+
+```
+guards -> pipes -> interceptors (wrapping) -> handler -> exception filters
+```
+
+Interceptors sit closest to the handler: by the time one runs, guards have
+already authorized the request and pipes have already validated/transformed
+its arguments — an interceptor only ever sees a request that's cleared both.
