@@ -1,0 +1,76 @@
+name: Publish
+
+# Cuts a release whenever a `v*.*.*` tag is pushed (e.g. `git tag -a v0.1.1 &&
+# git push origin v0.1.1`): runs the same lint/type-check/test gate as
+# pre-commit, then builds the sdist/wheel with `uv build`, publishes them to
+# PyPI via trusted publishing (OIDC -- no long-lived API token stored as a
+# secret), and attaches the built artifacts to a GitHub release.
+#
+# One-time setup required on PyPI before the first run: on the project's
+# https://pypi.org/manage/project/austial/settings/publishing/ page, add a
+# "pending publisher" (or trusted publisher once the project exists) with:
+#   owner: austial   repo: austial-py   workflow: publish.yml   environment: pypi
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Type-check
+        run: uv run mypy austial tests
+
+      - name: Test
+        run: uv run pytest -q
+
+  publish:
+    name: Build & publish to PyPI
+    needs: test
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/austial/
+    permissions:
+      id-token: write  # mint the PyPI trusted-publishing OIDC token
+      contents: write  # create the GitHub release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Build sdist + wheel
+        run: uv build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

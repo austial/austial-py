@@ -206,6 +206,28 @@ class CatsController:
 Note path params use Nest's `:id` syntax (translated to FastAPI's `{id}`
 under the hood), so route strings read exactly like their Nest counterparts.
 
+## Releasing
+
+Pushing a `v*.*.*` tag triggers [`.github/workflows/publish.yml`](.github/workflows/publish.yml),
+which re-runs the lint/type-check/test gate, builds the sdist + wheel with
+`uv build`, publishes them to PyPI via
+[trusted publishing](https://docs.pypi.org/trusted-publishers/) (no API
+token stored as a secret), and attaches the built artifacts to a GitHub
+release:
+
+```bash
+# bump the version in pyproject.toml first, then:
+git commit -am "Bump to vX.Y.Z"
+git tag -a vX.Y.Z -m "vX.Y.Z - ..."
+git push origin main
+git push origin vX.Y.Z
+```
+
+One-time setup: on PyPI's
+[publishing settings](https://pypi.org/manage/project/austial/settings/publishing/)
+for the project, add `austial-py`'s `publish.yml` workflow (environment
+`pypi`) as a trusted publisher.
+
 ## License
 
 [MIT](./LICENSE)
