@@ -15,9 +15,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/aayushsolanki40/austial/tags"><img src="https://img.shields.io/github/v/tag/aayushsolanki40/austial?label=version&sort=semver" alt="Latest tag"></a>
-  <a href="https://github.com/aayushsolanki40/austial/commits/main"><img src="https://img.shields.io/github/last-commit/aayushsolanki40/austial" alt="Last commit"></a>
-  <a href="https://github.com/aayushsolanki40/austial/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
+  <a href="https://github.com/austial/austial-py/tags"><img src="https://img.shields.io/github/v/tag/austial/austial-py?label=version&sort=semver" alt="Latest tag"></a>
+  <a href="https://github.com/austial/austial-py/commits/main"><img src="https://img.shields.io/github/last-commit/austial/austial-py" alt="Last commit"></a>
+  <a href="https://github.com/austial/austial-py/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+"></a>
   <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/built%20with-FastAPI-009688?logo=fastapi&logoColor=white" alt="Built with FastAPI"></a>
   <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/badge/managed%20with-uv-DE5FE9" alt="Managed with uv"></a>
@@ -32,9 +32,10 @@ interceptors, exception filters, middleware), a config layer, a database
 layer, Terminus-style health checks, a testing module -- and a CLI so you can
 scaffold new projects and artifacts the same way `nest new`/`nest generate` do.
 
-This repository is a **monorepo**: it contains both the reusable framework
-(`austial/`, an installable package) and a sample app built with it (`src/`,
-a working health-check API).
+This repository (`austial-py`) is the **framework itself** -- an installable
+library, no bundled sample app. To see it in action, scaffold a new project
+with the CLI (see [Quickstart](#quickstart) below); that generated project is
+the "hello world" app, kept separate from the framework's own source tree.
 
 ## Why
 
@@ -79,26 +80,27 @@ layout still mirrors Nest 1:1 -- one folder per feature under
 
 ## Quickstart
 
+Austial isn't published to PyPI yet, so install it straight from this repo
+while you build a new project with it:
+
 ```bash
-uv sync                    # installs the framework + sample app deps
+git clone https://github.com/austial/austial-py
+cd austial-py && uv sync
+uv run austial new ../my-app --link .   # scaffold a new project next to this repo
+cd ../my-app
 cp .env.example .env
-uv run austial serve       # http://localhost:8000, auto-reload
+uv run austial serve                    # http://localhost:8000, auto-reload
 ```
 
-Try it:
+`austial new` scaffolds a small health-check "hello world" app --
+`GET /`, `GET /health`, `GET /health/protected`, `/docs` (Swagger UI) -- see
+[Using the CLI](#using-the-cli) below for the full generator reference.
+
+## Developing Austial itself
 
 ```bash
-curl localhost:8000/                                          # {"message": "..."}
-curl localhost:8000/health                                    # terminus-style health check
-curl localhost:8000/health/protected                          # 403 Forbidden
-curl -H "x-api-key: changeme" localhost:8000/health/protected  # 200 OK
-curl localhost:8000/cats                                      # [] (generated via the CLI, see below)
-open http://localhost:8000/docs                                # Swagger UI, free from FastAPI
-```
-
-Run the tests:
-
-```bash
+git clone https://github.com/austial/austial-py
+cd austial-py
 uv sync --all-extras
 uv run pytest
 ```
@@ -108,7 +110,7 @@ uv run pytest
 ```bash
 uv run ruff check .           # lint
 uv run ruff format .          # format
-uv run mypy austial src tests # type-check
+uv run mypy austial tests     # type-check
 
 uv run pre-commit install --hook-type pre-commit --hook-type pre-push
 uv run pre-commit run --all-files   # run every hook once, on demand
@@ -132,7 +134,7 @@ uv run austial serve
 ```
 
 > While Austial isn't published to PyPI yet, point new projects at this repo
-> with `--link`: `austial new my-app --link /path/to/api.austial.com` -- this
+> with `--link`: `austial new my-app --link /path/to/austial-py` -- this
 > adds an editable `[tool.uv.sources]` entry so `uv sync` resolves `austial`
 > from your local checkout.
 
@@ -148,18 +150,14 @@ uv run austial generate resource cats      # module + full CRUD controller/servi
 uv run austial g resource cats             # same as above, short alias
 ```
 
-This repo's own `src/modules/cats/` was produced by running
-`uv run austial generate resource cats` against this project -- it's not
-hand-written, it's proof the generator works.
-
 ## Repository layout
 
 ```
-api.austial.com/
+austial-py/
 ├── pyproject.toml          # package "austial", console-script entry point
 ├── LICENSE                  # MIT
 ├── assets/                   # logo.svg (+ logo-dark.svg for dark mode) / icon.svg / apple-icon.png
-├── austial/                 # the framework (installable library)
+├── austial/                 # the framework (installable library) -- this *is* the package
 │   ├── common/               # decorators, guards, interceptors, pipes, filters,
 │   │                         # middleware, exceptions, logger
 │   ├── core/                  # metadata/reflector, DI container, router builder,
@@ -169,20 +167,15 @@ api.austial.com/
 │   ├── terminus/                 # HealthCheckService + health indicators
 │   ├── testing/                   # Test.create_testing_module(...)
 │   └── cli/                        # `austial new` / `generate` / `serve` + templates
-├── src/                      # sample app built with austial
-│   ├── main.py                # entry point (mirrors Nest's main.ts)
-│   ├── app_module.py            # root module
-│   ├── app_controller.py / app_service.py
-│   └── modules/
-│       ├── health/                # GET /health, GET /health/protected
-│       └── cats/                   # generated via `austial generate resource cats`
-└── tests/
-    ├── unit/health_service_spec.py
-    └── e2e/app_e2e_spec.py
+└── tests/                    # tests for the framework itself -- no sample app needed;
+    ├── unit/                   # test modules/controllers are defined inline per test file
+    └── e2e/
 ```
 
-Test files use Nest's `*.spec.ts` naming convention (`*_spec.py` here);
-`pyproject.toml`'s `[tool.pytest.ini_options]` is configured to discover them.
+There's deliberately no `src/` here -- that's what `austial new` generates for
+*your* project, kept out of the framework's own repo. Test files use Nest's
+`*.spec.ts` naming convention (`*_spec.py` here); `pyproject.toml`'s
+`[tool.pytest.ini_options]` is configured to discover them.
 
 ## Request lifecycle
 

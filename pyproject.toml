@@ -5,6 +5,7 @@ description = "A NestJS-inspired, batteries-included web framework for Python, b
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+urls = { Homepage = "https://github.com/austial/austial-py", Repository = "https://github.com/austial/austial-py", Issues = "https://github.com/austial/austial-py/issues" }
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
@@ -42,7 +43,6 @@ packages = ["austial"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = ["."]
 python_files = ["*_spec.py", "test_*.py", "*_test.py"]
 
 [tool.uv]
@@ -58,7 +58,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["B008"]  # function calls in default args (`Body()`, `Query()`, ... -- FastAPI's own idiom)
 
 [tool.ruff.lint.isort]
-known-first-party = ["austial", "src"]
+known-first-party = ["austial"]
 
 [tool.mypy]
 python_version = "3.11"
