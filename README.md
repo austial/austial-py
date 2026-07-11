@@ -15,7 +15,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/austial/austial-py/tags"><img src="https://img.shields.io/github/v/tag/austial/austial-py?label=version&sort=semver" alt="Latest tag"></a>
+  <a href="https://pypi.org/project/austial/"><img src="https://img.shields.io/pypi/v/austial?label=pypi" alt="PyPI version"></a>
+  <a href="https://github.com/austial/austial-py/tags"><img src="https://img.shields.io/github/v/tag/austial/austial-py?label=tag&sort=semver" alt="Latest tag"></a>
   <a href="https://github.com/austial/austial-py/commits/main"><img src="https://img.shields.io/github/last-commit/austial/austial-py" alt="Last commit"></a>
   <a href="https://github.com/austial/austial-py/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+"></a>
@@ -80,14 +81,13 @@ layout still mirrors Nest 1:1 -- one folder per feature under
 
 ## Quickstart
 
-Austial isn't published to PyPI yet, so install it straight from this repo
-while you build a new project with it:
+Austial is published on PyPI -- install the CLI and scaffold a new project:
 
 ```bash
-git clone https://github.com/austial/austial-py
-cd austial-py && uv sync
-uv run austial new ../my-app --link .   # scaffold a new project next to this repo
-cd ../my-app
+uv tool install austial                 # or: pipx install austial / pip install austial
+austial new my-app                      # scaffold a new project
+cd my-app
+uv sync
 cp .env.example .env
 uv run austial serve                    # http://localhost:8000, auto-reload
 ```
@@ -133,10 +133,12 @@ cp .env.example .env
 uv run austial serve
 ```
 
-> While Austial isn't published to PyPI yet, point new projects at this repo
-> with `--link`: `austial new my-app --link /path/to/austial-py` -- this
-> adds an editable `[tool.uv.sources]` entry so `uv sync` resolves `austial`
-> from your local checkout.
+> New projects depend on the published `austial` package from PyPI by
+> default. If you're developing the framework itself, point new projects at
+> your local checkout instead with `--link`:
+> `austial new my-app --link /path/to/austial-py` -- this adds an editable
+> `[tool.uv.sources]` entry so `uv sync` resolves `austial` from your local
+> checkout rather than PyPI.
 
 `austial generate` (alias `austial g`) adds artifacts to an existing project,
 patching `src/app_module.py`'s imports/`imports=[...]` array automatically --
