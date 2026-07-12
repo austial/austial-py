@@ -171,8 +171,7 @@ Note: the generator uses the name you type directly for class naming
 `austial generate resource cats` produces `CatController`/`CatService`/`Cat`
 because that's what a straightforward pascal-case of "cats" minus its
 trailing `s` looks like in the generator's naming convention; check the
-generated names before committing, the same way you'd sanity-check any
-`nest g resource` output.
+generated names before committing.
 </div>
 
 ## App module patching
@@ -194,7 +193,6 @@ that case.
 
 ## File-already-exists guard
 
-Every generator refuses to overwrite an existing file by default (mirroring
-`nest g`'s "already exists" prompt, minus the interactive prompt — Austial
-just skips and reports it) — delete or rename the existing file first if
-you intend to regenerate it.
+Every generator refuses to overwrite an existing file by default — it
+skips and reports it — delete or rename the existing file first if you
+intend to regenerate it.

@@ -4,9 +4,9 @@ title: Health Checks
 
 # Health Checks (Terminus)
 
-`austial.terminus` is a Terminus-style health-check module (Nest's
-`@nestjs/terminus`) — an aggregator that runs a set of health indicator
-checks in parallel intent and returns a single, consistently-shaped result.
+`austial.terminus` is a Terminus-style health-check module — an aggregator
+that runs a set of health indicator checks in parallel intent and returns a
+single, consistently-shaped result.
 
 ## `HealthCheckService`
 
@@ -58,8 +58,7 @@ class HealthController:
 
 - `status` is `"ok"` if every indicator passed, `"error"` if any failed.
 - `info` collects passing indicators' results; `error` collects failing
-  ones; `details` always contains the union of both — same four-key shape
-  `@nestjs/terminus` returns.
+  ones; `details` always contains the union of both.
 
 ## Built-in indicators
 

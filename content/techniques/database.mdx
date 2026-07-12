@@ -4,11 +4,10 @@ title: Database
 
 # Database
 
-`austial.database` provides an async SQLAlchemy integration analogous to
-`@nestjs/typeorm`'s `TypeOrmModule.forRootAsync()` — a `DatabaseModule`
-dynamic module that provisions an async engine and session factory as
-injectable tokens, defaulting to a local SQLite file so it works with zero
-external setup.
+`austial.database` provides an async SQLAlchemy integration — a
+`DatabaseModule` dynamic module that provisions an async engine and
+session factory as injectable tokens, defaulting to a local SQLite file so
+it works with zero external setup.
 
 ## Setup
 
@@ -25,7 +24,7 @@ class AppModule:
 ```
 
 Connection URL resolved at runtime from other providers (the common case --
-reading it out of `ConfigService`), mirroring `TypeOrmModule.forRootAsync`:
+reading it out of `ConfigService`):
 
 ```python
 from austial.config import ConfigService

@@ -4,8 +4,7 @@ title: Pipes
 
 # Pipes
 
-A pipe transforms or validates input data before it reaches a route handler
-— the same two use cases Nest pipes cover.
+A pipe transforms or validates input data before it reaches a route handler.
 
 ## The `PipeTransform` interface
 
@@ -21,7 +20,7 @@ class ParseIntPipe(PipeTransform):
             raise BadRequestException(f"{metadata.data} must be an integer") from exc
 ```
 
-`ArgumentMetadata` mirrors Nest's:
+`ArgumentMetadata` describes the argument being processed:
 
 ```python
 @dataclass
@@ -54,8 +53,8 @@ FastAPI against your type hints) and, on failure, raises a
 Since FastAPI already parses and type-checks request bodies against your
 pydantic `BaseModel` DTOs before your handler runs, `ValidationPipe`'s main
 job is normalizing *how* a validation failure is reported — into the same
-Nest-shaped error body every other exception produces, rather than
-FastAPI's native `422` shape.
+error body shape every other exception produces, rather than FastAPI's
+native `422` shape.
 
 Every project scaffolded by `austial new` registers it globally in
 `src/main.py` by default.

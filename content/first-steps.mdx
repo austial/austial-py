@@ -8,8 +8,7 @@ import { Tabs } from "nextra/components";
 
 In this section you'll install the Austial CLI, scaffold a new project, and
 get it running with auto-reload. Austial requires **Python 3.11+** and uses
-[uv](https://github.com/astral-sh/uv) for dependency management, the same
-way a Nest project uses `npm`/`pnpm`.
+[uv](https://github.com/astral-sh/uv) for dependency management.
 
 ## Installation
 
@@ -31,7 +30,7 @@ way a Nest project uses `npm`/`pnpm`.
   </Tabs.Tab>
 </Tabs>
 
-This installs the `austial` console script — the CLI equivalent of `@nestjs/cli`.
+This installs the `austial` console script.
 
 ## Scaffolding a new project
 
@@ -76,8 +75,8 @@ my-app/
     └── e2e/app_e2e_spec.py
 ```
 
-This is the same one-folder-per-feature layout Nest uses under `src/`,
-just with underscore-suffixed file names instead of dots (see
+This is a one-folder-per-feature layout under `src/`, using
+underscore-suffixed file names (see
 [the note on file names](/#a-note-on-file-names)).
 
 ## Running the app
@@ -98,8 +97,7 @@ uv run uvicorn src.main:app --reload
 
 ## The bootstrap file
 
-Every Austial app boots from `src/main.py`, the direct analogue of Nest's
-`main.ts`:
+Every Austial app boots from `src/main.py`:
 
 ```python
 from austial import AustialFactory
@@ -129,8 +127,7 @@ at `AppModule`, registers every provider/controller into one DI container,
 wires up any middleware declared via `configure()`, and returns an
 `AustialApplication` -- a thin wrapper around a real `fastapi.FastAPI`
 instance. Because it's ASGI-callable itself (`app(scope, receive, send)`),
-`uvicorn src.main:app` works directly, exactly like a Nest app boots off
-its compiled Express/Fastify instance.
+`uvicorn src.main:app` works directly.
 
 ## Developing without installing from PyPI
 

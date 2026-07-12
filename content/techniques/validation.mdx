@@ -42,7 +42,7 @@ app.use_global_pipes(ValidationPipe())
 
 Registering `ValidationPipe` globally (as every `austial new` project does
 by default in `src/main.py`) ensures validation failures come back in the
-same Nest-shaped error body as every other exception in the app:
+same error body shape as every other exception in the app:
 
 ```json
 {
@@ -78,4 +78,4 @@ class CreateCustomerDto(BaseModel):
 
 There's no separate Austial-specific validation DSL to learn on top of
 this — the framework's job stops at wiring pydantic's own validation into
-the Nest-shaped error response format.
+the consistent error response format.

@@ -40,9 +40,9 @@ assert x is y       # default: singleton
 
 ## No request scope (yet)
 
-Nest also offers `Scope.REQUEST` — a fresh instance per inbound HTTP
-request, letting a provider safely hold per-request state (like the
-current user) as instance attributes. Austial does not implement this yet;
-if you need per-request state today, read it off the `Request` object
-directly (via a guard, interceptor, or `Req` param) rather than expecting a
-request-scoped provider to carry it for you.
+A request scope — a fresh instance per inbound HTTP request, letting a
+provider safely hold per-request state (like the current user) as instance
+attributes — is not implemented yet. If you need per-request state today,
+read it off the `Request` object directly (via a guard, interceptor, or
+`Req` param) rather than expecting a request-scoped provider to carry it
+for you.

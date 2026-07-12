@@ -5,7 +5,7 @@ title: Controllers
 # Controllers
 
 Controllers are responsible for handling incoming requests and returning
-responses to the client — exactly their role in Nest. A controller's
+responses to the client. A controller's
 purpose is to receive requests and delegate business logic to a
 **provider** (see [Providers](/overview/providers)).
 
@@ -34,13 +34,12 @@ class CatsController:
 ```
 
 `@Controller("cats")` + `@Get()` maps to `GET /cats`, `@Post()` maps to
-`POST /cats` — same prefix-plus-suffix composition Nest uses.
+`POST /cats` — a prefix-plus-suffix composition.
 
 ## Route parameters
 
-Austial route strings use Nest/Express's `:paramName` syntax. A decoration-time
-regex rewrites `:id` into FastAPI's `{id}` before FastAPI ever sees the path,
-so the following reads identically to its Nest counterpart:
+Austial route strings use a familiar `:paramName` syntax. A decoration-time
+regex rewrites `:id` into FastAPI's `{id}` before FastAPI ever sees the path:
 
 ```python
 @Get(":id")
@@ -76,17 +75,17 @@ async def create(self, dto: CreateCatDto = Body()) -> Cat:
     ...
 ```
 
-| Decorator/helper | Binds to | Nest equivalent |
-|---|---|---|
-| `Param(name=None, ...)` | path parameter | `@Param()` |
-| `Query(name=None, default=None, ...)` | query string | `@Query()` |
-| `Body(default=..., embed=False, ...)` | request body (usually a pydantic `BaseModel`) | `@Body()` |
-| `Headers(name=None, default=None, ...)` | request header | `@Headers()` |
-| `Req` / `Res` | raw `fastapi.Request` / `fastapi.Response` | `@Req()` / `@Res()` |
+| Decorator/helper | Binds to |
+|---|---|
+| `Param(name=None, ...)` | path parameter |
+| `Query(name=None, default=None, ...)` | query string |
+| `Body(default=..., embed=False, ...)` | request body (usually a pydantic `BaseModel`) |
+| `Headers(name=None, default=None, ...)` | request header |
+| `Req` / `Res` | raw `fastapi.Request` / `fastapi.Response` |
 
 In practice, plain type-hinted path params (`id: int`) already resolve
 correctly via FastAPI's own inference from `{id}` in the path — `Param()` is
-there for Nest-style explicitness. `Body()` is the one you'll reach for
+there for explicitness. `Body()` is the one you'll reach for
 most, since it's what turns a plain constructor parameter into an
 explicitly-bound request body.
 
@@ -103,8 +102,8 @@ async def create(self, dto: CreateCatDto = Body()) -> Cat:
     ...
 ```
 
-Without `@HttpCode`, Austial mirrors Nest's defaults: `POST` handlers return
-`201 Created`, every other verb returns `200 OK`.
+Without `@HttpCode`, `POST` handlers return `201 Created`, every other verb
+returns `200 OK`.
 
 ## Guards, pipes, interceptors on a controller
 

@@ -6,19 +6,19 @@ import { Cards } from "nextra/components";
 
 # Introduction
 
-Austial is a **NestJS-style, batteries-included web framework for Python**,
-built on top of [FastAPI](https://fastapi.tiangolo.com/). It gives Python the
-exact developer experience of [NestJS](https://nestjs.com/): decorator-driven
+Austial is a **batteries-included web framework for Python**, built on top
+of [FastAPI](https://fastapi.tiangolo.com/) and inspired by
+[NestJS](https://nestjs.com/). It gives Python decorator-driven
 modules/controllers/providers, real constructor-based dependency injection,
 the full request lifecycle (guards, pipes, interceptors, exception filters,
 middleware), a config layer, a database layer, Terminus-style health checks,
-a testing module — and a CLI so you can scaffold new projects and artifacts
-the same way `nest new`/`nest generate` do.
+a testing module — and a CLI so you can scaffold new projects and generate
+artifacts.
 
 FastAPI is a fantastic ASGI toolkit, but it doesn't prescribe an application
-architecture. Austial is opinionated on top of FastAPI the way Nest is
-opinionated on top of Express/Fastify: modules own controllers and providers,
-providers get dependency-injected by type, and the request pipeline
+architecture. Austial is opinionated on top of FastAPI: modules own
+controllers and providers, providers get dependency-injected by type, and
+the request pipeline
 
 ```
 guards -> pipes -> interceptors (wrapping) -> handler -> exception filters
@@ -29,7 +29,8 @@ is a first-class concept instead of something you hand-roll with
 
 ## Why Austial
 
-If you already know Nest, you already know Austial:
+Routing, guards, and interceptors are all declared with decorators that
+read top to bottom, in the order they execute:
 
 ```python
 from austial import Controller, Get, UseGuards, UseInterceptors
@@ -47,48 +48,42 @@ class CatsController:
         ...
 ```
 
-Path params use Nest's `:id` syntax (translated to FastAPI's `{id}` under
-the hood), so route strings read exactly like their Nest counterparts, and
-the decorator stack -- guard, interceptor, handler -- reads top to bottom
-exactly like it would in a `.ts` controller.
+Path params use a familiar `:id` syntax (translated to FastAPI's `{id}`
+under the hood), so route strings stay short, and the decorator stack --
+guard, interceptor, handler -- reads top to bottom in the order it executes.
 
 ## Architecture at a glance
 
-| NestJS | Austial |
-|---|---|
-| `@Module()` | `@Module(imports=, controllers=, providers=, exports=)` |
-| `@Controller()` / `@Get()` etc. | `@Controller(prefix)` / `@Get/@Post/@Put/@Patch/@Delete/@Options/@Head` |
-| `@Injectable()` | `@Injectable(scope=Scope.DEFAULT \| Scope.TRANSIENT)` |
-| Constructor DI | Container resolves `__init__` type hints recursively, singleton by default |
-| Custom providers (`useClass`/`useValue`/`useFactory`) | provider dicts: `{"provide": TOKEN, "useClass"/"useValue"/"useFactory": ..., "inject": [...]}` |
-| `NestFactory.create(AppModule)` | `AustialFactory.create(AppModule)` -> `AustialApplication` |
-| `app.listen(3000)` | `await app.listen(8000)` |
-| `CanActivate` / `@UseGuards` | `CanActivate` ABC + `ExecutionContext`, `@UseGuards(...)` |
-| `NestInterceptor` / `@UseInterceptors` | `NestInterceptor` ABC (`intercept(context, call_next)`) + `@UseInterceptors(...)` |
-| `PipeTransform` / `ValidationPipe` | `PipeTransform` ABC + `ValidationPipe` |
-| `ExceptionFilter` / `@Catch` | `ExceptionFilter` ABC + `@Catch(...)`, default `AllExceptionsFilter` |
-| `NestMiddleware`, `MiddlewareConsumer` | `NestMiddleware` ABC, `configure(consumer)` on modules |
-| `ConfigModule.forRoot()` | `ConfigModule.for_root(env_file=".env")` / `ConfigService` |
-| `TypeOrmModule.forRootAsync` | `DatabaseModule.for_root_async(use_factory=, inject=)` (SQLAlchemy async) |
-| `@nestjs/terminus` | `austial.terminus.HealthCheckService` + `MemoryHealthIndicator`, `DatabaseHealthIndicator` |
-| `@nestjs/testing` | `austial.testing.Test.create_testing_module(...).compile()` |
-| `nest new` / `nest generate` | `austial new <name>` / `austial generate\|g module\|controller\|service\|resource <name>` |
+- **Modules** — `@Module(imports=, controllers=, providers=, exports=)` compose the application graph.
+- **Controllers** — `@Controller(prefix)` plus `@Get`/`@Post`/`@Put`/`@Patch`/`@Delete`/`@Options`/`@Head` declare routes.
+- **Providers** — `@Injectable(scope=Scope.DEFAULT | Scope.TRANSIENT)`; the container resolves `__init__` type hints recursively, singleton by default. Custom providers use provider dicts: `{"provide": TOKEN, "useClass"/"useValue"/"useFactory": ..., "inject": [...]}`.
+- **Bootstrap** — `AustialFactory.create(AppModule)` returns an `AustialApplication`; `await app.listen(8000)` starts it.
+- **Guards** — `CanActivate` ABC + `ExecutionContext`, applied with `@UseGuards(...)`.
+- **Interceptors** — `NestInterceptor` ABC (`intercept(context, call_next)`), applied with `@UseInterceptors(...)`.
+- **Pipes** — `PipeTransform` ABC, including the built-in `ValidationPipe`.
+- **Exception filters** — `ExceptionFilter` ABC + `@Catch(...)`, with a default `AllExceptionsFilter`.
+- **Middleware** — `NestMiddleware` ABC, wired up via `configure(consumer)` on modules.
+- **Config** — `ConfigModule.for_root(env_file=".env")` / `ConfigService`.
+- **Database** — `DatabaseModule.for_root_async(use_factory=, inject=)` over async SQLAlchemy.
+- **Health checks** — `austial.terminus.HealthCheckService` + `MemoryHealthIndicator`, `DatabaseHealthIndicator`.
+- **Testing** — `austial.testing.Test.create_testing_module(...).compile()`.
+- **CLI** — `austial new <name>` / `austial generate|g module|controller|service|resource <name>`.
 
 ## A note on file names
 
-Nest names files with dots (`health.controller.ts`) because Node resolves
-modules by explicit relative path strings. Python's `import a.b` instead
-resolves `a` as a package and `b` as a submodule — a literal file
-`health.controller.py` isn't importable via a normal `import` statement. So
-Austial uses underscore suffixes instead: `health_controller.py`,
+Some JavaScript frameworks name files with dots (`health.controller.ts`)
+because Node resolves modules by explicit relative path strings. Python's
+`import a.b` instead resolves `a` as a package and `b` as a submodule — a
+literal file `health.controller.py` isn't importable via a normal `import`
+statement. So Austial uses underscore suffixes instead: `health_controller.py`,
 `health_service.py`, `health_module.py`, `health_dto.py`. The directory
-layout still mirrors Nest 1:1 — one folder per feature under
-`src/modules/`.
+layout is one folder per feature under `src/modules/`.
 
 ## What's not (yet) implemented
 
-Austial is deliberately opinionated but not a 1:1 port. A few Nest concepts
-are intentionally out of scope for now, so you don't go looking for them:
+Austial is deliberately opinionated but not a 1:1 port of any single
+framework. A few concepts are intentionally out of scope for now, so you
+don't go looking for them:
 
 - **Request-scoped providers** (`Scope.REQUEST`) — only `Scope.DEFAULT`
   (singleton) and `Scope.TRANSIENT` exist today.

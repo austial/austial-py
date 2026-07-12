@@ -5,8 +5,8 @@ title: Exception Filters
 # Exception Filters
 
 Austial ships a built-in exceptions layer that converts thrown exceptions
-into a consistent, Nest-shaped JSON error response — no `try/except` in
-every handler required.
+into a consistent JSON error response — no `try/except` in every handler
+required.
 
 ## The default error response
 
@@ -22,8 +22,8 @@ Any unhandled exception becomes:
 }
 ```
 
-`statusCode`/`message`/`error`/`timestamp`/`path` — the same shape Nest's
-default exception filter produces.
+`statusCode`/`message`/`error`/`timestamp`/`path` — the shape every
+default exception filter response uses.
 
 ## Built-in HTTP exceptions
 
@@ -82,8 +82,7 @@ class NotFoundFilter(ExceptionFilter):
 ```
 
 `@Catch(*exceptions)` declares which exception types a filter handles;
-`@Catch()` with no arguments catches everything, exactly like Nest's
-`@Catch()`.
+`@Catch()` with no arguments catches everything.
 
 ## Applying filters
 
@@ -113,10 +112,9 @@ When multiple filters are registered, Austial walks them in order and uses
 the first one whose `@Catch(...)` types match the raised exception
 (an empty `@Catch()` always matches). If none match, the exception
 re-raises — this is why `AllExceptionsFilter` (registered with an empty
-`@Catch()`) is the sane default to always have installed as a catch-all,
-the same role Nest's built-in filter plays.
+`@Catch()`) is the sane default to always have installed as a catch-all.
 
 Validation errors raised by FastAPI itself (`RequestValidationError`) and
 any other uncaught exception are automatically funneled through the same
-filter chain, so a forgotten `try/except` still produces the Nest-shaped
-error body instead of a raw traceback.
+filter chain, so a forgotten `try/except` still produces the same
+consistent error body instead of a raw traceback.

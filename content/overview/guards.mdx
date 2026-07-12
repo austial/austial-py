@@ -6,7 +6,7 @@ title: Guards
 
 A guard determines whether a given request will be handled by the route
 handler or not, based on certain conditions (permissions, roles, API keys,
-ACLs, ...) — precisely Nest's `CanActivate`.
+ACLs, ...).
 
 ## The `CanActivate` interface
 
@@ -54,7 +54,7 @@ class HealthController:
 
 Stack `@UseGuards` on the controller class to protect every route in it,
 or on a single handler for one route only — guards attached at multiple
-levels combine, same as Nest.
+levels combine.
 
 ```python
 @Controller("cats")

@@ -4,8 +4,8 @@ title: Providers
 
 # Providers
 
-Providers are the core concept in Austial, exactly as in Nest. Services,
-repositories, factories, helpers — anything that can be injected as a
+Providers are the core concept in Austial. Services, repositories,
+factories, helpers — anything that can be injected as a
 dependency is a provider. The main idea is that a provider can be
 **injected** as a dependency, meaning objects can create various
 relationships with each other, and the "wiring up" of these objects can
@@ -63,8 +63,7 @@ class CatsController:
 
 When `CatsController` is instantiated, the container inspects
 `CatsService`'s own constructor, resolves *its* dependencies first, and so
-on — the same recursive resolution Nest's Angular-derived injector
-performs. Providers are **singletons by default**: the first `resolve()`
+on, recursively. Providers are **singletons by default**: the first `resolve()`
 builds and caches the instance; every subsequent resolution (including
 across different controllers/services within the same app) returns that
 same cached object.
@@ -91,16 +90,15 @@ class RequestIdGenerator:
 | `Scope.DEFAULT` | Singleton — one instance for the lifetime of the application (default). |
 | `Scope.TRANSIENT` | A new instance is built every time it's resolved. |
 
-Austial does not currently implement Nest's `Scope.REQUEST` (a fresh
-instance per inbound request) — see
+Austial does not currently implement a request scope (a fresh instance per
+inbound request) — see
 [Injection Scopes](/fundamentals/injection-scopes) for details.
 
 ## Injecting by token instead of type
 
 Not every dependency is a class you can type-hint against — a database
 session factory, a connection string, a raw value. For those, use
-`Inject(token)` as an explicit default, the same way Nest's `@Inject()`
-parameter decorator works:
+`Inject(token)` as an explicit default:
 
 ```python
 from austial import Inject
@@ -129,7 +127,7 @@ class MetricsService:
 ## Custom providers
 
 Beyond a plain class, a module's `providers=[...]` list also accepts
-Nest-style provider dicts for `useValue`/`useClass`/`useFactory` --
+provider dicts for `useValue`/`useClass`/`useFactory` --
 see [Custom Providers](/fundamentals/custom-providers) for the full
 reference, and [Dynamic Modules](/fundamentals/dynamic-modules) for how
 `ConfigModule.for_root()`/`DatabaseModule.for_root_async()` are built on top
@@ -139,7 +137,7 @@ of the same mechanism.
 
 If a provider isn't registered anywhere reachable from the module graph and
 can't be auto-registered (i.e. it's not a plain type), resolving it raises
-`ProviderNotFoundError`, with a message deliberately styled after Nest's own:
+`ProviderNotFoundError`:
 
 ```
 Nest can't resolve dependency 'CatsService'. Is it registered in a module's

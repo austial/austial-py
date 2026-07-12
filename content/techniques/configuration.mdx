@@ -4,10 +4,9 @@ title: Configuration
 
 # Configuration
 
-`austial.config` provides Nest's `@nestjs/config`-equivalent: a
-`ConfigModule.for_root()` dynamic module that loads a `.env` file and
-exposes its values (plus the rest of the process environment) through an
-injectable `ConfigService`.
+`austial.config` provides a `ConfigModule.for_root()` dynamic module that
+loads a `.env` file and exposes its values (plus the rest of the process
+environment) through an injectable `ConfigService`.
 
 ## Setup
 
@@ -49,10 +48,9 @@ class ConfigService:
     def get_or_throw(self, key: str) -> Any: ...   # raises KeyError if the key is missing
 ```
 
-`get_or_throw` is the equivalent of Nest's `configService.getOrThrow()` --
-use it for configuration that has no sane default (a secret key, an
-external API URL) so a missing value fails fast at startup-adjacent code
-rather than silently falling through as `None`.
+Use `get_or_throw` for configuration that has no sane default (a secret
+key, an external API URL) so a missing value fails fast at
+startup-adjacent code rather than silently falling through as `None`.
 
 ## `.env` files
 

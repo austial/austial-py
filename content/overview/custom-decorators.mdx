@@ -6,8 +6,7 @@ title: Custom Decorators
 
 Austial is built around a single mechanism — a metadata bag attached to
 every decorated class or function (`austial.core.metadata.set_metadata` /
-`get_metadata`) — the exact analogue of Nest's `Reflect.defineMetadata` and
-`@nestjs/core`'s `Reflector`. Every framework decorator (`@Module`,
+`get_metadata`). Every framework decorator (`@Module`,
 `@Controller`, the route decorators, `@UseGuards`, `@Injectable`, ...) is
 built on top of it, and it's directly available to you for your own
 decorators, guards, and interceptors.
@@ -37,9 +36,8 @@ class CatsController:
         ...
 ```
 
-This is the same shape as Nest's `SetMetadata(key, value)` — a decorator
-factory that stamps metadata onto whatever it's applied to (class or
-method).
+This is a decorator factory that stamps metadata onto whatever it's applied
+to (class or method).
 
 ## Reading metadata with `Reflector`
 
@@ -78,8 +76,7 @@ async def find_all(self):
 
 `Reflector` also exposes `get_all_and_merge`/`get_all_and_override` for
 reading the same metadata key stamped at both the controller and handler
-level and combining them — the same helpers Nest's `Reflector` provides for
-composing class-level and method-level metadata.
+level and combining them.
 
 ## Where this is used internally
 

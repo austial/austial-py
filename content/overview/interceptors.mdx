@@ -7,8 +7,7 @@ title: Interceptors
 An interceptor wraps a route handler's execution, letting you run logic
 before *and* after the handler runs — transform the response, add timing,
 log calls, cache results. There's no RxJS here: `CallHandler.handle()` is
-a plain async continuation rather than an Observable, but the shape of the
-pattern is identical to Nest's `NestInterceptor`.
+a plain async continuation rather than an Observable.
 
 ## The `NestInterceptor` interface
 
@@ -42,7 +41,7 @@ class TransformInterceptor(NestInterceptor):
         return {"data": result, "timestamp": datetime.now(UTC).isoformat()}
 ```
 
-Wraps every response in Nest's familiar `{ data, timestamp }` envelope:
+Wraps every response in a familiar `{ data, timestamp }` envelope:
 
 ```python
 @Get(":id")

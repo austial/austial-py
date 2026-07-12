@@ -4,10 +4,9 @@ title: Testing
 
 # Testing
 
-`austial.testing` mirrors `@nestjs/testing`'s `Test.createTestingModule` --
-a way to build a real, fully-wired application (real DI, real routing) from
-an ad-hoc set of controllers/providers, without needing your full
-`AppModule` or a running server.
+`austial.testing` provides a way to build a real, fully-wired application
+(real DI, real routing) from an ad-hoc set of controllers/providers,
+without needing your full `AppModule` or a running server.
 
 ## Unit tests — resolving a provider directly
 
@@ -121,7 +120,7 @@ class WidgetsController:
         return self.service.create(dto)
 ```
 
-## Asserting the Nest-shaped error body
+## Asserting the error body shape
 
 Since [exception filters](/overview/exception-filters) always produce the
 same `statusCode`/`message`/`error`/`timestamp`/`path` shape, testing error
@@ -138,7 +137,7 @@ assert body["path"] == "/widgets/999"
 
 ## Naming convention
 
-Test files use Nest's `*.spec.ts` convention translated to Python:
+Test files use a `*.spec.ts`-style convention translated to Python:
 `*_spec.py` (e.g. `cats_service_spec.py`, `app_e2e_spec.py`). A project
 scaffolded by `austial new` configures `pytest` to discover this pattern
 automatically via `[tool.pytest.ini_options]` in `pyproject.toml`.

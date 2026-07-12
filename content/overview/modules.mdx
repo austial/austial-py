@@ -5,8 +5,7 @@ title: Modules
 # Modules
 
 A module is a class annotated with `@Module()`. The decorator provides
-metadata that Austial uses to organize the application structure — exactly
-Nest's role for modules.
+metadata that Austial uses to organize the application structure.
 
 ```python
 from austial import Module
@@ -58,16 +57,15 @@ class AppModule:
 `AustialFactory.create(AppModule)` walks this `imports` graph recursively
 (`austial.core.module_scanner.scan_module`), registering every module's
 `controllers`/`providers` into one shared `Container`, and de-duplicating
-modules that are imported more than once — the same traversal Nest performs
-over its module graph.
+modules that are imported more than once.
 
 ## Feature modules
 
 Group a feature's controller + service + DTOs + entity behind its own
-module, then `import` it from `AppModule` — exactly the "one folder per
-feature" convention Nest recommends, and exactly what
-`austial generate module <name>` / `austial generate resource <name>`
-scaffold automatically (see [CLI](/cli/generating)):
+module, then `import` it from `AppModule` — one folder per feature, which
+is exactly what `austial generate module <name>` /
+`austial generate resource <name>` scaffold automatically (see
+[CLI](/cli/generating)):
 
 ```
 src/modules/cats/
@@ -99,26 +97,24 @@ class ConfigModule:
 ```
 
 `@Global()` marks a module's exports as available everywhere without every
-consumer needing to list it in their own `imports` — the same escape hatch
-Nest's `@Global()` provides (used internally by `ConfigModule.for_root()`).
+consumer needing to list it in their own `imports` (used internally by
+`ConfigModule.for_root()`).
 
 ## A note on module visibility
 
-Unlike Nest, Austial's DI container is currently **application-wide and
-flat**: every module's `providers` register into the same `Container`
-instance regardless of `imports`/`exports`. In practice this means anything
+Austial's DI container is currently **application-wide and flat**: every
+module's `providers` register into the same `Container` instance
+regardless of `imports`/`exports`. In practice this means anything
 registered anywhere in the graph is resolvable anywhere else — `imports`
 and `exports` are honored for *scanning* (so you must still `import` a
 module for its controllers/providers to be registered at all) but are not
 yet enforced as a visibility boundary. Write your `imports`/`exports`
-correctly anyway: it documents intent, keeps the mental model identical to
-Nest, and means nothing changes for your code if/when strict visibility
-lands.
+correctly anyway: it documents intent and means nothing changes for your
+code if/when strict visibility lands.
 
 ## Dynamic modules
 
 `ConfigModule.for_root(...)` and `DatabaseModule.for_root_async(...)` are
 **dynamic modules** — static methods that build and return module metadata
-at runtime instead of a fixed `@Module(...)` decorator, exactly mirroring
-`ConfigModule.forRoot()`/`TypeOrmModule.forRootAsync()`. See
+at runtime instead of a fixed `@Module(...)` decorator. See
 [Dynamic Modules](/fundamentals/dynamic-modules) for how to write your own.

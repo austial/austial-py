@@ -6,8 +6,8 @@ title: Middleware
 
 Middleware is a function (here, a class implementing `.use()`) called
 **before** the route handler, sitting in front of the whole
-guards/pipes/interceptors/handler/filters pipeline — same position it
-occupies in Nest, Express, and every other web framework middleware chain.
+guards/pipes/interceptors/handler/filters pipeline — the same position it
+occupies in most web framework middleware chains.
 
 ## Writing middleware
 
@@ -33,7 +33,7 @@ class LoggingMiddleware(NestMiddleware):
 
 `call_next()` invokes the rest of the pipeline (the next middleware, or the
 route handler if this is the last one) and returns its `Response` — call it
-exactly once, same contract as Nest's `next()`.
+exactly once.
 
 Austial ships this exact pattern built in: `austial.common.middleware.LoggingMiddleware`,
 which logs `{METHOD} {path} {status_code} - {duration}ms` through the
@@ -42,7 +42,7 @@ framework's own `Logger`.
 ## Applying middleware
 
 Middleware is wired up in a module's `configure()` method using a
-`MiddlewareConsumer`, exactly like Nest's `MiddlewareConsumer`:
+`MiddlewareConsumer`:
 
 ```python
 from austial import Module
