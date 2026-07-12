@@ -5,6 +5,7 @@ const withNextra = nextra({
   search: {
     codeblocks: false,
   },
+  defaultShowCopyCode: true,
 });
 
 export default withNextra({
