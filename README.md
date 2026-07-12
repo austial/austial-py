@@ -51,7 +51,7 @@ for the full format.
 Documentation should stay in lockstep with
 [`austial/austial-py`](https://github.com/austial/austial-py) -- when the
 framework's public API changes, update the corresponding page here in the
-same PR (or a follow-up linked to it).
+same PR (or a follow-up linked to it)..
 
 ## License
 
