@@ -1,6 +1,6 @@
 [project]
 name = "austial-terminus"
-version = "0.1.1"
+dynamic = ["version"]
 description = "Health-check aggregator and indicators (memory, database) -- mirrors @nestjs/terminus (no main-monorepo equivalent)."
 requires-python = ">=3.11"
 dependencies = [
@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
@@ -18,3 +18,9 @@ packages = ["src/austial"]
 [tool.uv.sources]
 austial-common = { workspace = true }
 austial-database = { workspace = true }
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+root = "../.."

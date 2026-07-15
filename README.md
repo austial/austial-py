@@ -234,25 +234,36 @@ under the hood), so route strings read exactly like their Nest counterparts.
 
 ## Releasing
 
-Pushing a `v*.*.*` tag triggers [`.github/workflows/publish.yml`](.github/workflows/publish.yml),
-which re-runs the lint/type-check/test gate, builds the sdist + wheel with
-`uv build`, publishes them to PyPI via
-[trusted publishing](https://docs.pypi.org/trusted-publishers/) (no API
-token stored as a secret), and attaches the built artifacts to a GitHub
-release:
+Every `packages/*` distribution's version is derived automatically from git
+tags via [hatch-vcs](https://github.com/ofek/hatch-vcs) -- there is no
+version to hand-edit in any `pyproject.toml` anymore. An untagged commit
+builds as a `.devN+g<sha>` version; a commit exactly on a `vX.Y.Z` tag builds
+as the clean release version `X.Y.Z`. This is what caused the original
+`0.1.1`/`0.1.2` PyPI "file already exists" mixups -- manually-bumped,
+hand-edited versions drifting out of sync with the tag actually being
+published -- so releasing is now just:
 
 ```bash
-# bump the version in pyproject.toml first, then:
-git commit -am "Bump to vX.Y.Z"
 git tag -a vX.Y.Z -m "vX.Y.Z - ..."
-git push origin main
 git push origin vX.Y.Z
 ```
 
-One-time setup: on PyPI's
+Pushing that tag triggers [`.github/workflows/publish.yml`](.github/workflows/publish.yml),
+which re-runs the lint/type-check/test gate, builds the sdist + wheel for
+every `packages/*` member with `uv build --all-packages`, publishes them to
+PyPI via [trusted publishing](https://docs.pypi.org/trusted-publishers/) (no
+API token stored as a secret), and attaches the built artifacts to a GitHub
+release.
+
+One-time setup per distribution: `austial`, `austial-common`,
+`austial-core`, `austial-config`, `austial-database`, `austial-terminus`,
+`austial-testing` and `austial-cli` are each their own PyPI project and each
+need a trusted publisher added for `austial-py`'s `publish.yml` workflow
+(environment `pypi`) -- on the *existing* `austial` project's
 [publishing settings](https://pypi.org/manage/project/austial/settings/publishing/)
-for the project, add `austial-py`'s `publish.yml` workflow (environment
-`pypi`) as a trusted publisher.
+page for `austial` itself, or via a
+["pending publisher"](https://pypi.org/manage/account/publishing/) for the
+7 project names that don't exist on PyPI yet.
 
 ## License
 

@@ -19,6 +19,7 @@ Nest apps need. Deeper framework internals live in ``austial.core``,
 # sibling ``austial/<name>`` directories onto this package's search path so that
 # ``import austial.common`` etc. keeps resolving, matching NestJS's split into
 # separately-published `@nestjs/*` packages while keeping this convenience barrel intact.
+import importlib.metadata
 from pkgutil import extend_path
 
 __path__ = extend_path(__path__, __name__)
@@ -83,7 +84,10 @@ from austial.core import DynamicModule, Reflector
 from austial.core.app import AustialApplication
 from austial.core.factory import AustialFactory
 
-__version__ = "0.1.0"
+# Derived from the installed distribution's metadata (itself computed by hatch-vcs
+# from the nearest git tag), so this never drifts out of sync with a manual release
+# version bump again.
+__version__ = importlib.metadata.version("austial")
 
 __all__ = [
     "AllExceptionsFilter",
