@@ -96,19 +96,19 @@ inbound request) — see
 
 ## Injecting by token instead of type
 
-Not every dependency is a class you can type-hint against — a database
-session factory, a connection string, a raw value. For those, use
-`Inject(token)` as an explicit default:
+Not every dependency is a class you can type-hint against — a connection
+string, a raw value, a repository bound to a specific entity. For those,
+use `Inject(token)` as an explicit default (`InjectRepository(Entity)` in
+[Database](/techniques/database) is built the same way):
 
 ```python
 from austial import Inject
-from austial.database import DATABASE_SESSION_FACTORY
 
 
 @Injectable()
-class DatabaseHealthIndicator(HealthIndicator):
-    def __init__(self, session_factory=Inject(DATABASE_SESSION_FACTORY)):
-        self._session_factory = session_factory
+class AnalyticsService:
+    def __init__(self, api_prefix=Inject("ANALYTICS_API_PREFIX")):
+        self.api_prefix = api_prefix
 ```
 
 `Optional_()` marks a dependency as optional — if it can't be resolved,
@@ -130,7 +130,7 @@ Beyond a plain class, a module's `providers=[...]` list also accepts
 provider dicts for `useValue`/`useClass`/`useFactory` --
 see [Custom Providers](/fundamentals/custom-providers) for the full
 reference, and [Dynamic Modules](/fundamentals/dynamic-modules) for how
-`ConfigModule.for_root()`/`DatabaseModule.for_root_async()` are built on top
+`ConfigModule.for_root()`/`OrmModule.for_root_async()` are built on top
 of the same mechanism.
 
 ## Provider registration errors

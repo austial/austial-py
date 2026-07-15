@@ -4,94 +4,231 @@ title: Database
 
 # Database
 
-`austial.database` provides an async SQLAlchemy integration — a
-`DatabaseModule` dynamic module that provisions an async engine and
-session factory as injectable tokens, defaulting to a local SQLite file so
-it works with zero external setup.
+`austial.orm` is a from-scratch, [TypeORM](https://typeorm.io)-shaped ORM: `@Entity()`/`@Column()`
+decorators, all four relation types, a `Repository`/`EntityManager` data-mapper API, a fluent
+`QueryBuilder`, and transactions — wired natively into Austial's DI container via `OrmModule`,
+the same way `@nestjs/typeorm` wires up `typeorm` in Nest.
+
+SQLAlchemy Core is used internally, purely as a hidden SQL-compilation/connection-pooling layer
+behind a pluggable `Driver` interface (PostgreSQL via `asyncpg`, SQLite via `aiosqlite` today) —
+you never import or see SQLAlchemy anywhere in application code.
+
+## Defining an entity
+
+```python
+from austial.orm import Column, Entity, PrimaryGeneratedColumn
+
+
+@Entity()
+class Cat:
+    id: int = PrimaryGeneratedColumn()
+    name: str = Column()
+    age: int = Column(nullable=True)
+```
+
+Python has no field-level decorators, so (exactly like `Inject()` elsewhere in Austial) each
+column/relation marker is used as the attribute's *default value* — `@Entity()` reads these
+markers back off the class, converts it into a real `@dataclass`, and registers its schema
+metadata. `Cat` instances are just plain mutable objects (`Cat(name="Tom")`, attribute
+access/assignment) — no active-record magic, no lazy proxies, no dirty-checking.
 
 ## Setup
 
-Simple, static connection URL:
-
 ```python
 from austial import Module
-from austial.database import DatabaseModule
+from austial.orm import OrmModule
 
-
-@Module(imports=[DatabaseModule.for_root("sqlite+aiosqlite:///./austial.db")])
-class AppModule:
-    pass
-```
-
-Connection URL resolved at runtime from other providers (the common case --
-reading it out of `ConfigService`):
-
-```python
-from austial.config import ConfigService
-from austial.database import DatabaseModule
+from src.entities.cat import Cat
 
 
 @Module(
     imports=[
-        DatabaseModule.for_root_async(
-            use_factory=lambda config: config.get(
-                "DATABASE_URL", "sqlite+aiosqlite:///./austial.db"
-            ),
-            inject=[ConfigService],
+        OrmModule.for_root(
+            type_="postgres",
+            url="postgresql+asyncpg://user:pass@localhost/mydb",
+            entities=[Cat],
         ),
-    ]
+    ],
 )
 class AppModule:
     pass
 ```
 
-`use_factory` is called with each of `inject`'s tokens resolved and passed
-positionally, and must return the SQLAlchemy connection URL string. The
-engine itself (`create_async_engine(url, **engine_kwargs)`) is then built
-lazily, the first time anything actually depends on it.
-
-## Injecting a session
-
-`DatabaseModule` exports two string tokens instead of classes (there's no
-single "the" session/engine type to hang a type hint off of), so inject
-them with `Inject(...)`:
+Zero-config local development/tests with SQLite:
 
 ```python
-from austial import Inject
-from austial.database import DATABASE_SESSION_FACTORY
+OrmModule.for_root(type_="sqlite", url="sqlite+aiosqlite:///./austial.db", entities=[Cat])
+```
+
+Connection options resolved at runtime from other providers (the common case — reading a URL out
+of `ConfigService`):
+
+```python
+from austial.config import ConfigService
+from austial.orm import OrmModule
+
+
+OrmModule.for_root_async(
+    use_factory=lambda config: {
+        "type_": "postgres",
+        "url": config.get("DATABASE_URL"),
+    },
+    inject=[ConfigService],
+    entities=[Cat],
+)
+```
+
+`use_factory` is called with each of `inject`'s tokens resolved and passed positionally, and must
+return a dict shaped like `for_root()`'s keyword arguments (`type_`, `url`, any extra
+driver-specific kwargs). `entities`/`synchronize` stay static — they describe your app's schema,
+not runtime connection config, so they're passed directly to `for_root_async()` itself rather
+than through the factory.
+
+### The one manual step: initializing the `DataSource`
+
+`austial-core`'s module scanner walks `@Module(imports=[...])` synchronously and eagerly, and
+there's no async module-init lifecycle hook (yet) for `OrmModule` to hook into. So
+`OrmModule.for_root()` only *constructs* the `Driver`/`DataSource` object at module-scan time
+(cheap — no connection opens yet); your entrypoint must explicitly initialize it before serving
+requests, exactly like vanilla (non-Nest) TypeORM:
+
+```python
+from austial import AustialFactory
+from austial.orm import DataSource
+
+from src.app_module import AppModule
+
+app = AustialFactory.create(AppModule)
+
+
+async def bootstrap() -> None:
+    await app.get(DataSource).initialize()
+    await app.listen(8000)
+```
+
+`synchronize=True` (dev/test only — not the production path once migrations exist) makes
+`initialize()` also issue `CREATE TABLE` for every entity in `entities=[...]`.
+
+## Repositories
+
+Register entities with `OrmModule.for_feature([...])` in whichever feature module owns them, then
+inject a `Repository` with `@InjectRepository()`:
+
+```python
+from austial import Injectable
+from austial.orm import InjectRepository, Repository
+
+from src.entities.cat import Cat
 
 
 @Injectable()
-class CatsRepository:
-    def __init__(self, session_factory=Inject(DATABASE_SESSION_FACTORY)):
-        self._session_factory = session_factory
+class CatsService:
+    def __init__(self, repository: Repository[Cat] = InjectRepository(Cat)):
+        self.repository = repository
 
-    async def find_all(self):
-        async with self._session_factory() as session:
-            result = await session.execute(select(CatModel))
-            return result.scalars().all()
+    async def create(self, name: str) -> Cat:
+        return await self.repository.save(Cat(name=name))
+
+    async def find_all(self) -> list[Cat]:
+        return await self.repository.find()
+
+    async def find_one(self, id: int) -> Cat | None:
+        return await self.repository.find_one_by({"id": id})
 ```
-
-`DATABASE_SESSION_FACTORY` resolves to an
-`sqlalchemy.ext.asyncio.async_sessionmaker` (`expire_on_commit=False`);
-call it to open a session, same as using SQLAlchemy directly -- Austial
-doesn't wrap or hide the underlying SQLAlchemy APIs, it just wires the
-engine/session-factory lifecycle into the DI container for you.
-
-`DATABASE_ENGINE` is exported too, for anything that needs the raw
-`AsyncEngine` directly (running raw SQL, managing connection-pool settings,
-etc.):
 
 ```python
-from austial.database import DATABASE_ENGINE
+@Module(
+    imports=[OrmModule.for_feature([Cat])],
+    providers=[CatsService],
+)
+class CatsModule:
+    pass
 ```
 
-## Swapping in a real database
+`Repository[T]` methods: `find(options)`, `find_one(options)`, `find_by(criteria)`,
+`find_one_by(criteria)`, `count(options)`, `save(entity | [entities])` (INSERT when the primary
+key is unset, else a full-column UPDATE), `remove(entity | [entities])`, `update(criteria,
+partial)` and `delete(criteria)` (bulk, no prior SELECT — same distinction as TypeORM's
+`Repository.update()`/`.delete()` vs. `.save()`/`.remove()`), and `create_query_builder(alias)`.
 
-Nothing about `DatabaseModule` is SQLite-specific beyond the default URL --
-point `use_factory`/`for_root` at any SQLAlchemy-async-compatible URL
-(Postgres via `asyncpg`, MySQL via `aiomysql`, ...) and everything else
-(session injection, health checks) keeps working unchanged. See
-[Health Checks](/techniques/health-checks) for how
-`DatabaseHealthIndicator` uses this same session factory to verify
-connectivity.
+`FindOptions` supports `where` (a dict is one AND-of-equality group, a `list[dict]` is
+OR-of-AND-groups), `relations` (single-level eager-loading via `LEFT JOIN`), `order_by`, `skip`,
+`take`.
+
+## Relations
+
+```python
+from austial.orm import Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn
+
+
+@Entity()
+class Owner:
+    id: int = PrimaryGeneratedColumn()
+    name: str = Column()
+    cats: list["Cat"] = OneToMany(lambda: Cat, inverse_side="owner")
+
+
+@Entity()
+class Cat:
+    id: int = PrimaryGeneratedColumn()
+    name: str = Column()
+    owner: Owner = ManyToOne(lambda: Owner, join_column=JoinColumn(name="owner_id"))
+```
+
+`OneToOne`, `OneToMany`, `ManyToOne`, `ManyToMany` all work the same way TypeORM's do, with one
+deliberate deviation: TypeORM stacks `@JoinColumn()`/`@JoinTable()` decorators above the relation
+decorator, but Python's "marker as default value" trick only allows one right-hand side per
+attribute — so `JoinColumn`/`JoinTable` are passed as a `join_column=`/`join_table=` kwarg
+instead. The target entity accepts either the class directly or a zero-arg callable (`lambda:
+Cat`) for forward references.
+
+Eager-load a relation with `FindOptions.relations` or `QueryBuilder.left_join_and_select()`:
+
+```python
+owners = await owner_repository.find(FindOptions(relations=["cats"]))
+```
+
+## `QueryBuilder`
+
+For anything `FindOptions` can't express, drop to the fluent query builder — mirrors TypeORM's
+own `createQueryBuilder()`:
+
+```python
+cats = await (
+    repository.create_query_builder("cat")
+    .left_join_and_select("cat.owner", "owner")
+    .where("cat.age > :age", {"age": 2})
+    .and_where("owner.name = :name", {"name": "Alice"})
+    .order_by("cat.name", "ASC")
+    .take(10)
+    .get_many()
+)
+```
+
+WHERE clauses are always a raw SQL fragment plus a **separate** bound-params dict — values are
+never string-formatted into the SQL text, only ever bound through the DBAPI driver. This is what
+makes `.where()`/`.and_where()`/`.or_where()` (and everything built on top of them, including
+`FindOptions.where`) SQL-injection-safe by construction.
+
+## Transactions
+
+```python
+async def transfer_cat(data_source: DataSource, cat_id: int, new_owner_id: int) -> None:
+    async def _run(manager: EntityManager) -> None:
+        cat = await manager.find_one_by(Cat, {"id": cat_id})
+        cat.owner_id = new_owner_id
+        await manager.save(cat)
+
+    await data_source.transaction(_run)
+```
+
+`DataSource.transaction(callback)` opens one connection, binds a fresh `EntityManager` to it, and
+runs `callback` — commits on clean return, rolls back automatically if `callback` raises.
+
+## Swapping in a different database
+
+Nothing above the `Driver` interface (`Repository`, `EntityManager`, `QueryBuilder`,
+`DataSource`, every decorator) is dialect-specific — pick `type_="postgres"` or `type_="sqlite"`
+in `OrmModule.for_root()`/`for_root_async()` and everything else keeps working unchanged. See
+[Health Checks](/techniques/health-checks) for how `DatabaseHealthIndicator` uses the same
+`DataSource` to verify connectivity via `data_source.driver.execute_raw("SELECT 1")`.

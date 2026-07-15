@@ -64,7 +64,7 @@ guard, interceptor, handler -- reads top to bottom in the order it executes.
 - **Exception filters** — `ExceptionFilter` ABC + `@Catch(...)`, with a default `AllExceptionsFilter`.
 - **Middleware** — `NestMiddleware` ABC, wired up via `configure(consumer)` on modules.
 - **Config** — `ConfigModule.for_root(env_file=".env")` / `ConfigService`.
-- **Database** — `DatabaseModule.for_root_async(use_factory=, inject=)` over async SQLAlchemy.
+- **Database** — `austial.orm`, a from-scratch TypeORM-shaped ORM: `@Entity()`, `Repository`, `QueryBuilder`, wired up via `OrmModule.for_root(...)`.
 - **Health checks** — `austial.terminus.HealthCheckService` + `MemoryHealthIndicator`, `DatabaseHealthIndicator`.
 - **Testing** — `austial.testing.Test.create_testing_module(...).compile()`.
 - **CLI** — `austial new <name>` / `austial generate|g module|controller|service|resource <name>`.

@@ -62,7 +62,7 @@ providers=[
 
 The factory function is called with each of `inject`'s tokens resolved and
 passed positionally, in order — this is exactly how
-`DatabaseModule.for_root_async(use_factory=, inject=)` and
+`OrmModule.for_root_async(use_factory=, inject=)` and
 `ConfigModule.for_root()` build their own providers under the hood (see
 [Dynamic Modules](/fundamentals/dynamic-modules) and
 [Database](/techniques/database)).
@@ -70,11 +70,13 @@ passed positionally, in order — this is exactly how
 ## Non-class tokens
 
 Any hashable value works as a `"provide"` token — a string (as above), or
-a dedicated sentinel constant:
+a computed per-entity key:
 
 ```python
-DATABASE_ENGINE = "DATABASE_ENGINE"
-DATABASE_SESSION_FACTORY = "DATABASE_SESSION_FACTORY"
+def repository_token(entity: type) -> str:
+    return f"austial:orm:repository:{entity.__module__}.{entity.__qualname__}"
 ```
 
-is precisely the pattern `austial.database` uses internally.
+is precisely the pattern `austial.orm`'s `OrmModule.for_feature(...)` /
+`InjectRepository(...)` use internally, so each entity gets its own
+injectable `Repository` token without a shared string constant to collide on.

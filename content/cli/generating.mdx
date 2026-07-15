@@ -69,16 +69,17 @@ src/modules/cats/
     └── update_cats_dto.py
 ```
 
-`entities/cats_entity.py` — a plain pydantic model standing in for your
-domain entity:
+`entities/cats_entity.py` — an `@Entity()`-decorated domain entity (see
+[Database](/techniques/database) for the full `austial.orm` API):
 
 ```python
-from pydantic import BaseModel
+from austial.orm import Column, Entity, PrimaryGeneratedColumn
 
 
-class Cat(BaseModel):
-    id: int
-    name: str
+@Entity()
+class Cat:
+    id: int = PrimaryGeneratedColumn()
+    name: str = Column()
 ```
 
 `dto/create_cats_dto.py` / `dto/update_cats_dto.py`:
@@ -92,39 +93,36 @@ class UpdateCatDto(BaseModel):
     name: str | None = None
 ```
 
-`cats_service.py` — an in-memory CRUD store, meant to be swapped for
-[`austial.database`](/techniques/database) once you're ready:
+`cats_service.py` — CRUD methods backed by an injected `Repository` (this
+resolves as soon as an `OrmModule.for_root(...)` is configured somewhere in
+the app — see [Database](/techniques/database)):
 
 ```python
 @Injectable()
 class CatService:
-    def __init__(self):
-        self._items: list[Cat] = []
-        self._next_id = 1
+    def __init__(self, repository: Repository[Cat] = InjectRepository(Cat)):
+        self.repository = repository
 
-    def create(self, dto: CreateCatDto) -> Cat:
-        item = Cat(id=self._next_id, **dto.model_dump())
-        self._next_id += 1
-        self._items.append(item)
+    async def create(self, dto: CreateCatDto) -> Cat:
+        return await self.repository.save(Cat(**dto.model_dump()))
+
+    async def find_all(self) -> list[Cat]:
+        return await self.repository.find()
+
+    async def find_one(self, id: int) -> Cat:
+        item = await self.repository.find_one_by({"id": id})
+        if item is None:
+            raise NotFoundException(f"Cat #{id} not found")
         return item
 
-    def find_all(self) -> list[Cat]:
-        return self._items
+    async def update(self, id: int, dto: UpdateCatDto) -> Cat:
+        await self.find_one(id)
+        await self.repository.update(id, dto.model_dump(exclude_unset=True))
+        return await self.find_one(id)
 
-    def find_one(self, id: int) -> Cat:
-        for item in self._items:
-            if item.id == id:
-                return item
-        raise NotFoundException(f"Cat #{id} not found")
-
-    def update(self, id: int, dto: UpdateCatDto) -> Cat:
-        item = self.find_one(id)
-        updated = item.model_copy(update=dto.model_dump(exclude_unset=True))
-        self._items[self._items.index(item)] = updated
-        return updated
-
-    def remove(self, id: int) -> None:
-        self._items.remove(self.find_one(id))
+    async def remove(self, id: int) -> None:
+        await self.find_one(id)
+        await self.repository.delete(id)
 ```
 
 `cats_controller.py` — full CRUD routes, wired to the service above:
@@ -137,30 +135,35 @@ class CatController:
 
     @Post()
     async def create(self, dto: CreateCatDto = Body()) -> Cat:
-        return self.service.create(dto)
+        return await self.service.create(dto)
 
     @Get()
     async def find_all(self) -> list[Cat]:
-        return self.service.find_all()
+        return await self.service.find_all()
 
     @Get(":id")
     async def find_one(self, id: int) -> Cat:
-        return self.service.find_one(id)
+        return await self.service.find_one(id)
 
     @Patch(":id")
     async def update(self, id: int, dto: UpdateCatDto = Body()) -> Cat:
-        return self.service.update(id, dto)
+        return await self.service.update(id, dto)
 
     @Delete(":id")
     async def remove(self, id: int) -> dict:
-        self.service.remove(id)
+        await self.service.remove(id)
         return {"deleted": True}
 ```
 
-`cats_module.py`:
+`cats_module.py` — registers the entity with `OrmModule.for_feature(...)`
+so `InjectRepository(Cat)` above has something to resolve:
 
 ```python
-@Module(controllers=[CatController], providers=[CatService])
+@Module(
+    imports=[OrmModule.for_feature([Cat])],
+    controllers=[CatController],
+    providers=[CatService],
+)
 class CatModule:
     pass
 ```

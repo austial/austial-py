@@ -74,19 +74,19 @@ raises `HealthCheckError` if it exceeds `threshold_bytes`.
 ### `DatabaseHealthIndicator`
 
 ```python
-from austial.database import DATABASE_SESSION_FACTORY
+from austial.orm import DataSource
 from austial.terminus import DatabaseHealthIndicator
 
 
 @Injectable()
 class DatabaseHealthIndicator(HealthIndicator):
-    def __init__(self, session_factory=Inject(DATABASE_SESSION_FACTORY)):
-        self._session_factory = session_factory
+    def __init__(self, data_source: DataSource):
+        self._data_source = data_source
 
     async def ping_check(self, key: str) -> HealthIndicatorResult: ...
 ```
 
-Runs `SELECT 1` through the injected session factory (see
+Runs `SELECT 1` through the injected `DataSource`'s driver (see
 [Database](/techniques/database)) and raises `HealthCheckError` if the
 connection fails — plug it straight into `check([...])` alongside memory:
 
