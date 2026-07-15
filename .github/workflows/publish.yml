@@ -8,7 +8,7 @@ name: Publish
 #
 # One-time setup required on PyPI before the first run: this now publishes 8
 # separate distributions (austial, austial-common, austial-core, austial-config,
-# austial-database, austial-terminus, austial-testing, austial-cli), one per
+# austial-orm, austial-terminus, austial-testing, austial-cli), one per
 # packages/* workspace member. Each is its own PyPI project and needs its OWN
 # "pending publisher" (or trusted publisher once it exists) added on its
 # https://pypi.org/manage/project/<name>/settings/publishing/ page with:

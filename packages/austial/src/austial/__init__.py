@@ -8,12 +8,12 @@ Quickstart::
 Most day-to-day symbols (decorators, exceptions, guards, etc.) are re-exported
 here for convenience, mirroring how ``@nestjs/common`` re-exports everything
 Nest apps need. Deeper framework internals live in ``austial.core``,
-``austial.config``, ``austial.database``, ``austial.terminus``,
+``austial.config``, ``austial.orm``, ``austial.terminus``,
 ``austial.testing`` and ``austial.cli``.
 """
 
 # This distribution ("austial") ships the real top-level ``austial/__init__.py``,
-# while ``austial.common``, ``austial.core``, ``austial.config``, ``austial.database``,
+# while ``austial.common``, ``austial.core``, ``austial.config``, ``austial.orm``,
 # ``austial.terminus``, ``austial.testing`` and ``austial.cli`` each live in their own
 # sibling distribution under packages/. pkgutil-style namespace extension merges those
 # sibling ``austial/<name>`` directories onto this package's search path so that

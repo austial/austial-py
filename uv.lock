@@ -13,7 +13,7 @@ members = [
     "austial-common",
     "austial-config",
     "austial-core",
-    "austial-database",
+    "austial-orm",
     "austial-terminus",
     "austial-testing",
 ]
@@ -118,7 +118,7 @@ dependencies = [
     { name = "austial-common" },
     { name = "austial-config" },
     { name = "austial-core" },
-    { name = "austial-database" },
+    { name = "austial-orm" },
     { name = "austial-terminus" },
     { name = "austial-testing" },
 ]
@@ -129,7 +129,7 @@ requires-dist = [
     { name = "austial-common", editable = "packages/common" },
     { name = "austial-config", editable = "packages/config" },
     { name = "austial-core", editable = "packages/core" },
-    { name = "austial-database", editable = "packages/database" },
+    { name = "austial-orm", editable = "packages/orm" },
     { name = "austial-terminus", editable = "packages/terminus" },
     { name = "austial-testing", editable = "packages/testing" },
 ]
@@ -207,8 +207,8 @@ requires-dist = [
 ]
 
 [[package]]
-name = "austial-database"
-source = { editable = "packages/database" }
+name = "austial-orm"
+source = { editable = "packages/orm" }
 dependencies = [
     { name = "aiosqlite" },
     { name = "austial-common" },
@@ -229,13 +229,13 @@ name = "austial-terminus"
 source = { editable = "packages/terminus" }
 dependencies = [
     { name = "austial-common" },
-    { name = "austial-database" },
+    { name = "austial-orm" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "austial-common", editable = "packages/common" },
-    { name = "austial-database", editable = "packages/database" },
+    { name = "austial-orm", editable = "packages/orm" },
 ]
 
 [[package]]

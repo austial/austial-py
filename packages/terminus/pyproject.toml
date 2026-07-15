@@ -5,7 +5,7 @@ description = "Health-check aggregator and indicators (memory, database) -- mirr
 requires-python = ">=3.11"
 dependencies = [
     "austial-common",
-    "austial-database",
+    "austial-orm",
 ]
 
 [build-system]
@@ -17,7 +17,7 @@ packages = ["src/austial"]
 
 [tool.uv.sources]
 austial-common = { workspace = true }
-austial-database = { workspace = true }
+austial-orm = { workspace = true }
 
 [tool.hatch.version]
 source = "vcs"

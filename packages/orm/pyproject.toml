@@ -1,5 +1,5 @@
 [project]
-name = "austial-database"
+name = "austial-orm"
 dynamic = ["version"]
 description = "DatabaseModule wrapping SQLAlchemy's async engine/session -- mirrors @nestjs/typeorm (no main-monorepo equivalent)."
 requires-python = ">=3.11"

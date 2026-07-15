@@ -10,7 +10,7 @@ dependencies = [
     "austial-common",
     "austial-core",
     "austial-config",
-    "austial-database",
+    "austial-orm",
     "austial-terminus",
     "austial-testing",
     "austial-cli",
@@ -30,7 +30,7 @@ packages = ["src/austial"]
 austial-common = { workspace = true }
 austial-core = { workspace = true }
 austial-config = { workspace = true }
-austial-database = { workspace = true }
+austial-orm = { workspace = true }
 austial-terminus = { workspace = true }
 austial-testing = { workspace = true }
 austial-cli = { workspace = true }

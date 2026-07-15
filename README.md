@@ -182,8 +182,8 @@ austial-py/
 │   ├── config/                       # "austial-config" -- ConfigModule / ConfigService
 │   │   └── src/austial/config/       # (no nestjs/nest equivalent -- mirrors the separate
 │   │                                 #  @nestjs/config repo instead)
-│   ├── database/                      # "austial-database" -- DatabaseModule (SQLAlchemy async)
-│   │   └── src/austial/database/      # (mirrors the separate @nestjs/typeorm repo)
+│   ├── orm/                            # "austial-orm" -- DatabaseModule (SQLAlchemy async)
+│   │   └── src/austial/orm/           # (mirrors the separate @nestjs/typeorm repo)
 │   ├── terminus/                       # "austial-terminus" -- HealthCheckService + indicators,
 │   │   ├── test/                       # own health_check_service_spec.py, like Nest's
 │   │   │                               # per-package test/ dirs
@@ -256,7 +256,7 @@ API token stored as a secret), and attaches the built artifacts to a GitHub
 release.
 
 One-time setup per distribution: `austial`, `austial-common`,
-`austial-core`, `austial-config`, `austial-database`, `austial-terminus`,
+`austial-core`, `austial-config`, `austial-orm`, `austial-terminus`,
 `austial-testing` and `austial-cli` are each their own PyPI project and each
 need a trusted publisher added for `austial-py`'s `publish.yml` workflow
 (environment `pypi`) -- on the *existing* `austial` project's

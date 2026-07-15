@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import text
 
 from austial.common.decorators.injectable import Inject, Injectable
-from austial.database.database_module import DATABASE_SESSION_FACTORY
+from austial.orm.database_module import DATABASE_SESSION_FACTORY
 from austial.terminus.health_indicator import HealthCheckError, HealthIndicator, HealthIndicatorResult
 
 

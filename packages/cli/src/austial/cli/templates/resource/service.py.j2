@@ -8,7 +8,7 @@ from src.modules.{{ snake_name }}.entities.{{ snake_name }}_entity import {{ cla
 @Injectable()
 class {{ class_name }}Service:
     """In-memory CRUD store -- swap this out for a real repository backed by
-    ``austial.database`` (SQLAlchemy) whenever you're ready."""
+    ``austial.orm`` (SQLAlchemy) whenever you're ready."""
 
     def __init__(self):
         self._items: list[{{ class_name }}] = []
