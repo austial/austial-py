@@ -154,30 +154,56 @@ uv run austial g resource cats             # same as above, short alias
 
 ## Repository layout
 
+Mirrors how [nestjs/nest](https://github.com/nestjs/nest/tree/master) splits
+its monorepo into independently-published `packages/*`, rather than one
+monolithic library. The root `pyproject.toml` is a virtual [uv
+workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) (like
+`lerna.json` + the root `package.json`'s `"workspaces"` field) -- it has no
+`[project]` of its own and installs nothing directly.
+
 ```
 austial-py/
-├── pyproject.toml          # package "austial", console-script entry point
-├── LICENSE                  # MIT
-├── assets/                   # logo.svg (+ logo-dark.svg for dark mode) / icon.svg / apple-icon.png
-├── austial/                 # the framework (installable library) -- this *is* the package
-│   ├── common/               # decorators, guards, interceptors, pipes, filters,
-│   │                         # middleware, exceptions, logger
-│   ├── core/                  # metadata/reflector, DI container, router builder,
-│   │                         # AustialFactory / AustialApplication
-│   ├── config/                 # ConfigModule / ConfigService
-│   ├── database/                # DatabaseModule (SQLAlchemy async)
-│   ├── terminus/                 # HealthCheckService + health indicators
-│   ├── testing/                   # Test.create_testing_module(...)
-│   └── cli/                        # `austial new` / `generate` / `serve` + templates
-└── tests/                    # tests for the framework itself -- no sample app needed;
-    ├── unit/                   # test modules/controllers are defined inline per test file
-    └── e2e/
+├── pyproject.toml            # virtual workspace root: [tool.uv.workspace], shared ruff/mypy/pytest config
+├── LICENSE                    # MIT
+├── assets/                     # logo.svg (+ logo-dark.svg for dark mode) / icon.svg / apple-icon.png
+├── packages/                    # every installable distribution; each is `austial.<name>` via
+│   │                             # a pkgutil-style namespace-package shim -- imports stay
+│   │                             # `from austial.core import ...` etc, unchanged
+│   ├── austial/                   # umbrella "austial" dist: re-exports common+core's
+│   │   │                          # everyday symbols, depends on ALL packages below,
+│   │   │                          # owns the `austial` console-script entry point
+│   │   └── src/austial/__init__.py
+│   ├── common/                     # "austial-common" -- decorators, guards, interceptors,
+│   │   │                           # pipes, filters, middleware, exceptions, logger
+│   │   └── src/austial/common/
+│   ├── core/                        # "austial-core" -- metadata/reflector, DI container,
+│   │   │                            # router builder, AustialFactory / AustialApplication
+│   │   └── src/austial/core/
+│   ├── config/                       # "austial-config" -- ConfigModule / ConfigService
+│   │   └── src/austial/config/       # (no nestjs/nest equivalent -- mirrors the separate
+│   │                                 #  @nestjs/config repo instead)
+│   ├── database/                      # "austial-database" -- DatabaseModule (SQLAlchemy async)
+│   │   └── src/austial/database/      # (mirrors the separate @nestjs/typeorm repo)
+│   ├── terminus/                       # "austial-terminus" -- HealthCheckService + indicators,
+│   │   ├── test/                       # own health_check_service_spec.py, like Nest's
+│   │   │                               # per-package test/ dirs
+│   │   └── src/austial/terminus/        # (mirrors the separate @nestjs/terminus repo)
+│   ├── testing/                          # "austial-testing" -- Test.create_testing_module(...)
+│   │   └── src/austial/testing/
+│   └── cli/                                # "austial-cli" -- `austial new`/`generate`/`serve`
+│       └── src/austial/cli/                 # + Jinja2 templates (mirrors the separate
+│                                             #  nest-cli repo)
+└── integration/               # cross-package e2e tests -- mirrors Nest's top-level
+                                # `integration/` dir (its per-package unit tests live
+                                # in each package's own `test/`)
 ```
 
-There's deliberately no `src/` here -- that's what `austial new` generates for
-*your* project, kept out of the framework's own repo. Test files use Nest's
-`*.spec.ts` naming convention (`*_spec.py` here); `pyproject.toml`'s
-`[tool.pytest.ini_options]` is configured to discover them.
+There's deliberately no `src/` at the repo root -- that's what `austial new`
+generates for *your* project, kept out of the framework's own repo. Test files
+use Nest's `*.spec.ts` naming convention (`*_spec.py` here); the root
+`pyproject.toml`'s `[tool.pytest.ini_options]` scans `packages/` and
+`integration/` to discover them. Run everything from the repo root with
+`uv sync --all-packages --group dev`.
 
 ## Request lifecycle
 

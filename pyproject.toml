@@ -1,26 +1,12 @@
-[project]
-name = "austial"
-version = "0.1.1"
-description = "A NestJS-inspired, batteries-included web framework for Python, built on top of FastAPI."
-readme = "README.md"
-requires-python = ">=3.11"
-license = { text = "MIT" }
-urls = { Homepage = "https://github.com/austial/austial-py", Repository = "https://github.com/austial/austial-py", Issues = "https://github.com/austial/austial-py/issues" }
-dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.30.0",
-    "pydantic>=2.7.0",
-    "pydantic-settings>=2.4.0",
-    "typer>=0.12.0",
-    "rich>=13.7.0",
-    "jinja2>=3.1.0",
-    "sqlalchemy>=2.0.30",
-    "aiosqlite>=0.20.0",
-    "httpx>=0.27.0",
-    "python-multipart>=0.0.9",
-]
 
-[project.optional-dependencies]
+# Virtual workspace root -- this project itself is not published. It only wires
+# together the installable sub-packages under packages/ (each with its own
+# pyproject.toml) into a single shared uv-managed virtualenv, the same role
+# lerna.json + the root package.json "workspaces" field play in nestjs/nest.
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[dependency-groups]
 dev = [
     "pytest>=8.2.0",
     "pytest-asyncio>=0.23.0",
@@ -28,30 +14,18 @@ dev = [
     "ruff>=0.6.0",
     "mypy>=1.11.0",
     "pre-commit>=3.7.0",
+    "httpx>=0.27.0",
 ]
-
-[project.scripts]
-austial = "austial.cli.main:run"
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["austial"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+testpaths = ["packages", "integration"]
 python_files = ["*_spec.py", "test_*.py", "*_test.py"]
-
-[tool.uv]
-package = true
 
 [tool.ruff]
 line-length = 120
 target-version = "py311"
-extend-exclude = ["austial/cli/templates"]
+extend-exclude = ["packages/cli/src/austial/cli/templates"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
@@ -65,4 +39,4 @@ python_version = "3.11"
 ignore_missing_imports = true
 check_untyped_defs = true
 warn_unused_ignores = true
-exclude = ["austial/cli/templates/", "build/"]
+exclude = ["packages/cli/src/austial/cli/templates/", "build/"]

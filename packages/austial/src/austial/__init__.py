@@ -12,6 +12,17 @@ Nest apps need. Deeper framework internals live in ``austial.core``,
 ``austial.testing`` and ``austial.cli``.
 """
 
+# This distribution ("austial") ships the real top-level ``austial/__init__.py``,
+# while ``austial.common``, ``austial.core``, ``austial.config``, ``austial.database``,
+# ``austial.terminus``, ``austial.testing`` and ``austial.cli`` each live in their own
+# sibling distribution under packages/. pkgutil-style namespace extension merges those
+# sibling ``austial/<name>`` directories onto this package's search path so that
+# ``import austial.common`` etc. keeps resolving, matching NestJS's split into
+# separately-published `@nestjs/*` packages while keeping this convenience barrel intact.
+from pkgutil import extend_path
+
+__path__ = extend_path(__path__, __name__)
+
 from austial.common import (
     AllExceptionsFilter,
     ArgumentMetadata,

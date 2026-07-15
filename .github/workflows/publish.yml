@@ -6,9 +6,12 @@ name: Publish
 # PyPI via trusted publishing (OIDC -- no long-lived API token stored as a
 # secret), and attaches the built artifacts to a GitHub release.
 #
-# One-time setup required on PyPI before the first run: on the project's
-# https://pypi.org/manage/project/austial/settings/publishing/ page, add a
-# "pending publisher" (or trusted publisher once the project exists) with:
+# One-time setup required on PyPI before the first run: this now publishes 8
+# separate distributions (austial, austial-common, austial-core, austial-config,
+# austial-database, austial-terminus, austial-testing, austial-cli), one per
+# packages/* workspace member. Each is its own PyPI project and needs its OWN
+# "pending publisher" (or trusted publisher once it exists) added on its
+# https://pypi.org/manage/project/<name>/settings/publishing/ page with:
 #   owner: austial   repo: austial-py   workflow: publish.yml   environment: pypi
 
 on:
@@ -32,13 +35,13 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync --all-extras
+        run: uv sync --all-packages --group dev
 
       - name: Lint
         run: uv run ruff check .
 
       - name: Type-check
-        run: uv run mypy austial tests
+        run: uv run mypy packages
 
       - name: Test
         run: uv run pytest -q
@@ -61,8 +64,8 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Build sdist + wheel
-        run: uv build
+      - name: Build sdist + wheel for every workspace package
+        run: uv build --all-packages --out-dir dist
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
