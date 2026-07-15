@@ -2,11 +2,23 @@ name: Publish
 
 # Cuts a release whenever a `v*.*.*` tag is pushed (e.g. `git tag -a v0.1.1 &&
 # git push origin v0.1.1`): runs the same lint/type-check/test gate as
-# pre-commit, then builds the sdist/wheel with `uv build`, publishes them to
-# PyPI via trusted publishing (OIDC -- no long-lived API token stored as a
-# secret), and attaches the built artifacts to a GitHub release.
+# pre-commit, builds the sdist/wheel for every workspace package once, then
+# publishes each of the 8 distributions to PyPI via trusted publishing (OIDC
+# -- no long-lived API token stored as a secret), and finally attaches the
+# built artifacts to a GitHub release.
 #
-# One-time setup required on PyPI before the first run: this now publishes 8
+# IMPORTANT: publishing runs as a job matrix -- one job per PyPI project,
+# each minting its OWN OIDC token. Trusted-publishing OIDC tokens are scoped
+# to a single PyPI project per mint request; funnelling all 8 projects'
+# files through one `pypa/gh-action-pypi-publish` call in a single job (the
+# previous setup) causes PyPI to reject every project's upload except the
+# one its token happened to get scoped to, with:
+#   403 Invalid API Token: OIDC scoped token is not valid for project 'x'
+# See https://github.com/pypa/gh-action-pypi-publish#trusted-publishing --
+# "if uploading to multiple indices/projects, use a separate job (and
+# therefore a separate OIDC token) per project."
+#
+# One-time setup required on PyPI before the first run: this publishes 8
 # separate distributions (austial, austial-common, austial-core, austial-config,
 # austial-orm, austial-terminus, austial-testing, austial-cli), one per
 # packages/* workspace member. Each is its own PyPI project and needs its OWN
@@ -46,16 +58,10 @@ jobs:
       - name: Test
         run: uv run pytest -q
 
-  publish:
-    name: Build & publish to PyPI
+  build:
+    name: Build distributions
     needs: test
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/project/austial/
-    permissions:
-      id-token: write  # mint the PyPI trusted-publishing OIDC token
-      contents: write  # create the GitHub release
     steps:
       - uses: actions/checkout@v4
 
@@ -67,10 +73,66 @@ jobs:
       - name: Build sdist + wheel for every workspace package
         run: uv build --all-packages --out-dir dist
 
+      - name: Upload built distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish ${{ matrix.package }} to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - austial
+          - austial-common
+          - austial-core
+          - austial-config
+          - austial-orm
+          - austial-terminus
+          - austial-testing
+          - austial-cli
+    environment:
+      name: pypi
+      url: https://pypi.org/project/${{ matrix.package }}/
+    permissions:
+      id-token: write  # mint this project's own PyPI trusted-publishing OIDC token
+    steps:
+      - name: Download built distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Select this project's distribution files
+        run: |
+          mkdir -p dist-selected
+          normalized="${PACKAGE//-/_}"
+          cp "dist/${normalized}-"* dist-selected/
+          ls -l dist-selected
+        env:
+          PACKAGE: ${{ matrix.package }}
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: dist
+          packages-dir: dist-selected
+
+  release:
+    name: Create GitHub release
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # create the GitHub release
+    steps:
+      - name: Download built distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2

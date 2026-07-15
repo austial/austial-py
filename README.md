@@ -250,10 +250,15 @@ git push origin vX.Y.Z
 
 Pushing that tag triggers [`.github/workflows/publish.yml`](.github/workflows/publish.yml),
 which re-runs the lint/type-check/test gate, builds the sdist + wheel for
-every `packages/*` member with `uv build --all-packages`, publishes them to
-PyPI via [trusted publishing](https://docs.pypi.org/trusted-publishers/) (no
-API token stored as a secret), and attaches the built artifacts to a GitHub
-release.
+every `packages/*` member once with `uv build --all-packages`, then publishes
+each of the 8 distributions to PyPI via
+[trusted publishing](https://docs.pypi.org/trusted-publishers/) (no API token
+stored as a secret) from its own job in a matrix -- one job per PyPI project,
+each minting its own OIDC token, since a trusted-publishing token is scoped
+to a single project per mint request and funnelling every project's files
+through one job/one token gets every project but one rejected with `403
+Invalid API Token: OIDC scoped token is not valid for project '<name>'`.
+A final job attaches all the built artifacts to a GitHub release.
 
 One-time setup per distribution: `austial`, `austial-common`,
 `austial-core`, `austial-config`, `austial-orm`, `austial-terminus`,
