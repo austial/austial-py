@@ -22,7 +22,14 @@ repos:
     hooks:
       - id: mypy
         name: mypy
-        entry: uv run mypy packages
+        # Scoped to each package's `src/` (the published framework code), not `packages` as a
+        # whole -- `packages/*/test` dirs mix pytest's own import conventions (bare `test/`
+        # dirs deliberately left without `__init__.py` so pytest rootdir-inserts them onto
+        # `sys.path`, but subpackages like `orm/test/fixtures/` do have one) with mypy's
+        # `explicit_package_bases` module-name resolution, which the two disagree on for the
+        # same file. Test *correctness* is pytest's job (`pytest` hook below); mypy's job here
+        # is keeping the public framework API honest.
+        entry: uv run mypy packages/austial/src packages/cli/src packages/common/src packages/config/src packages/core/src packages/orm/src packages/terminus/src packages/testing/src
         language: system
         pass_filenames: false
         types: [python]

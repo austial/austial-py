@@ -39,4 +39,30 @@ python_version = "3.11"
 ignore_missing_imports = true
 check_untyped_defs = true
 warn_unused_ignores = true
+explicit_package_bases = true
 exclude = ["packages/cli/src/austial/cli/templates/", "build/"]
+# Every sub-package's `austial.*` namespace is merged at runtime via `pkgutil.extend_path()`
+# (see `packages/austial/src/austial/__init__.py`) -- mypy has no static equivalent for that, so
+# without every package's `src/` on `mypy_path`, an absolute `from austial.orm import ...` in a
+# file mypy analyzes outside `packages/orm` (e.g. any *other* package's test suite) silently
+# resolves to `Any` instead of erroring (masked by `ignore_missing_imports`), which is exactly
+# how `@Entity()`'s `dataclass_transform`-synthesized `__init__` went unchecked before this fix.
+mypy_path = [
+    "packages/austial/src",
+    "packages/cli/src",
+    "packages/common/src",
+    "packages/config/src",
+    "packages/core/src",
+    "packages/orm/src",
+    "packages/terminus/src",
+    "packages/testing/src",
+    # `packages/orm/test` has no `__init__.py` (pytest rootdir-inserts it onto `sys.path`,
+    # exactly like every other package's `test/`), but its `fixtures/` subpackage *does* have
+    # one -- so `fixtures.entities` is importable at runtime. Without this on `mypy_path`,
+    # mypy computes two different module names for the same file (`fixtures.entities` when
+    # resolving `entity_metadata_spec.py`'s `from fixtures.entities import ...`, vs.
+    # `packages.orm.test.fixtures.entities` when directory-walking `packages` directly, since
+    # `packages/orm/test` matches no known source root) -- the same "found twice" class of bug
+    # `explicit_package_bases` above exists to prevent, just one level deeper.
+    "packages/orm/test",
+]

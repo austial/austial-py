@@ -1,6 +1,7 @@
-from pydantic import BaseModel
+from austial.orm import Column, Entity, PrimaryGeneratedColumn
 
 
-class {{ class_name }}(BaseModel):
-    id: int
-    name: str
+@Entity()
+class {{ class_name }}:
+    id: int = PrimaryGeneratedColumn()
+    name: str = Column()

@@ -13,21 +13,21 @@ class {{ class_name }}Controller:
 
     @Post()
     async def create(self, dto: Create{{ class_name }}Dto = Body()) -> {{ class_name }}:
-        return self.service.create(dto)
+        return await self.service.create(dto)
 
     @Get()
     async def find_all(self) -> list[{{ class_name }}]:
-        return self.service.find_all()
+        return await self.service.find_all()
 
     @Get(":id")
     async def find_one(self, id: int) -> {{ class_name }}:
-        return self.service.find_one(id)
+        return await self.service.find_one(id)
 
     @Patch(":id")
     async def update(self, id: int, dto: Update{{ class_name }}Dto = Body()) -> {{ class_name }}:
-        return self.service.update(id, dto)
+        return await self.service.update(id, dto)
 
     @Delete(":id")
     async def remove(self, id: int) -> dict:
-        self.service.remove(id)
+        await self.service.remove(id)
         return {"deleted": True}

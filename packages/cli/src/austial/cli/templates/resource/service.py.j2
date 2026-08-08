@@ -1,4 +1,5 @@
 from austial import Injectable, NotFoundException
+from austial.orm import InjectRepository, Repository
 
 from src.modules.{{ snake_name }}.dto.create_{{ snake_name }}_dto import Create{{ class_name }}Dto
 from src.modules.{{ snake_name }}.dto.update_{{ snake_name }}_dto import Update{{ class_name }}Dto
@@ -7,33 +8,26 @@ from src.modules.{{ snake_name }}.entities.{{ snake_name }}_entity import {{ cla
 
 @Injectable()
 class {{ class_name }}Service:
-    """In-memory CRUD store -- swap this out for a real repository backed by
-    ``austial.orm`` (SQLAlchemy) whenever you're ready."""
+    def __init__(self, repository: Repository[{{ class_name }}] = InjectRepository({{ class_name }})):
+        self.repository = repository
 
-    def __init__(self):
-        self._items: list[{{ class_name }}] = []
-        self._next_id = 1
+    async def create(self, dto: Create{{ class_name }}Dto) -> {{ class_name }}:
+        return await self.repository.save({{ class_name }}(**dto.model_dump()))
 
-    def create(self, dto: Create{{ class_name }}Dto) -> {{ class_name }}:
-        item = {{ class_name }}(id=self._next_id, **dto.model_dump())
-        self._next_id += 1
-        self._items.append(item)
+    async def find_all(self) -> list[{{ class_name }}]:
+        return await self.repository.find()
+
+    async def find_one(self, id: int) -> {{ class_name }}:
+        item = await self.repository.find_one_by({"id": id})
+        if item is None:
+            raise NotFoundException(f"{{ class_name }} #{id} not found")
         return item
 
-    def find_all(self) -> list[{{ class_name }}]:
-        return self._items
+    async def update(self, id: int, dto: Update{{ class_name }}Dto) -> {{ class_name }}:
+        await self.find_one(id)
+        await self.repository.update(id, dto.model_dump(exclude_unset=True))
+        return await self.find_one(id)
 
-    def find_one(self, id: int) -> {{ class_name }}:
-        for item in self._items:
-            if item.id == id:
-                return item
-        raise NotFoundException(f"{{ class_name }} #{id} not found")
-
-    def update(self, id: int, dto: Update{{ class_name }}Dto) -> {{ class_name }}:
-        item = self.find_one(id)
-        updated = item.model_copy(update=dto.model_dump(exclude_unset=True))
-        self._items[self._items.index(item)] = updated
-        return updated
-
-    def remove(self, id: int) -> None:
-        self._items.remove(self.find_one(id))
+    async def remove(self, id: int) -> None:
+        await self.find_one(id)
+        await self.repository.delete(id)

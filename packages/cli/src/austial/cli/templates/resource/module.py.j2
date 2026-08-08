@@ -1,9 +1,15 @@
 from austial import Module
+from austial.orm import OrmModule
 
 from src.modules.{{ snake_name }}.{{ snake_name }}_controller import {{ class_name }}Controller
 from src.modules.{{ snake_name }}.{{ snake_name }}_service import {{ class_name }}Service
+from src.modules.{{ snake_name }}.entities.{{ snake_name }}_entity import {{ class_name }}
 
 
-@Module(controllers=[{{ class_name }}Controller], providers=[{{ class_name }}Service])
+@Module(
+    imports=[OrmModule.for_feature([{{ class_name }}])],
+    controllers=[{{ class_name }}Controller],
+    providers=[{{ class_name }}Service],
+)
 class {{ class_name }}Module:
     pass
