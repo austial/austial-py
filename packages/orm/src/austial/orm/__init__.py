@@ -33,7 +33,7 @@ from austial.orm.exceptions import (
     RelationNotFoundError,
     TransactionError,
 )
-from austial.orm.expression import AggregateFn
+from austial.orm.expression import AggregateFn, In, NotIn
 from austial.orm.metadata.column_types import (
     BigInteger,
     Boolean,
@@ -73,6 +73,7 @@ __all__ = [
     "EnumType",
     "FindOptions",
     "Float",
+    "In",
     "InjectRepository",
     "Integer",
     "JSONType",
@@ -82,6 +83,7 @@ __all__ = [
     "ManyToOne",
     "MissingPrimaryKeyError",
     "NamingStrategy",
+    "NotIn",
     "Numeric",
     "OneToMany",
     "OneToOne",

@@ -9,13 +9,44 @@ Nothing in this module imports ``sqlalchemy``. This is the seam a future, fully-
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
+
+from austial.orm.metadata.column_types import ColumnType
 
 JoinType = Literal["INNER", "LEFT"]
 OrderDirection = Literal["ASC", "DESC"]
 Connector = Literal["AND", "OR"]
 AggregateFn = Literal["SUM", "AVG", "MIN", "MAX"]
+
+
+@dataclass
+class TypedParam:
+    """A bind value paired with its logical column type -- lets a driver bind it with real type
+    information instead of an untyped DBAPI parameter (needed e.g. for Postgres native ``ENUM``
+    columns via asyncpg, which reject an untyped string parameter against an enum operator).
+    Only ``driver/sqlalchemy_support.py`` interprets this; a ``WhereFragment.params`` value that
+    isn't a ``TypedParam`` is bound as-is."""
+
+    value: Any
+    column_type: ColumnType
+    enum_name: str | None = None
+
+
+@dataclass
+class In:
+    """Marks a ``FindOptions.where`` value as a membership test (mirrors TypeORM's ``In()``) --
+    ``{"status": In([...])}`` compiles to ``status IN (...)`` instead of equality."""
+
+    values: Sequence[Any]
+
+
+@dataclass
+class NotIn:
+    """The negated counterpart of :class:`In` -- compiles to ``status NOT IN (...)``."""
+
+    values: Sequence[Any]
 
 
 @dataclass

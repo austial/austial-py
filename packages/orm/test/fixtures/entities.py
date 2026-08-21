@@ -16,6 +16,7 @@ from austial.orm import (
     Column,
     CreateDateColumn,
     Entity,
+    EnumType,
     JoinColumn,
     JoinTable,
     ManyToMany,
@@ -61,6 +62,15 @@ class Order:
     id: int = PrimaryGeneratedColumn()
     group: str = Column()
     total: int = Column(nullable=True)
+
+
+@Entity()
+class Subscriber:
+    """Regression fixture for a native-``ENUM``-typed column -- exercises ``In``/``NotIn`` and
+    ``QueryBuilder``'s ``cast_text`` helpers (see ``query_builder_spec.py``/``repository_spec.py``)."""
+
+    id: int = PrimaryGeneratedColumn()
+    status: str = Column(type_=EnumType(values=("PENDING", "VERIFIED", "REJECTED", "MANUAL_REVIEW")))
 
 
 @Entity(append_only=True)

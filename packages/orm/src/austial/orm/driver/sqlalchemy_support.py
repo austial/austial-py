@@ -13,7 +13,15 @@ from typing import Any
 import sqlalchemy as sa
 
 from austial.orm.decorators.entity import get_entity_metadata
-from austial.orm.expression import DeleteSpec, DriverResult, InsertSpec, SelectSpec, UpdateSpec, WhereFragment
+from austial.orm.expression import (
+    DeleteSpec,
+    DriverResult,
+    InsertSpec,
+    SelectSpec,
+    TypedParam,
+    UpdateSpec,
+    WhereFragment,
+)
 from austial.orm.metadata import column_types as ct
 from austial.orm.metadata.entity_metadata import ColumnMetadata, EntityMetadata, RelationMetadata
 from austial.orm.naming_strategy import NamingStrategy
@@ -55,7 +63,7 @@ def sqla_type_for(column_type: ct.ColumnType, *, enum_name: str | None = None) -
 def _sqla_column(table_name: str, column: ColumnMetadata) -> sa.Column:
     return sa.Column(
         column.column_name,
-        sqla_type_for(column.type_, enum_name=f"{table_name}_{column.column_name}_enum"),
+        sqla_type_for(column.type_, enum_name=ct.enum_type_name(table_name, column.column_name)),
         primary_key=column.primary,
         autoincrement=column.generated and column.primary,
         nullable=column.nullable,
@@ -179,7 +187,15 @@ class SchemaCatalog:
 def _combine_where(fragments: list[WhereFragment]) -> Any:
     clause: Any = None
     for frag in fragments:
-        piece = sa.text(frag.sql).bindparams(**frag.params)
+        plain: dict[str, Any] = {}
+        typed_binds: list[Any] = []
+        for name, value in frag.params.items():
+            if isinstance(value, TypedParam):
+                bind_type = sqla_type_for(value.column_type, enum_name=value.enum_name)
+                typed_binds.append(sa.bindparam(name, value.value, type_=bind_type))
+            else:
+                plain[name] = value
+        piece = sa.text(frag.sql).bindparams(*typed_binds, **plain)
         if clause is None:
             clause = piece
         elif frag.connector == "OR":

@@ -21,9 +21,20 @@ from austial.orm.decorators.entity import get_entity_metadata
 from austial.orm.driver.base import Driver
 from austial.orm.driver.sqlalchemy_support import SchemaCatalog
 from austial.orm.exceptions import AppendOnlyViolationError, OrmError, RelationNotFoundError
-from austial.orm.expression import AggregateFn, Connector, DeleteSpec, InsertSpec, UpdateSpec, WhereFragment
+from austial.orm.expression import (
+    AggregateFn,
+    Connector,
+    DeleteSpec,
+    In,
+    InsertSpec,
+    NotIn,
+    TypedParam,
+    UpdateSpec,
+    WhereFragment,
+)
 from austial.orm.identifier import quote_ref
-from austial.orm.metadata.entity_metadata import EntityMetadata, RelationType
+from austial.orm.metadata.column_types import EnumType, enum_type_name
+from austial.orm.metadata.entity_metadata import ColumnMetadata, EntityMetadata, RelationType
 from austial.orm.query_builder import QueryBuilder
 
 T = TypeVar("T")
@@ -51,11 +62,24 @@ class DeleteResult:
     affected: int
 
 
+def _typed_value(meta: EntityMetadata, column: ColumnMetadata, value: Any) -> Any:
+    """Wraps ``value`` as a :class:`TypedParam` when ``column`` is a native ``ENUM`` -- lets the
+    driver bind it with the real Postgres enum type instead of an untyped parameter (asyncpg
+    otherwise rejects comparing an enum column to an untyped string). No-op for every other
+    column type, and for the SQLite driver used in tests (which ignores ``TypedParam.column_type``
+    beyond the plain value)."""
+    if isinstance(column.type_, EnumType):
+        return TypedParam(value, column.type_, enum_type_name(meta.table_name, column.column_name))
+    return value
+
+
 def _build_where_fragments(meta: EntityMetadata, alias: str, where: WhereClause | None) -> list[WhereFragment]:
     """Translates a ``FindOptions.where``-shaped value into raw-SQL ``WhereFragment``s -- a
     ``dict`` is one AND-of-equality group, a ``list[dict]`` is OR-of-AND-groups (matches
-    TypeORM's ``FindOptionsWhere`` semantics). Values only ever travel through ``params``, never
-    string-formatted into ``sql`` -- same SQL-injection-safety guarantee as ``QueryBuilder``."""
+    TypeORM's ``FindOptionsWhere`` semantics). A value wrapped in :class:`In`/:class:`NotIn`
+    (mirrors TypeORM's ``In()``) compiles to ``column IN (...)``/``NOT IN (...)`` instead of
+    equality. Values only ever travel through ``params``, never string-formatted into ``sql`` --
+    same SQL-injection-safety guarantee as ``QueryBuilder``."""
     if not where:
         return []
     groups = where if isinstance(where, list) else [where]
@@ -68,9 +92,23 @@ def _build_where_fragments(meta: EntityMetadata, alias: str, where: WhereClause 
             column = meta.column(attr_name)
             if column is None:
                 raise OrmError(f"{meta.entity_cls.__name__!r} has no column {attr_name!r}")
-            param_name = f"p{next(counter)}"
-            clauses.append(f"{quote_ref(alias, column.column_name)} = :{param_name}")
-            params[param_name] = value
+            qualified = quote_ref(alias, column.column_name)
+            if isinstance(value, (In, NotIn)):
+                membership_values = list(value.values)
+                negate = isinstance(value, NotIn)
+                if not membership_values:
+                    clauses.append("1 = 1" if negate else "1 = 0")
+                    continue
+                names = [f"p{next(counter)}" for _ in membership_values]
+                placeholders = ", ".join(f":{n}" for n in names)
+                op = "NOT IN" if negate else "IN"
+                clauses.append(f"{qualified} {op} ({placeholders})")
+                for param_name, item in zip(names, membership_values, strict=True):
+                    params[param_name] = _typed_value(meta, column, item)
+            else:
+                param_name = f"p{next(counter)}"
+                clauses.append(f"{qualified} = :{param_name}")
+                params[param_name] = _typed_value(meta, column, value)
         connector: Connector = "AND" if group_index == 0 else "OR"
         fragments.append(WhereFragment(" AND ".join(clauses), params, connector))
     return fragments

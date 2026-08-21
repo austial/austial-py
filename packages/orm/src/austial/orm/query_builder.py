@@ -9,11 +9,21 @@ through the DBAPI, which is what actually makes this SQL-injection-safe.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from itertools import count
 from typing import Any, Generic, Literal, Self, TypeVar
 
 from austial.orm.driver.base import Driver
 from austial.orm.driver.sqlalchemy_support import SchemaCatalog
-from austial.orm.expression import AggregateFn, AggregateSpec, JoinSpec, OrderBySpec, SelectSpec, WhereFragment
+from austial.orm.expression import (
+    AggregateFn,
+    AggregateSpec,
+    Connector,
+    JoinSpec,
+    OrderBySpec,
+    SelectSpec,
+    WhereFragment,
+)
 from austial.orm.hydration import RowHydrator
 
 T = TypeVar("T")
@@ -24,6 +34,7 @@ class QueryBuilder(Generic[T]):
         self._driver = driver
         self._catalog = catalog
         self._spec = SelectSpec(entity=entity, alias=alias)
+        self._param_seq = count()
 
     def select(self, *columns: str) -> Self:
         self._spec.columns = list(columns) or None
@@ -41,6 +52,74 @@ class QueryBuilder(Generic[T]):
 
     def or_where(self, condition: str, params: dict[str, Any] | None = None) -> Self:
         self._spec.wheres.append(WhereFragment(condition, params or {}, "OR"))
+        return self
+
+    def _next_param_name(self) -> str:
+        return f"v{next(self._param_seq)}"
+
+    @staticmethod
+    def _column_ref(column: str, cast_text: bool) -> str:
+        return f"CAST({column} AS TEXT)" if cast_text else column
+
+    def _eq_fragment(self, column: str, value: Any, cast_text: bool, connector: Connector) -> WhereFragment:
+        name = self._next_param_name()
+        return WhereFragment(f"{self._column_ref(column, cast_text)} = :{name}", {name: value}, connector)
+
+    def _membership_fragment(
+        self, column: str, values: Sequence[Any], cast_text: bool, negate: bool, connector: Connector
+    ) -> WhereFragment:
+        values = list(values)
+        col_ref = self._column_ref(column, cast_text)
+        if not values:
+            # An empty IN() is invalid SQL; vacuous-truth semantics instead (NOT IN [] matches
+            # everything, IN [] matches nothing) rather than raising.
+            return WhereFragment("1 = 1" if negate else "1 = 0", {}, connector)
+        names = [self._next_param_name() for _ in values]
+        placeholders = ", ".join(f":{n}" for n in names)
+        op = "NOT IN" if negate else "IN"
+        return WhereFragment(f"{col_ref} {op} ({placeholders})", dict(zip(names, values, strict=True)), connector)
+
+    def where_eq(self, column: str, value: Any, *, cast_text: bool = False) -> Self:
+        """Single-value equality with a framework-generated bind param -- ``cast_text=True``
+        wraps ``column`` in ``CAST(column AS TEXT)``, needed when comparing a native Postgres
+        ``ENUM`` column against a plain string parameter (ANSI SQL, also works against SQLite)."""
+        self._spec.wheres = [self._eq_fragment(column, value, cast_text, "AND")]
+        return self
+
+    def and_where_eq(self, column: str, value: Any, *, cast_text: bool = False) -> Self:
+        self._spec.wheres.append(self._eq_fragment(column, value, cast_text, "AND"))
+        return self
+
+    def or_where_eq(self, column: str, value: Any, *, cast_text: bool = False) -> Self:
+        self._spec.wheres.append(self._eq_fragment(column, value, cast_text, "OR"))
+        return self
+
+    def where_in(self, column: str, values: Sequence[Any], *, cast_text: bool = False) -> Self:
+        """``column IN (...)`` with framework-generated bind params -- see ``.where_eq()`` for
+        ``cast_text``."""
+        self._spec.wheres = [self._membership_fragment(column, values, cast_text, False, "AND")]
+        return self
+
+    def and_where_in(self, column: str, values: Sequence[Any], *, cast_text: bool = False) -> Self:
+        self._spec.wheres.append(self._membership_fragment(column, values, cast_text, False, "AND"))
+        return self
+
+    def or_where_in(self, column: str, values: Sequence[Any], *, cast_text: bool = False) -> Self:
+        self._spec.wheres.append(self._membership_fragment(column, values, cast_text, False, "OR"))
+        return self
+
+    def where_not_in(self, column: str, values: Sequence[Any], *, cast_text: bool = False) -> Self:
+        """``column NOT IN (...)`` with framework-generated bind params -- see ``.where_eq()`` for
+        ``cast_text``."""
+        self._spec.wheres = [self._membership_fragment(column, values, cast_text, True, "AND")]
+        return self
+
+    def and_where_not_in(self, column: str, values: Sequence[Any], *, cast_text: bool = False) -> Self:
+        self._spec.wheres.append(self._membership_fragment(column, values, cast_text, True, "AND"))
+        return self
+
+    def or_where_not_in(self, column: str, values: Sequence[Any], *, cast_text: bool = False) -> Self:
+        self._spec.wheres.append(self._membership_fragment(column, values, cast_text, True, "OR"))
         return self
 
     def left_join_and_select(self, relation: str, alias: str) -> Self:

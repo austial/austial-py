@@ -81,6 +81,14 @@ class EnumType(ColumnType):
     values: tuple[str, ...] = ()
 
 
+def enum_type_name(table_name: str, column_name: str) -> str:
+    """Deterministic Postgres native-``ENUM`` type name for a given table/column -- the single
+    source of truth both DDL (``driver/sqlalchemy_support.py``'s ``_sqla_column``) and typed WHERE
+    parameter binding (``entity_manager.py``'s ``_build_where_fragments``) derive it from, so the
+    two always agree without either side hardcoding the other's naming scheme."""
+    return f"{table_name}_{column_name}_enum"
+
+
 # Python-annotation -> default ColumnType inference table, consulted by
 # ``decorators/entity.py`` whenever a ``Column()``/``PrimaryColumn()``/... marker doesn't specify
 # ``type_`` explicitly. Kept here (next to the types themselves) so both stay in sync.
