@@ -109,6 +109,34 @@ async def bootstrap() -> None:
 `synchronize=True` (dev/test only — not the production path once migrations exist) makes
 `initialize()` also issue `CREATE TABLE` for every entity in `entities=[...]`.
 
+#### Production deployments (`uvicorn src.main:app` / `austial serve`)
+
+The `bootstrap()` function above only runs for `python src/main.py` — `uvicorn src.main:app` and
+`austial serve` (the deployment target in Docker/production) both just import `src.main:app` and
+hand it straight to uvicorn, so `bootstrap()` is never called and `DataSource.initialize()` never
+runs. For those entry points, register it as an ASGI `"startup"` lifespan event handler instead,
+via `get_http_adapter()`:
+
+```python
+from austial import AustialFactory
+from austial.orm import DataSource
+
+from src.app_module import AppModule
+
+app = AustialFactory.create(AppModule)
+
+
+@app.get_http_adapter().on_event("startup")
+async def _init_data_source() -> None:
+    await app.get(DataSource).initialize()
+```
+
+This is safe with any global guard/pipe/interceptor/filter that constructor-injects a
+`Repository` via `@InjectRepository()`, even though route-building resolves those constructors:
+`AustialApplication` defers route-building until the first non-lifespan ASGI scope, so it always
+runs *after* every `"startup"` handler registered here has already completed, for both
+`app.listen()` and the bare-ASGI (`uvicorn`/`austial serve`) entry points.
+
 ## Repositories
 
 Register entities with `OrmModule.for_feature([...])` in whichever feature module owns them, then
@@ -154,6 +182,44 @@ partial)` and `delete(criteria)` (bulk, no prior SELECT — same distinction as 
 `FindOptions` supports `where` (a dict is one AND-of-equality group, a `list[dict]` is
 OR-of-AND-groups), `relations` (single-level eager-loading via `LEFT JOIN`), `order_by`, `skip`,
 `take`.
+
+### Append-only entities
+
+Pass `append_only=True` to `@Entity()` for rows that must only ever be inserted, never mutated or
+removed — audit logs, ledger entries, anything with a regulatory retention requirement:
+
+```python
+from austial.orm import Column, Entity, PrimaryGeneratedColumn
+
+
+@Entity(append_only=True)
+class LedgerEntry:
+    id: int = PrimaryGeneratedColumn()
+    description: str = Column()
+    amount: int = Column()
+```
+
+Composes with the optional table-name positional, e.g. `@Entity("ledger_entry",
+append_only=True)`.
+
+This is enforced at the `EntityManager` level — the single choke point every `Repository` method
+funnels through — not by convention in your service code:
+
+- `repository.save(entity)` still works for the INSERT path (primary key unset); calling it again
+  on an already-persisted instance (primary key set, which `save()` would otherwise treat as a
+  full-column UPDATE) raises.
+- `repository.update(criteria, partial)`, `repository.remove(entity)`, and
+  `repository.delete(criteria)` always raise, unconditionally — there's no legitimate partial
+  update or delete path for an append-only entity.
+
+All four raise `austial.orm.AppendOnlyViolationError` (a subclass of `OrmError`), naming the
+entity and the attempted operation.
+
+**What this guard does *not* cover:** it's an application-level check inside `EntityManager`,
+not a database-level trigger, `REVOKE`, or row-level-security policy — raw SQL run outside the
+ORM (a migration, a `psql` session, a DB role with direct table access) is not stopped by this.
+Pair it with an actual DB-level guard (e.g. a `REVOKE UPDATE, DELETE` grant or a trigger) if you
+need enforcement that survives someone bypassing the ORM entirely.
 
 ### Aggregation
 
@@ -234,6 +300,16 @@ WHERE clauses are always a raw SQL fragment plus a **separate** bound-params dic
 never string-formatted into the SQL text, only ever bound through the DBAPI driver. This is what
 makes `.where()`/`.and_where()`/`.or_where()` (and everything built on top of them, including
 `FindOptions.where`) SQL-injection-safe by construction.
+
+**Reserved-word table/column names:** a table or column name that collides with a SQL reserved
+keyword (`user`, `order`, `group`, `check`, ... — `user` is reserved in Postgres, for example) is
+safe everywhere the framework builds a query *for* you — `FindOptions.where`, the
+bare-scalar-primary-key shorthand (`repository.update(id, {...})`/`.delete(id)`),
+`find_one_by`/`find_by`, and `FindOptions.order_by` all quote table/column identifiers
+automatically. Raw fragments you write yourself via
+`.where()`/`.and_where()`/`.or_where()`/`.order_by()`/`.add_order_by()` on `QueryBuilder` are
+**not** auto-quoted — same contract as TypeORM's own querybuilder — so quote them yourself (e.g.
+`.where('"order".total > :n', {"n": 2})`) if your alias or column is a reserved word.
 
 ## Transactions
 
