@@ -138,10 +138,18 @@ class AustialApplication:
         self._fastapi_app.add_middleware(_MiddlewareDispatcher)
 
     async def listen(self, port: int = 8000, host: str = "0.0.0.0") -> None:
-        """Boots an ASGI server in-process, mirroring Nest's ``await app.listen(3000)``."""
-        await self.init()
+        """Boots an ASGI server in-process, mirroring Nest's ``await app.listen(3000)``.
+
+        Hands uvicorn ``self`` (the ``AustialApplication`` ASGI wrapper), not the raw
+        ``FastAPI`` instance, so this entry point goes through the exact same lazy,
+        lifespan-aware route-building as ``uvicorn src.main:app`` / ``austial serve``
+        (see ``__call__``) -- keeping every entry point's startup ordering identical
+        instead of ``listen()`` eagerly building routes here, before uvicorn's ASGI
+        lifespan protocol has run any ``"startup"`` event handlers registered via
+        ``get_http_adapter()``.
+        """
         self._print_startup_banner(port)
-        config = uvicorn.Config(self._fastapi_app, host=host, port=port, log_level="warning")
+        config = uvicorn.Config(self, host=host, port=port, log_level="warning")
         server = uvicorn.Server(config)
         await server.serve()
 
@@ -152,5 +160,22 @@ class AustialApplication:
 
     # -- ASGI passthrough, so `uvicorn src.main:app` works too --------------------------
     async def __call__(self, scope, receive, send) -> None:
-        self._build_routes()
+        """Handles both the ASGI "lifespan" scope (uvicorn's startup/shutdown
+        handshake) and real request scopes.
+
+        Routes -- and therefore every controller's and every global
+        guard/pipe/interceptor/filter's DI dependencies -- are built lazily on the
+        first *non*-lifespan scope rather than eagerly on every call (including the
+        lifespan one). Building them eagerly here used to run before uvicorn's ASGI
+        lifespan protocol fired any ``"startup"`` event handler registered via
+        ``get_http_adapter().on_event("startup")`` (e.g. ``DataSource.initialize()``,
+        the documented pattern in ``austial.orm``'s "the one manual step"), so any
+        global guard/pipe/interceptor/filter with a constructor-injected dependency
+        that only becomes valid post-startup (e.g. ``InjectRepository`` before the
+        ``DataSource`` was initialized) crashed route-building on every boot. By the
+        time the first non-lifespan scope arrives, the ASGI lifespan handshake --
+        and every ``"startup"`` handler it ran -- has already completed.
+        """
+        if scope["type"] != "lifespan":
+            self._build_routes()
         await self._fastapi_app(scope, receive, send)
