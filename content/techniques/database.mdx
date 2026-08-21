@@ -183,6 +183,20 @@ partial)` and `delete(criteria)` (bulk, no prior SELECT — same distinction as 
 OR-of-AND-groups), `relations` (single-level eager-loading via `LEFT JOIN`), `order_by`, `skip`,
 `take`.
 
+A `where` value can be wrapped in `In`/`NotIn` (mirrors TypeORM's `In()`) for membership tests
+instead of equality:
+
+```python
+from austial.orm import In, NotIn
+
+pending = await repository.find(FindOptions(where={"status": In(["PENDING", "MANUAL_REVIEW"])}))
+active = await repository.find(FindOptions(where={"status": NotIn(["REJECTED"])}))
+```
+
+Comparing a native Postgres `ENUM` column this way (equality or `In`/`NotIn`) "just works" without
+any `CAST` — `EntityManager` resolves the column's real enum type from schema metadata and binds
+the parameter with it, so no app-code workaround is needed here.
+
 ### Append-only entities
 
 Pass `append_only=True` to `@Entity()` for rows that must only ever be inserted, never mutated or
@@ -300,6 +314,27 @@ WHERE clauses are always a raw SQL fragment plus a **separate** bound-params dic
 never string-formatted into the SQL text, only ever bound through the DBAPI driver. This is what
 makes `.where()`/`.and_where()`/`.or_where()` (and everything built on top of them, including
 `FindOptions.where`) SQL-injection-safe by construction.
+
+For the common cases of equality and membership, `.where_eq()`/`.and_where_eq()`/`.or_where_eq()`
+and `.where_in()`/`.and_where_in()`/`.or_where_in()` (plus `.where_not_in()` and its `and_`/`or_`
+variants) generate the bind params for you — no need to invent placeholder names:
+
+```python
+qb.and_where_eq("cat.name", "Tom").and_where_in("cat.age", [2, 3, 4])
+```
+
+Pass `cast_text=True` when the target column is a native Postgres `ENUM` (or any column where a
+string-typed bind param needs it) — it wraps the column reference in `CAST(<column> AS TEXT)`,
+ANSI SQL so it also works against the SQLite driver used in tests:
+
+```python
+qb.and_where_eq("s.status", "MANUAL_REVIEW", cast_text=True)
+qb.and_where_not_in("s.status", ["VERIFIED", "REJECTED"], cast_text=True)
+```
+
+`QueryBuilder` deals with arbitrary joined aliases, so unlike `FindOptions.where`'s `In`/`NotIn`
+(which resolves the real column type automatically), this is an explicit opt-in rather than
+auto-detected.
 
 **Reserved-word table/column names:** a table or column name that collides with a SQL reserved
 keyword (`user`, `order`, `group`, `check`, ... — `user` is reserved in Postgres, for example) is
