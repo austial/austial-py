@@ -22,6 +22,7 @@ from austial.orm.driver.base import Driver
 from austial.orm.driver.sqlalchemy_support import SchemaCatalog
 from austial.orm.exceptions import OrmError, RelationNotFoundError
 from austial.orm.expression import AggregateFn, Connector, DeleteSpec, InsertSpec, UpdateSpec, WhereFragment
+from austial.orm.identifier import quote_ref
 from austial.orm.metadata.entity_metadata import EntityMetadata, RelationType
 from austial.orm.query_builder import QueryBuilder
 
@@ -68,7 +69,7 @@ def _build_where_fragments(meta: EntityMetadata, alias: str, where: WhereClause 
             if column is None:
                 raise OrmError(f"{meta.entity_cls.__name__!r} has no column {attr_name!r}")
             param_name = f"p{next(counter)}"
-            clauses.append(f"{alias}.{column.column_name} = :{param_name}")
+            clauses.append(f"{quote_ref(alias, column.column_name)} = :{param_name}")
             params[param_name] = value
         connector: Connector = "AND" if group_index == 0 else "OR"
         fragments.append(WhereFragment(" AND ".join(clauses), params, connector))
@@ -82,7 +83,7 @@ def _criteria_where(meta: EntityMetadata, alias: str, criteria: Criteria) -> lis
     if isinstance(criteria, dict):
         return _build_where_fragments(meta, alias, criteria)
     pk = SchemaCatalog.pk_column(meta)
-    return [WhereFragment(f"{alias}.{pk.column_name} = :pk", {"pk": criteria}, "AND")]
+    return [WhereFragment(f"{quote_ref(alias, pk.column_name)} = :pk", {"pk": criteria}, "AND")]
 
 
 def _as_list(entity_instance: T | Sequence[T]) -> list[T]:
@@ -130,7 +131,7 @@ class EntityManager:
         for attr_name, direction in options.order_by or ():
             column = meta.column(attr_name)
             physical = column.column_name if column is not None else attr_name
-            qb.add_order_by(f"{alias}.{physical}", direction)
+            qb.add_order_by(quote_ref(alias, physical), direction)
         if options.take is not None:
             qb.take(options.take)
         if options.skip is not None:
@@ -322,7 +323,7 @@ class EntityManager:
         values.update(self._owning_relation_values(meta, instance))
         alias = self._alias_for(meta)
         pk_value = getattr(instance, pk.attribute_name)
-        where = [WhereFragment(f"{alias}.{pk.column_name} = :pk", {"pk": pk_value}, "AND")]
+        where = [WhereFragment(f"{quote_ref(alias, pk.column_name)} = :pk", {"pk": pk_value}, "AND")]
         await self._driver.execute_update(UpdateSpec(entity=type(instance), values=values, wheres=where))
         return instance
 
@@ -332,7 +333,7 @@ class EntityManager:
             pk = SchemaCatalog.pk_column(meta)
             alias = self._alias_for(meta)
             pk_value = getattr(instance, pk.attribute_name)
-            where = [WhereFragment(f"{alias}.{pk.column_name} = :pk", {"pk": pk_value}, "AND")]
+            where = [WhereFragment(f"{quote_ref(alias, pk.column_name)} = :pk", {"pk": pk_value}, "AND")]
             await self._driver.execute_delete(DeleteSpec(entity=type(instance), wheres=where))
 
     async def update(self, entity: type[T], criteria: Criteria, partial: dict[str, Any]) -> UpdateResult:

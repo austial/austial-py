@@ -47,3 +47,17 @@ class Cat:
     created_at: datetime.datetime = CreateDateColumn()
     owner: Owner = ManyToOne(lambda: Owner, "cats", join_column=JoinColumn(name="owner_id"))
     toys: list[Toy] = ManyToMany(lambda: Toy, "cats", join_table=JoinTable())
+
+
+@Entity()
+class Order:
+    """Deliberately named after a SQL reserved keyword (both Postgres and SQLite reserve
+    ``ORDER``) -- regression fixture for the ``EntityManager``-internal WHERE/ORDER BY
+    fragment builders correctly quoting the identifiers they splice together (table name doubles
+    as the query alias -- see ``EntityManager._alias_for`` -- and ``group`` is *also* reserved, so
+    this one entity exercises both a reserved table/alias name and a reserved column name at
+    once)."""
+
+    id: int = PrimaryGeneratedColumn()
+    group: str = Column()
+    total: int = Column(nullable=True)
