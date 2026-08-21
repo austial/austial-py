@@ -31,21 +31,31 @@ _TYPE_MAP: dict[type, Any] = {
     ct.Time: lambda t: sa.Time(),
     ct.UUIDType: lambda t: sa.Uuid(),
     ct.JSONType: lambda t: sa.JSON(),
-    ct.EnumType: lambda t: sa.Enum(*t.values) if t.values else sa.String(),
 }
 
 
-def sqla_type_for(column_type: ct.ColumnType) -> sa.types.TypeEngine:
+def sqla_type_for(column_type: ct.ColumnType, *, enum_name: str | None = None) -> sa.types.TypeEngine:
+    """``enum_name`` is only consulted for ``EnumType`` columns -- Postgres' native ``ENUM`` is a
+    named type at the DDL level (``CREATE TYPE <name> AS ENUM (...)``); an unnamed
+    ``sa.Enum(...)`` compiles fine as a *column* type but raises
+    ``CompileError: PostgreSQL ... Enum type requires a name`` the moment Alembic (or
+    ``create_all_schemas()``) actually tries to issue that `CREATE TYPE`/`CREATE TABLE` against a
+    real Postgres connection -- SQLite has no such requirement, which is why this went unnoticed
+    until Alembic (Postgres-only) started exercising it. ``_sqla_column`` below derives a
+    deterministic ``<table>_<column>_enum`` name from schema metadata alone, so it needs no
+    caller-supplied config and can't collide between two different enum columns."""
+    if isinstance(column_type, ct.EnumType):
+        return sa.Enum(*column_type.values, name=enum_name) if column_type.values else sa.String()
     factory = _TYPE_MAP.get(type(column_type))
     if factory is None:  # pragma: no cover - defensive, every ColumnType subclass is mapped above
         return sa.String()
     return factory(column_type)
 
 
-def _sqla_column(column: ColumnMetadata) -> sa.Column:
+def _sqla_column(table_name: str, column: ColumnMetadata) -> sa.Column:
     return sa.Column(
         column.column_name,
-        sqla_type_for(column.type_),
+        sqla_type_for(column.type_, enum_name=f"{table_name}_{column.column_name}_enum"),
         primary_key=column.primary,
         autoincrement=column.generated and column.primary,
         nullable=column.nullable,
@@ -77,7 +87,9 @@ class SchemaCatalog:
         # Pass 1: bare tables (columns only) so every target table exists before any relation
         # tries to reference it with a ForeignKey, regardless of entity declaration order.
         for entity, meta in self.metadata_by_entity.items():
-            table = sa.Table(meta.table_name, self.sqla_metadata, *[_sqla_column(c) for c in meta.columns])
+            table = sa.Table(
+                meta.table_name, self.sqla_metadata, *[_sqla_column(meta.table_name, c) for c in meta.columns]
+            )
             self.tables[entity] = table
 
         # Pass 2: FK columns for owning relations, and many-to-many join tables.

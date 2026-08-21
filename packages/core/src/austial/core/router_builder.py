@@ -141,17 +141,39 @@ class RouterBuilder:
         filters: list,
         headers_meta: dict,
     ) -> Callable:
-        original_sig = inspect.signature(handler)  # bound method -> `self` already excluded
-        request_param = inspect.Parameter(_REQUEST_PARAM_NAME, kind=inspect.Parameter.KEYWORD_ONLY, annotation=Request)
-        response_param = inspect.Parameter(
-            _RESPONSE_PARAM_NAME, kind=inspect.Parameter.KEYWORD_ONLY, annotation=Response
+        original_sig = inspect.signature(handler, eval_str=True)  # bound method -> `self` already excluded
+
+        request_param_name = next(
+            (name for name, p in original_sig.parameters.items() if p.annotation is Request), None
         )
-        new_sig = original_sig.replace(parameters=[*original_sig.parameters.values(), request_param, response_param])
+        response_param_name = next(
+            (name for name, p in original_sig.parameters.items() if p.annotation is Response), None
+        )
+        extra_params = []
+        if request_param_name is None:
+            request_param_name = _REQUEST_PARAM_NAME
+            extra_params.append(
+                inspect.Parameter(_REQUEST_PARAM_NAME, kind=inspect.Parameter.KEYWORD_ONLY, annotation=Request)
+            )
+        if response_param_name is None:
+            response_param_name = _RESPONSE_PARAM_NAME
+            extra_params.append(
+                inspect.Parameter(_RESPONSE_PARAM_NAME, kind=inspect.Parameter.KEYWORD_ONLY, annotation=Response)
+            )
+        new_sig = original_sig.replace(parameters=[*original_sig.parameters.values(), *extra_params])
         is_coroutine = inspect.iscoroutinefunction(handler)
 
         async def endpoint(**kwargs):
-            request: Request = kwargs.pop(_REQUEST_PARAM_NAME)
-            response: Response = kwargs.pop(_RESPONSE_PARAM_NAME)
+            request: Request = (
+                kwargs.pop(_REQUEST_PARAM_NAME)
+                if request_param_name == _REQUEST_PARAM_NAME
+                else kwargs[request_param_name]
+            )
+            response: Response = (
+                kwargs.pop(_RESPONSE_PARAM_NAME)
+                if response_param_name == _RESPONSE_PARAM_NAME
+                else kwargs[response_param_name]
+            )
             context = ExecutionContext(request, controller_cls, handler)
 
             try:

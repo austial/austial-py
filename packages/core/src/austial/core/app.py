@@ -9,6 +9,7 @@ from typing import Any
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -98,7 +99,7 @@ class AustialApplication:
 
     def _install_fallback_exception_handlers(self) -> None:
         async def handle_validation_error(request: Request, exc: RequestValidationError) -> Response:
-            converted = BadRequestException({"message": exc.errors(), "error": "Bad Request"})
+            converted = BadRequestException({"message": jsonable_encoder(exc.errors()), "error": "Bad Request"})
             filters = self._global_filters or [AllExceptionsFilter()]
             return await dispatch_exception(converted, request, filters)
 
