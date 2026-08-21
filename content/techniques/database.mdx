@@ -155,6 +155,31 @@ partial)` and `delete(criteria)` (bulk, no prior SELECT — same distinction as 
 OR-of-AND-groups), `relations` (single-level eager-loading via `LEFT JOIN`), `order_by`, `skip`,
 `take`.
 
+### Aggregation
+
+Alongside `count(options)`, `Repository[T]` has `sum(column, criteria=None, group_by=None)` and
+the lower-level `aggregate(fn, column, criteria=None, group_by=None)` (`fn` is
+`"SUM" | "AVG" | "MIN" | "MAX"`) for numeric rollups — e.g. total AUM across matching holdings:
+
+```python
+total_aum: float = await holdings_repository.sum("quantity", criteria={"status": "ACTIVE"})
+```
+
+Pass `group_by` (a sequence of attribute names) to get a breakdown instead of a single scalar —
+e.g. AUM per currency:
+
+```python
+by_currency: list[dict] = await holdings_repository.sum("quantity", group_by=["currency"])
+# [{"currency": "USD", "value": 125000.0}, {"currency": "EUR", "value": 42000.0}]
+```
+
+Without `group_by`, `sum`/`aggregate` return a single `float` (`0.0`, not `None`, when no rows
+match — SQL's `SUM` of zero rows is `NULL`, normalized here). With `group_by`, they return one
+`dict` per group actually present in the data (the group-by attribute names as keys, plus
+`"value"`) — groups with no matching rows don't appear, standard SQL `GROUP BY` semantics. Same
+scope as `count()`: WHERE (+ here, `GROUP BY`) only, no joins/paging, single-level (no dotted
+relation paths) group-by columns.
+
 ## Relations
 
 ```python
@@ -224,6 +249,29 @@ async def transfer_cat(data_source: DataSource, cat_id: int, new_owner_id: int) 
 
 `DataSource.transaction(callback)` opens one connection, binds a fresh `EntityManager` to it, and
 runs `callback` — commits on clean return, rolls back automatically if `callback` raises.
+
+## Migrations with Alembic
+
+`austial.orm` doesn't ship its own migration runner — use [Alembic](https://alembic.sqlalchemy.org)
+directly. `DataSource.get_metadata()` returns the `sqlalchemy.MetaData` describing every entity the
+`DataSource` was constructed with, which is what Alembic's `env.py` needs as `target_metadata`:
+
+```python
+# migrations/env.py
+from src.app_module import entities  # whatever list you pass OrmModule.for_root(entities=...)
+from austial.orm import DataSource, SQLiteDriver
+
+data_source = DataSource(SQLiteDriver("sqlite+aiosqlite:///./austial.db"), entities)
+target_metadata = data_source.get_metadata()
+```
+
+Building the entity catalog only walks entity/relation metadata — it opens no DB connection, so
+this is safe to call before `DataSource.initialize()` too, which matters for Alembic: its process
+must not open the app's real connection pool just to import `target_metadata` at module load time.
+
+This is the one deliberate exception to `austial.orm`'s "SQLAlchemy stays hidden behind `Driver`"
+rule — Alembic's own API requires a real `sqlalchemy.MetaData` instance, so `get_metadata()` is the
+single documented seam where that type crosses the public API boundary.
 
 ## Swapping in a different database
 
