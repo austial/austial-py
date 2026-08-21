@@ -13,7 +13,7 @@ from typing import Any, Generic, Literal, Self, TypeVar
 
 from austial.orm.driver.base import Driver
 from austial.orm.driver.sqlalchemy_support import SchemaCatalog
-from austial.orm.expression import JoinSpec, OrderBySpec, SelectSpec, WhereFragment
+from austial.orm.expression import AggregateFn, AggregateSpec, JoinSpec, OrderBySpec, SelectSpec, WhereFragment
 from austial.orm.hydration import RowHydrator
 
 T = TypeVar("T")
@@ -77,6 +77,13 @@ class QueryBuilder(Generic[T]):
     def skip(self, n: int) -> Self:
         return self.offset(n)
 
+    def group_by(self, *columns: str) -> Self:
+        """(Re)starts the GROUP BY clause -- physical column names on the root entity, no
+        dotted/joined paths (Phase-1 scope, matches ``EntityManager.count()``). Pair with
+        ``.get_aggregate_raw()`` for grouped aggregates (e.g. AUM broken down by currency)."""
+        self._spec.group_by = list(columns)
+        return self
+
     async def get_many(self) -> list[T]:
         result = await self._driver.execute_select(self._spec)
         return RowHydrator(self._catalog).hydrate(self._spec, result)
@@ -105,6 +112,16 @@ class QueryBuilder(Generic[T]):
     async def get_raw_one(self) -> dict[str, Any] | None:
         rows = await self.get_raw_many()
         return rows[0] if rows else None
+
+    async def get_aggregate_raw(self, fn: AggregateFn, column: str) -> list[dict[str, Any]]:
+        """Compiles a ``SUM``/``AVG``/``MIN``/``MAX`` over ``column`` (a physical column name --
+        no entity-metadata translation, unlike ``Repository.sum()``/``EntityManager.aggregate()``,
+        which build on this) against the current WHERE/``.group_by()`` clauses, and executes it.
+        Returns raw rows: one ``{"value": ...}`` dict without ``.group_by()``, or one dict per
+        group (its columns' names + ``"value"``) with it."""
+        self._spec.aggregate = AggregateSpec(fn, column)
+        result = await self._driver.execute_select(self._spec)
+        return result.rows
 
     def get_sql(self) -> str:
         """Compiles without executing -- a debug helper, also used in tests to assert

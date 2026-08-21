@@ -7,9 +7,10 @@ construct one directly.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, TypeVar, overload
 
 from austial.orm.entity_manager import DeleteResult, EntityManager, FindOptions, UpdateResult
+from austial.orm.expression import AggregateFn
 from austial.orm.query_builder import QueryBuilder
 
 T = TypeVar("T")
@@ -39,6 +40,38 @@ class Repository(Generic[T]):
 
     async def count(self, options: FindOptions | None = None) -> int:
         return await self.manager.count(self.entity, options)
+
+    @overload
+    async def aggregate(
+        self, fn: AggregateFn, column: str, criteria: dict[str, Any] | None = None, group_by: None = None
+    ) -> float: ...
+
+    @overload
+    async def aggregate(
+        self, fn: AggregateFn, column: str, criteria: dict[str, Any] | None = None, *, group_by: Sequence[str]
+    ) -> list[dict[str, Any]]: ...
+
+    async def aggregate(
+        self,
+        fn: AggregateFn,
+        column: str,
+        criteria: dict[str, Any] | None = None,
+        group_by: Sequence[str] | None = None,
+    ) -> float | list[dict[str, Any]]:
+        return await self.manager.aggregate(self.entity, fn, column, criteria=criteria, group_by=group_by)
+
+    @overload
+    async def sum(self, column: str, criteria: dict[str, Any] | None = None, group_by: None = None) -> float: ...
+
+    @overload
+    async def sum(
+        self, column: str, criteria: dict[str, Any] | None = None, *, group_by: Sequence[str]
+    ) -> list[dict[str, Any]]: ...
+
+    async def sum(
+        self, column: str, criteria: dict[str, Any] | None = None, group_by: Sequence[str] | None = None
+    ) -> float | list[dict[str, Any]]:
+        return await self.manager.sum(self.entity, column, criteria=criteria, group_by=group_by)
 
     async def save(self, entity_instance: T | Sequence[T]) -> T | list[T]:
         return await self.manager.save(entity_instance)

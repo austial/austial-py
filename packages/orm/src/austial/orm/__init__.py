@@ -1,7 +1,9 @@
 """``austial-orm`` -- a from-scratch, TypeORM-shaped ORM: entities/decorators, relations,
 ``Repository``/``EntityManager``, a fluent ``QueryBuilder``, and DI-native ``OrmModule`` wiring.
-SQLAlchemy Core is used only as a hidden SQL-compilation/pooling seam behind ``Driver`` --
-nothing in this public API is a SQLAlchemy type."""
+SQLAlchemy Core is used only as a hidden SQL-compilation/pooling seam behind ``Driver`` -- nothing
+in this public API is a SQLAlchemy type, with one deliberate exception:
+``DataSource.get_metadata()`` returns a real ``sqlalchemy.MetaData`` for Alembic's ``env.py`` to
+use as ``target_metadata``."""
 
 from austial.orm.data_source import DataSource
 from austial.orm.decorators import (
@@ -30,6 +32,7 @@ from austial.orm.exceptions import (
     RelationNotFoundError,
     TransactionError,
 )
+from austial.orm.expression import AggregateFn
 from austial.orm.metadata.column_types import (
     BigInteger,
     Boolean,
@@ -51,6 +54,7 @@ from austial.orm.query_builder import QueryBuilder
 from austial.orm.repository import Repository
 
 __all__ = [
+    "AggregateFn",
     "BigInteger",
     "Boolean",
     "Column",

@@ -17,6 +17,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Sequence
 from typing import TypeVar
 
+import sqlalchemy as sa
+
 from austial.orm.driver.base import Driver
 from austial.orm.driver.sqlalchemy_support import SchemaCatalog
 from austial.orm.entity_manager import EntityManager
@@ -77,6 +79,27 @@ class DataSource:
 
     def get_repository(self, entity: type[T]) -> Repository[T]:
         return Repository(entity, self.manager)
+
+    def get_metadata(self) -> sa.MetaData:
+        """Returns the ``sqlalchemy.MetaData`` describing every entity this ``DataSource`` was
+        constructed with -- what Alembic's ``env.py`` needs as ``target_metadata``::
+
+            data_source = DataSource(driver, entities=[...])
+            target_metadata = data_source.get_metadata()
+
+        Building the entity ``SchemaCatalog`` only walks entity/relation metadata (no DB
+        connection), so this is safe to call before ``initialize()`` too -- exactly what Alembic
+        needs, since its process must not open the app's real connection pool just to import
+        ``target_metadata`` at module load time.
+
+        The one deliberate exception to this package's "nothing outside ``driver/`` imports
+        ``sqlalchemy`` itself" rule (see ``driver/sqlalchemy_support.py``'s module docstring):
+        Alembic's own API requires a real ``sqlalchemy.MetaData`` instance, so this method is the
+        single documented seam where that type crosses the public API boundary.
+        """
+        if self._catalog is None:
+            self._catalog = SchemaCatalog(self._entities, self._naming_strategy)
+        return self._catalog.sqla_metadata
 
     async def transaction(self, callback: Callable[[EntityManager], Awaitable[R]]) -> R:
         """Opens one connection/transaction via ``Driver.transaction()``, binds a fresh

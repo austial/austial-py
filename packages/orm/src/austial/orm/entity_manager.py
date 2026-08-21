@@ -15,13 +15,13 @@ import datetime
 from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import count
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal, TypeVar, overload
 
 from austial.orm.decorators.entity import get_entity_metadata
 from austial.orm.driver.base import Driver
 from austial.orm.driver.sqlalchemy_support import SchemaCatalog
 from austial.orm.exceptions import OrmError, RelationNotFoundError
-from austial.orm.expression import Connector, DeleteSpec, InsertSpec, UpdateSpec, WhereFragment
+from austial.orm.expression import AggregateFn, Connector, DeleteSpec, InsertSpec, UpdateSpec, WhereFragment
 from austial.orm.metadata.entity_metadata import EntityMetadata, RelationType
 from austial.orm.query_builder import QueryBuilder
 
@@ -165,6 +165,96 @@ class EntityManager:
         self._apply_wheres(qb, _build_where_fragments(meta, alias, options.where if options else None))
         rows = await qb.get_raw_many()
         return len(rows)
+
+    @overload
+    async def aggregate(
+        self,
+        entity: type[T],
+        fn: AggregateFn,
+        column: str,
+        *,
+        criteria: dict[str, Any] | None = None,
+        group_by: None = None,
+    ) -> float: ...
+
+    @overload
+    async def aggregate(
+        self,
+        entity: type[T],
+        fn: AggregateFn,
+        column: str,
+        *,
+        criteria: dict[str, Any] | None = None,
+        group_by: Sequence[str],
+    ) -> list[dict[str, Any]]: ...
+
+    async def aggregate(
+        self,
+        entity: type[T],
+        fn: AggregateFn,
+        column: str,
+        *,
+        criteria: dict[str, Any] | None = None,
+        group_by: Sequence[str] | None = None,
+    ) -> float | list[dict[str, Any]]:
+        """Runs ``SUM``/``AVG``/``MIN``/``MAX`` over ``column`` (an attribute name, translated to
+        its physical column the same way ``criteria``'s keys are) across rows matching
+        ``criteria`` (same AND/OR shape as ``find_by``'s criteria dict). Deliberately mirrors
+        ``count()``'s scope: WHERE (+ here, optionally GROUP BY) only, no joins/paging.
+
+        Without ``group_by``: returns a single scalar. SQL's aggregate of zero matching rows is
+        ``NULL``; normalized to ``0.0`` here so callers don't have to special-case ``None``.
+
+        With ``group_by`` (attribute names, same translation as ``column``): returns one ``dict``
+        per group actually present in the data -- the group-by attribute names as keys, plus
+        ``"value"`` holding the aggregate result. Groups with no matching rows don't appear
+        (standard SQL ``GROUP BY`` semantics), same as e.g. currency-breakdown reporting expects.
+        """
+        meta = get_entity_metadata(entity)
+        alias = self._alias_for(meta)
+        agg_column = meta.column(column)
+        if agg_column is None:
+            raise OrmError(f"{entity.__name__!r} has no column {column!r}")
+
+        group_columns: list[str] = []
+        for attr_name in group_by or ():
+            group_column = meta.column(attr_name)
+            if group_column is None:
+                raise OrmError(f"{entity.__name__!r} has no column {attr_name!r}")
+            group_columns.append(group_column.column_name)
+
+        qb = self.create_query_builder(entity, alias)
+        self._apply_wheres(qb, _build_where_fragments(meta, alias, criteria))
+        if group_columns:
+            qb.group_by(*group_columns)
+        rows = await qb.get_aggregate_raw(fn, agg_column.column_name)
+
+        if not group_by:
+            value = rows[0]["value"] if rows else None
+            return float(value) if value is not None else 0.0
+        return rows
+
+    @overload
+    async def sum(
+        self, entity: type[T], column: str, *, criteria: dict[str, Any] | None = None, group_by: None = None
+    ) -> float: ...
+
+    @overload
+    async def sum(
+        self, entity: type[T], column: str, *, criteria: dict[str, Any] | None = None, group_by: Sequence[str]
+    ) -> list[dict[str, Any]]: ...
+
+    async def sum(
+        self,
+        entity: type[T],
+        column: str,
+        *,
+        criteria: dict[str, Any] | None = None,
+        group_by: Sequence[str] | None = None,
+    ) -> float | list[dict[str, Any]]:
+        """Convenience for ``aggregate(entity, "SUM", column, ...)`` -- the common case (e.g.
+        total AUM across matching holdings)."""
+        return await self.aggregate(entity, "SUM", column, criteria=criteria, group_by=group_by)
 
     async def save(self, entity_instance: T | Sequence[T]) -> T | list[T]:
         instances = _as_list(entity_instance)

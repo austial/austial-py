@@ -177,11 +177,41 @@ def _combine_where(fragments: list[WhereFragment]) -> Any:
     return clause
 
 
+_AGGREGATE_FN: dict[str, Any] = {
+    "SUM": sa.func.sum,
+    "AVG": sa.func.avg,
+    "MIN": sa.func.min,
+    "MAX": sa.func.max,
+}
+
+
+def _compile_aggregate_select(spec: SelectSpec, root_table: Any) -> tuple[Any, dict[str, list[str]]]:
+    """Compiles ``spec.aggregate`` (``SUM``/``AVG``/``MIN``/``MAX``, optionally grouped by
+    ``spec.group_by``) instead of the normal "every mapped column" select list. No joins --
+    matches ``EntityManager.count()``'s Phase-1 scope (WHERE, and here also GROUP BY, on the root
+    entity's own columns only)."""
+    agg = spec.aggregate
+    assert agg is not None
+    fn = _AGGREGATE_FN[agg.fn]
+    group_cols = [root_table.c[name] for name in spec.group_by]
+    columns: list[Any] = [*group_cols, fn(root_table.c[agg.column]).label(agg.result_alias)]
+
+    stmt = sa.select(*columns).select_from(root_table)
+    if spec.wheres:
+        stmt = stmt.where(_combine_where(spec.wheres))
+    if group_cols:
+        stmt = stmt.group_by(*group_cols)
+    return stmt, {spec.alias: []}
+
+
 def compile_select(spec: SelectSpec, catalog: SchemaCatalog) -> tuple[Any, dict[str, list[str]]]:
     """Returns ``(select_statement, column_labels_by_alias)`` -- the latter tells
     ``hydration.py`` which result-column labels belong to which alias/entity."""
     root_meta = catalog.metadata_by_entity[spec.entity]
     root_table = catalog.tables[spec.entity].alias(spec.alias)
+
+    if spec.aggregate is not None:
+        return _compile_aggregate_select(spec, root_table)
 
     columns: list[Any] = []
     labels_by_alias: dict[str, list[str]] = {spec.alias: []}

@@ -15,6 +15,7 @@ from typing import Any, Literal
 JoinType = Literal["INNER", "LEFT"]
 OrderDirection = Literal["ASC", "DESC"]
 Connector = Literal["AND", "OR"]
+AggregateFn = Literal["SUM", "AVG", "MIN", "MAX"]
 
 
 @dataclass
@@ -45,6 +46,18 @@ class OrderBySpec:
 
 
 @dataclass
+class AggregateSpec:
+    """A single ``SUM``/``AVG``/``MIN``/``MAX`` applied to one physical column -- attached to a
+    ``SelectSpec`` in place of its normal "every mapped column" select list. Mirrors
+    ``EntityManager.count()``'s Phase-1 scope: no joins, WHERE (+ optional ``SelectSpec.group_by``)
+    only."""
+
+    fn: AggregateFn
+    column: str  # physical column name on the root entity/alias
+    result_alias: str = "value"
+
+
+@dataclass
 class SelectSpec:
     entity: type
     alias: str
@@ -54,6 +67,8 @@ class SelectSpec:
     order_by: list[OrderBySpec] = field(default_factory=list)
     limit: int | None = None
     offset: int | None = None
+    aggregate: AggregateSpec | None = None
+    group_by: list[str] = field(default_factory=list)  # physical column names on the root entity/alias
 
 
 @dataclass
