@@ -25,6 +25,7 @@ from austial.orm.decorators import (
 from austial.orm.driver import Driver, PostgresDriver, SQLiteDriver
 from austial.orm.entity_manager import DeleteResult, EntityManager, FindOptions, UpdateResult
 from austial.orm.exceptions import (
+    AppendOnlyViolationError,
     EntityNotFoundError,
     MissingPrimaryKeyError,
     OrmError,
@@ -55,6 +56,7 @@ from austial.orm.repository import Repository
 
 __all__ = [
     "AggregateFn",
+    "AppendOnlyViolationError",
     "BigInteger",
     "Boolean",
     "Column",

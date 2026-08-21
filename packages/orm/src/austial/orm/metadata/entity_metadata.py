@@ -89,6 +89,7 @@ class EntityMetadata:
     table_name: str
     columns: list[ColumnMetadata] = field(default_factory=list)
     relations: list[RelationMetadata] = field(default_factory=list)
+    append_only: bool = False
 
     @property
     def primary_columns(self) -> list[ColumnMetadata]:

@@ -20,7 +20,7 @@ from typing import Any, Literal, TypeVar, overload
 from austial.orm.decorators.entity import get_entity_metadata
 from austial.orm.driver.base import Driver
 from austial.orm.driver.sqlalchemy_support import SchemaCatalog
-from austial.orm.exceptions import OrmError, RelationNotFoundError
+from austial.orm.exceptions import AppendOnlyViolationError, OrmError, RelationNotFoundError
 from austial.orm.expression import AggregateFn, Connector, DeleteSpec, InsertSpec, UpdateSpec, WhereFragment
 from austial.orm.identifier import quote_ref
 from austial.orm.metadata.entity_metadata import EntityMetadata, RelationType
@@ -318,6 +318,8 @@ class EntityManager:
 
         # Full-column UPDATE, excluding primary keys (identity, never rewritten) and
         # CreateDateColumn-marked columns (stamped once at insert time, immutable thereafter).
+        if meta.append_only:
+            raise AppendOnlyViolationError(meta.entity_cls, "save() on an already-persisted instance (UPDATE)")
         update_columns = [c for c in meta.columns if not c.primary and not c.create_date]
         values = {c.column_name: getattr(instance, c.attribute_name) for c in update_columns}
         values.update(self._owning_relation_values(meta, instance))
@@ -330,6 +332,8 @@ class EntityManager:
     async def remove(self, entity_instance: T | Sequence[T]) -> None:
         for instance in _as_list(entity_instance):
             meta = get_entity_metadata(type(instance))
+            if meta.append_only:
+                raise AppendOnlyViolationError(meta.entity_cls, "remove()")
             pk = SchemaCatalog.pk_column(meta)
             alias = self._alias_for(meta)
             pk_value = getattr(instance, pk.attribute_name)
@@ -340,6 +344,8 @@ class EntityManager:
         """Bulk update -- issues a single ``UPDATE ... WHERE`` without loading matching rows
         first (matches TypeORM's ``Repository.update()``, distinct from ``save()``)."""
         meta = get_entity_metadata(entity)
+        if meta.append_only:
+            raise AppendOnlyViolationError(meta.entity_cls, "update()")
         alias = self._alias_for(meta)
         values: dict[str, Any] = {}
         for attr_name, value in partial.items():
@@ -358,6 +364,8 @@ class EntityManager:
         """Bulk delete -- issues a single ``DELETE ... WHERE`` without loading matching rows
         first (matches TypeORM's ``Repository.delete()``, distinct from ``remove()``)."""
         meta = get_entity_metadata(entity)
+        if meta.append_only:
+            raise AppendOnlyViolationError(meta.entity_cls, "delete()")
         alias = self._alias_for(meta)
         wheres = _criteria_where(meta, alias, criteria)
         affected = await self._driver.execute_delete(DeleteSpec(entity=entity, wheres=wheres))

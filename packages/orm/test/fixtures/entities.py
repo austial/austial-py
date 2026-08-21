@@ -61,3 +61,15 @@ class Order:
     id: int = PrimaryGeneratedColumn()
     group: str = Column()
     total: int = Column(nullable=True)
+
+
+@Entity(append_only=True)
+class LedgerEntry:
+    """Regression fixture for ``@Entity(append_only=True)`` -- stands in for the real
+    ``LedgerEntry``/``AuditLog`` entities the build plan ships later (append-only ledger rows,
+    7-year-retention audit rows): INSERT must still work, every UPDATE/remove/delete path must
+    raise ``AppendOnlyViolationError`` at the ``EntityManager`` choke point."""
+
+    id: int = PrimaryGeneratedColumn()
+    description: str = Column()
+    amount: int = Column(nullable=True)

@@ -79,11 +79,23 @@ def _resolve_annotations(cls: type) -> dict[str, Any]:
         RelationMarker,
     ),
 )
-def Entity(name: str | None = None, *, naming_strategy: NamingStrategy | None = None) -> Callable[[type[T]], type[T]]:
-    """Class decorator. Usable as ``@Entity()`` or ``@Entity("custom_table_name")``.
+def Entity(
+    name: str | None = None,
+    *,
+    naming_strategy: NamingStrategy | None = None,
+    append_only: bool = False,
+) -> Callable[[type[T]], type[T]]:
+    """Class decorator. Usable as ``@Entity()``, ``@Entity("custom_table_name")``, or
+    ``@Entity(append_only=True)`` (composes with the positional ``name``, e.g.
+    ``@Entity("ledger_entry", append_only=True)``).
 
     ``naming_strategy`` only affects *this* entity's default table/column names when the app's
     ``DataSource`` doesn't otherwise override them; the vast majority of callers never need it.
+
+    ``append_only=True`` marks the entity as insert-only: ``EntityManager`` (and therefore every
+    ``Repository`` method that funnels through it) rejects UPDATE/remove/delete against it,
+    raising :class:`~austial.orm.exceptions.AppendOnlyViolationError` -- see that class's
+    docstring for what this guard does and does not cover.
     """
     strategy = naming_strategy or _default_naming_strategy
 
@@ -153,7 +165,13 @@ def Entity(name: str | None = None, *, naming_strategy: NamingStrategy | None = 
         entity_cls = dataclasses.dataclass(eq=False, repr=True)(cls)
 
         table_name = strategy.table_name(entity_cls.__name__, name)
-        metadata = EntityMetadata(entity_cls=entity_cls, table_name=table_name, columns=columns, relations=relations)
+        metadata = EntityMetadata(
+            entity_cls=entity_cls,
+            table_name=table_name,
+            columns=columns,
+            relations=relations,
+            append_only=append_only,
+        )
 
         set_metadata(ENTITY_METADATA, metadata)(entity_cls)
         MetadataRegistry.register(entity_cls, metadata)

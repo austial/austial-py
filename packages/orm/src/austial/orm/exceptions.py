@@ -50,3 +50,18 @@ class MissingPrimaryKeyError(OrmError):
 
 class TransactionError(OrmError):
     """Raised for misuse of ``DataSource.transaction()`` (e.g. nested-transaction misuse)."""
+
+
+class AppendOnlyViolationError(OrmError):
+    """Raised when ``EntityManager`` is asked to UPDATE/remove/delete a row belonging to an
+    ``@Entity(append_only=True)`` entity -- INSERT (via ``save()`` on an instance with no primary
+    key set) is the only mutation such an entity ever permits. This is an application-level guard
+    inside ``EntityManager``, not a database-level trigger/permission -- raw SQL issued outside the
+    ORM (or a DB user with direct table access) is not covered."""
+
+    def __init__(self, entity: type, operation: str):
+        super().__init__(
+            f"{entity.__name__!r} is an append-only entity (@Entity(append_only=True)) -- {operation} is not permitted"
+        )
+        self.entity = entity
+        self.operation = operation
