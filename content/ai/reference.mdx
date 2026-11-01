@@ -1,0 +1,155 @@
+---
+title: Framework Reference
+---
+
+# Framework reference for agents
+
+A dense, scannable summary of Austial's surface area, organised by the
+question an agent actually has while coding. Each row links to the full page.
+When this summary and a full page disagree, the full page wins.
+
+## Request pipeline
+
+```
+middleware -> guards -> pipes -> interceptors (wrapping) -> handler -> exception filters
+```
+
+Guards run first, so unauthorised requests never pay for validation or reach
+handler code. Exceptions raised anywhere in the pipeline, including FastAPI's
+own validation errors, flow through the exception filters.
+
+## Building blocks
+
+| Concept | Declare with | Registered in | Page |
+|---|---|---|---|
+| Module | `@Module(imports=, controllers=, providers=, exports=)` | an `imports=[...]` chain reaching `AppModule` | [Modules](/overview/modules) |
+| Controller | `@Controller("prefix")` + `@Get/@Post/@Put/@Patch/@Delete/@Options/@Head` | a module's `controllers` | [Controllers](/overview/controllers) |
+| Provider | `@Injectable()` | a module's `providers` | [Providers](/overview/providers) |
+| Guard | subclass `CanActivate`, `can_activate(context) -> bool` | `@UseGuards(...)` or `app.use_global_guards(...)` | [Guards](/overview/guards) |
+| Pipe | subclass `PipeTransform` | `@UsePipes(...)` or `app.use_global_pipes(...)` | [Pipes](/overview/pipes) |
+| Interceptor | subclass `NestInterceptor`, `intercept(context, call_next)` | `@UseInterceptors(...)` | [Interceptors](/overview/interceptors) |
+| Exception filter | subclass `ExceptionFilter` + `@Catch(...)` | `@UseFilters(...)` or `app.use_global_filters(...)` | [Exception filters](/overview/exception-filters) |
+| Middleware | subclass `NestMiddleware` | `configure(consumer)` on a module | [Middleware](/overview/middleware) |
+| Custom provider | `{"provide": TOKEN, "useClass"/"useValue"/"useFactory": ..., "inject": [...]}` | a module's `providers` | [Custom providers](/fundamentals/custom-providers) |
+| Dynamic module | static method returning `DynamicModule` | `imports=[X.for_root(...)]` | [Dynamic modules](/fundamentals/dynamic-modules) |
+
+## Handler parameters
+
+Python has no parameter decorators, so request data is bound with marker
+defaults and type hints:
+
+| You want | Write |
+|---|---|
+| JSON body validated by a DTO | `dto: CreateCatDto = Body()` |
+| Path parameter | `id: int` (matches `:id` in the route) or `key: str = Param("key")` |
+| Catch-all path (matches `/`) | route `files/:key*`, then `key: str = Param("key")` |
+| Query string value | `limit: int = Query(default=10)` |
+| Header | `x_request_id: str \| None = Headers("x-request-id")` |
+| Authenticated principal | `user=CurrentUser()` (`austial.auth`) |
+| Tenant context | inject `TenantContext` in the constructor |
+| Status code / header | `@HttpCode(204)`, `@Header("Cache-Control", "no-store")` |
+
+## Errors
+
+Raise these from anywhere; never build the response yourself. Every one takes
+`(message: str | dict | None = None)`.
+
+| Exception | Status | Exception | Status |
+|---|---|---|---|
+| `BadRequestException` | 400 | `ConflictException` | 409 |
+| `UnauthorizedException` | 401 | `UnprocessableEntityException` | 422 |
+| `ForbiddenException` | 403 | `TooManyRequestsException` | 429 |
+| `NotFoundException` | 404 | `InternalServerErrorException` | 500 |
+| `MethodNotAllowedException` | 405 | `ServiceUnavailableException` | 503 |
+
+Response shape: `{"statusCode", "message", "error", "timestamp", "path"}`.
+
+## Data access (`austial.orm`)
+
+| Task | API |
+|---|---|
+| Define a table | `@Entity()` class with `PrimaryGeneratedColumn()`, `Column()`, relation markers |
+| Wire the connection | `OrmModule.for_root(type_="postgres" \| "sqlite", url=..., entities=[...])` or `for_root_async(use_factory=..., inject=[ConfigService], entities=[...])` |
+| Wire a feature's entities | `OrmModule.for_feature([Cat])` in the feature module |
+| Get a repository | `repo: Repository[Cat] = InjectRepository(Cat)` |
+| Read | `find`, `find_one`, `find_by`, `find_one_by`, `count` |
+| Write | `save` (insert when PK unset, else update), `insert` (always insert), `update(criteria, partial)`, `delete(criteria)`, `remove(entity)` |
+| Filter | `FindOptions(where=..., relations=[...], order_by=..., skip=, take=)`; wrap values in `In([...])`, `NotIn([...])`, `IsNull()`, `NotNull()` |
+| Aggregate | `repo.sum(column, criteria=, group_by=)`, `repo.aggregate("SUM" \| "AVG" \| "MIN" \| "MAX", ...)` |
+| Complex query | `repo.create_query_builder("alias")` with `.where(sql, params)`, `.where_eq`, `.where_in`, joins, `.get_many()` |
+| Transaction | `await data_source.transaction(async_callback)` |
+| Immutable rows | `@Entity(append_only=True)` (audit, ledger) |
+| Initialise | `await app.get(DataSource).initialize()` at startup |
+
+Relations (`OneToOne`, `OneToMany`, `ManyToOne`, `ManyToMany`) take a class or
+a `lambda: Class` target, and pass `join_column=JoinColumn(...)` as a keyword
+argument. Full detail: [Database](/techniques/database).
+
+## Feature packages
+
+| Need | Package | Wire with | Page |
+|---|---|---|---|
+| Environment config | `austial.config` | `ConfigModule.for_root()`, then `ConfigService.get / get_or_throw` | [Configuration](/techniques/configuration) |
+| Login, JWT, MFA, refresh tokens | `austial.auth` | `AuthModule.for_root(AuthConfig(jwt_secret=..., issuer=...))`, `AuthGuard`, `@Public()` | [Authentication](/techniques/authentication) |
+| Roles and permissions | `austial.authz` | `AuthzModule.for_root()`, `RolesGuard`, `@Roles`, `@Permissions`, `@AuthorizeObject` | [Authorization](/techniques/authorization) |
+| Tenant isolation | `austial.tenancy` | `TenancyModule.for_root()`, `TenantGuard`, `@RequireTenant()`, `Tenanted` mixin | [Multi-tenancy](/techniques/multi-tenancy) |
+| Headers, rate limit, idempotency, CSRF, PII, encryption | `austial.security` | `SecurityModule.for_root(SecurityConfig(...))` | [Security](/techniques/security) |
+| Who did what | `austial.audit` | `AuditModule.for_root(AuditConfig(...), store=OrmAuditStore(repo))`, `@Audited` | [Audit log](/techniques/audit-log) |
+| Background work | `austial.jobs` | `JobsModule.for_root(JobsConfig())`, `@Job`, `@Cron`, `JobQueue.enqueue` | [Background jobs](/techniques/background-jobs) |
+| Files | `austial.storage` | `StorageModule.for_root(StorageConfig(...))`, `StorageService`, `SignedUrlService` | [File storage](/techniques/file-storage) |
+| Schema changes | `austial.migrations` | `MigrationsModule.for_root(...)`, `austial-migrate` CLI | [Migrations](/techniques/migrations) |
+| Translations | `austial.i18n` | `I18nModule.for_root(I18nConfig(...))`, `LocaleMiddleware` | [i18n](/techniques/i18n) |
+| Liveness / readiness | `austial.terminus` | `HealthCheckService` plus indicators | [Health checks](/techniques/health-checks) |
+| Tests | `austial.testing` | `Test.create_testing_module(...).compile()` | [Testing](/techniques/testing) |
+
+## Guard ordering
+
+When stacking guards, list them in the order they must run:
+
+```python
+@UseGuards(AuthGuard, TenantGuard, RolesGuard)
+```
+
+`TenantGuard` and `RolesGuard` read the principal that `AuthGuard`
+publishes on `request.state`, so `AuthGuard` must come first. Rate limiting
+and idempotency guards usually go before `AuthGuard` so abusive traffic is
+rejected cheaply.
+
+## CLI
+
+```bash
+austial new <name> [--skip-install] [--skip-git] [--link PATH]
+austial g module|controller|service|resource <name>
+austial serve [--host] [--port] [--reload/--no-reload]
+austial-migrate init | revision -m "msg" --autogenerate | upgrade head | downgrade -1 | current | history
+austial-worker run src.app_module:AppModule
+```
+
+## Known limits
+
+Do not build on features that do not exist yet:
+
+- No `Scope.REQUEST`. Only singleton (`DEFAULT`) and `TRANSIENT`.
+- Module `imports` / `exports` are not enforced as a visibility boundary.
+  Write them correctly anyway.
+- `CallHandler.handle()` is a plain async continuation, not an RxJS
+  Observable.
+- `DataSource.initialize()` is a manual step. There is no async module-init
+  hook.
+- Only PostgreSQL (`asyncpg`) and SQLite (`aiosqlite`) drivers exist.
+- The `Tenanted` mixin's `tenant_id` is invisible to mypy's synthesised
+  `__init__`. Declare the column on the entity directly if strict typing
+  matters more than reuse.
+
+## Gotchas that cost agents the most time
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Route returns 404 / not in `/docs` | Controller or module not registered | Add to `controllers=[...]` and import the module from `AppModule` |
+| `Cannot resolve` DI error | Provider missing from any module's `providers` | Register it; check the `__init__` type hints are real classes |
+| `InjectRepository` fails to resolve | Entity not registered | `OrmModule.for_feature([Entity])` in the owning module, and the entity in `for_root(entities=[...])` |
+| `save()` on a UUID-keyed row updates nothing | `save()` treats a set PK as an UPDATE | Use `insert()` |
+| `where={"col": None}` matches nothing | Compiles to `= NULL` | Use `IsNull()` |
+| App works with `python src/main.py`, tables missing under uvicorn | `bootstrap()` never runs under `uvicorn src.main:app` | Initialise `DataSource` in a `startup` event handler |
+| Rate limit keyed on the proxy's IP | `X-Forwarded-For` ignored by default | Set `SecurityConfig.trusted_proxy_hops` |
+| `CurrentUser()` is `None` on a protected route | No `AuthGuard` ran for that route | Add the guard, or register it globally |

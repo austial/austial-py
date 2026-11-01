@@ -9,6 +9,12 @@ out/
 build/
 public/_pagefind/
 
+# generated from content/ by scripts/generate-agent-files.mjs
+public/llms.txt
+public/llms-full.txt
+public/AGENTS.md
+public/setup-agents.sh
+
 # misc
 .DS_Store
 *.pem

@@ -4,7 +4,9 @@
   "private": true,
   "description": "Documentation site for Austial -- a NestJS-style web framework for Python built on FastAPI.",
   "scripts": {
+    "predev": "node scripts/generate-agent-files.mjs",
     "dev": "next",
+    "prebuild": "node scripts/generate-agent-files.mjs",
     "build": "next build --webpack",
     "postbuild": "pagefind --site .next/server/app --output-path public/_pagefind",
     "start": "next start",

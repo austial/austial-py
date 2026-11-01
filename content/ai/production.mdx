@@ -1,0 +1,156 @@
+---
+title: Production Readiness
+---
+
+# Production readiness
+
+"It runs locally" is not done. This is the checklist an agent (or a reviewer)
+should walk before calling an Austial service production-ready. Each item
+names the failure it prevents and links to the page with the detail.
+
+An agent can verify most items by reading code. Items marked **(you)** need a
+human decision or access to your infrastructure.
+
+## 1. Build gates
+
+All must pass, with no `# type: ignore` or `noqa` added just to get green:
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy src tests
+uv run pytest -q
+```
+
+- [ ] Every new route has an e2e test through `Test.create_testing_module` and
+      `httpx.ASGITransport` ([Testing](/techniques/testing)).
+- [ ] Error paths are asserted (`statusCode`, `message`, `path`), not just
+      the happy 200.
+- [ ] Tests for security-relevant routes cover the **denied** case: no
+      token, wrong role, wrong tenant.
+
+## 2. Startup and process model
+
+- [ ] `src/main.py` registers `ValidationPipe()` and `AllExceptionsFilter()`
+      globally so every error has one shape.
+- [ ] `DataSource.initialize()` runs in a `startup` event handler. Under
+      `uvicorn src.main:app` or `austial serve`, `bootstrap()` is never
+      called ([Database](/techniques/database), "Production deployments").
+- [ ] `synchronize=True` is **off**. The schema comes from migrations.
+- [ ] CORS is configured deliberately. `app.enable_cors()` with no arguments
+      allows **every origin, method and header, with credentials**. That is a
+      development default (and what the scaffold ships). Pass explicit
+      `allow_origins=[...]` **(you)**.
+- [ ] The production command is explicit, for example
+      `uvicorn src.main:app --host 0.0.0.0 --port 8000`, with `--reload` off.
+
+## 3. Configuration and secrets
+
+- [ ] Every secret is read with `ConfigService.get_or_throw(...)` so a missing
+      value fails at startup instead of falling back to a default.
+- [ ] `.env` is git-ignored. `.env.example` lists every variable with no real
+      values.
+- [ ] `AuthConfig.jwt_secret` and `StorageConfig.signed_url_secret` are 32+
+      characters. The framework refuses shorter ones.
+- [ ] No secret, token or key appears in logs, audit `metadata`, or error
+      messages.
+- [ ] Encryption keys in `SecurityConfig.encryption_keys` are loaded from a
+      secret manager, and no historical key still referenced by data is
+      ever removed **(you)**.
+
+## 4. Replace the in-memory defaults
+
+These are reference implementations. They are correct, but process-local or
+non-durable. With more than one worker or one restart, they silently lose
+state:
+
+| Component | Default | Replace with | Page |
+|---|---|---|---|
+| Refresh tokens | `InMemoryRefreshTokenStore` | persistent `RefreshTokenStore` (pass a class so it gets DI) | [Authentication](/techniques/authentication#refresh-tokens) |
+| Rate limiting | `InMemoryRateLimitStore` | shared store via `rate_limit_store=` | [Security](/techniques/security#rate-limiting) |
+| Idempotency keys | `InMemoryIdempotencyStore` | persistent store | [Security](/techniques/security#idempotency) |
+| Audit log | `InMemoryAuditStore` | `OrmAuditStore(repo)` or a SIEM-backed store | [Audit log](/techniques/audit-log#persisting-the-log) |
+| Background jobs | in-memory `JobBackend` | persistent backend via `backend=` | [Background jobs](/techniques/background-jobs) |
+| File storage | `driver="local"` | `driver="s3"` | [File storage](/techniques/file-storage) |
+
+The jobs case deserves emphasis: `austial-worker run` is a **separate
+process**, and an in-memory backend is local to the process that created it.
+A web process and a worker process do not share a queue until you supply a
+persistent backend.
+
+## 5. Authentication, authorisation, tenancy
+
+- [ ] `AuthGuard` is registered globally (`app.use_global_guards(...)`) or on
+      every non-public controller. Intentionally open routes carry
+      `@Public()` and nothing else is open by accident.
+- [ ] Guard order is correct: `AuthGuard` before `TenantGuard` / `RolesGuard`.
+- [ ] Every mutating handler carries `@Roles`, `@Permissions` or `@Public`. For
+      a hard guarantee subclass `RolesGuard` with `deny_undeclared = True`
+      ([Authorization](/techniques/authorization#deny-by-default)).
+- [ ] Object-level access (ownership, tenant match) uses `@AuthorizeObject`.
+      A role check alone does not stop one user reading another's record.
+- [ ] Multi-tenant apps: `TenantGuard` subclass with `require_by_default =
+      True`, and **every** query on a `Tenanted` entity filters by
+      `tenant_id` ([Multi-tenancy](/techniques/multi-tenancy)).
+- [ ] Password changes, MFA re-enrolment and admin actions call
+      `logout_everywhere(subject)`.
+- [ ] Auth failures return a generic 401. The specific sub-type is logged,
+      never returned to the client.
+- [ ] Response DTOs are narrow. Never return an entity that carries
+      `password_hash`, secrets or internal columns.
+
+## 6. Abuse and data protection
+
+- [ ] `SecureHeadersMiddleware` is applied to `"*"`, and the CSP is tuned for
+      your frontend **(you)**.
+- [ ] Login, password reset, OTP and any expensive endpoint carry
+      `@RateLimit(...)` behind `RateLimitGuard`.
+- [ ] Behind a load balancer or CDN, `trusted_proxy_hops` matches the number
+      of proxies **you** operate. Too low rate-limits the proxy; too high lets
+      clients forge their IP **(you)**.
+- [ ] Payment-like or otherwise non-repeatable `POST`s use
+      `IdempotencyKeyGuard`.
+- [ ] Cookie-authenticated mutating routes use `CsrfInterceptor`.
+- [ ] Sensitive columns use `EnvelopeEncryptor`. Logged or audited records pass
+      through `PIIRedactor`.
+- [ ] Uploads set `allowed_content_types` and `max_object_size_bytes`, and use
+      signed URLs for downloads.
+
+## 7. Data and migrations
+
+- [ ] Every schema change has an Alembic revision, and the generated file was
+      read and corrected (renames, enums, server defaults, backfills).
+- [ ] Applied revisions are never edited. Fix forward with a new one.
+- [ ] Deploys run `austial-migrate upgrade head` **before** the new code takes
+      traffic, and a rollback plan exists **(you)**.
+- [ ] Multi-step writes use `data_source.transaction(...)`.
+- [ ] Audit and ledger tables use `@Entity(append_only=True)`, and, if
+      regulation requires it, a database-level `REVOKE UPDATE, DELETE`. The ORM
+      guard does not stop raw SQL.
+- [ ] Queries you wrote by hand use bound parameters, never string
+      formatting. Reserved-word table or column names are quoted in raw
+      fragments.
+
+## 8. Observability and operations
+
+- [ ] `GET /health` returns real state: `DatabaseHealthIndicator` wired in,
+      and the endpoint reachable by your orchestrator ([Health checks](/techniques/health-checks)).
+- [ ] Sensitive health details, if any, sit behind a guard.
+- [ ] Audit events are recorded for security-relevant actions (login, role
+      change, data export, deletion) ([Audit log](/techniques/audit-log)).
+- [ ] Background jobs have `max_attempts`, backoff, and an `idempotency_key`
+      at enqueue so a retry cannot do the work twice.
+- [ ] Logs, metrics and alerting exist and someone owns them **(you)**.
+
+## How an agent should use this page
+
+Give the agent this instruction at the end of a feature:
+
+```
+Review the diff against https://docs.austial.com/ai/production.
+For each section, list what applies to this change, whether it is
+satisfied (with file and line), and what is missing. Do not mark an item
+done without citing code or a test. Fix what is in scope and list the rest.
+```
+
+Items marked **(you)** should come back as questions, not as assumptions.

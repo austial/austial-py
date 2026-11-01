@@ -1,0 +1,241 @@
+---
+title: Tool Setup
+---
+
+import { Tabs } from "nextra/components";
+
+# Tool setup
+
+Every AI coding tool looks for its own instructions file. Maintaining nine
+copies of the same rules guarantees they drift. The setup below keeps **one**
+file, `AGENTS.md`, and points every tool at it with symlinks.
+
+```
+my-app/
+├── AGENTS.md                              # the only file you edit
+├── CLAUDE.md                -> AGENTS.md  # Claude Code
+├── GEMINI.md                -> AGENTS.md  # Gemini CLI
+├── CONVENTIONS.md           -> AGENTS.md  # Aider
+├── .windsurfrules           -> AGENTS.md  # Windsurf
+├── .clinerules              -> AGENTS.md  # Cline
+├── .rules                   -> AGENTS.md  # Zed
+└── .github/
+    └── copilot-instructions.md -> ../AGENTS.md   # GitHub Copilot
+```
+
+Several tools (Codex, Cursor, Copilot's coding agent, Amp and others) read
+`AGENTS.md` directly, so they need no link at all. Tool conventions change
+quickly, so treat the filenames above as the current best practice and check
+your tool's own docs if one stops picking the file up.
+
+## One-minute setup
+
+Run this from the root of your Austial project:
+
+```bash
+curl -fsSL https://docs.austial.com/setup-agents.sh -o setup-agents.sh
+sh setup-agents.sh
+```
+
+The script downloads the [AGENTS.md template](/ai/agents-md) if you do not
+have one, then creates every symlink in the diagram. It is safe to re-run: it
+replaces links it made earlier and never overwrites a real file.
+
+| Flag | Effect |
+|---|---|
+| `--copy` | Copy `AGENTS.md` instead of symlinking (for filesystems without symlinks) |
+| `--force` | Replace existing real files at the link paths |
+| `--check` | Change nothing. Exit non-zero if any link is missing, stale or a drifted copy |
+
+Prefer to read the script before running it? It is reproduced in full
+[below](#the-setup-script).
+
+## Doing it by hand
+
+<Tabs items={["macOS / Linux", "Windows"]}>
+  <Tabs.Tab>
+    ```bash
+    ln -s AGENTS.md CLAUDE.md
+    ln -s AGENTS.md GEMINI.md
+    ln -s AGENTS.md CONVENTIONS.md
+    ln -s AGENTS.md .windsurfrules
+    ln -s AGENTS.md .clinerules
+    ln -s AGENTS.md .rules
+    mkdir -p .github
+    ln -s ../AGENTS.md .github/copilot-instructions.md
+    ```
+
+    A symlink target is resolved **relative to the link's own directory**,
+    which is why the Copilot link points at `../AGENTS.md`.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Symlinks on Windows need Developer Mode (or an elevated shell) and Git
+    configured to create them:
+
+    ```powershell
+    git config core.symlinks true
+    ```
+
+    Without that, run `sh setup-agents.sh --copy` from Git Bash or WSL, and
+    add `sh setup-agents.sh --check` to CI so a copy that drifts from
+    `AGENTS.md` fails the build.
+  </Tabs.Tab>
+</Tabs>
+
+Commit the links. Git stores a symlink as a tiny file holding the target
+path, so teammates on macOS and Linux get working links on clone.
+
+## Per-tool notes
+
+| Tool | Reads | Notes |
+|---|---|---|
+| Claude Code | `CLAUDE.md` | Symlink works. Alternatively make `CLAUDE.md` a one-liner, `@AGENTS.md`, if you want Claude-only additions below it. |
+| OpenAI Codex CLI | `AGENTS.md` | Native. |
+| Cursor | `AGENTS.md` | Native. Use `.cursor/rules/*.mdc` only for glob-scoped extras. |
+| GitHub Copilot | `.github/copilot-instructions.md` | Symlink. The coding agent also reads `AGENTS.md`. |
+| Gemini CLI | `GEMINI.md` | Symlink, or set the context filename to `AGENTS.md` in Gemini's settings. |
+| Windsurf | `.windsurfrules` | Symlink. |
+| Cline | `.clinerules` | Symlink. |
+| Aider | `CONVENTIONS.md` | Symlink, then pass `--read CONVENTIONS.md` or add `read: CONVENTIONS.md` to `.aider.conf.yml`. |
+| Zed | `.rules` | Symlink. |
+| Anything else | `AGENTS.md` | Paste or `@`-mention the file at the start of the session. |
+
+### Keep tool-specific extras out of the shared file
+
+If one tool needs something the others should not see (a Claude Code
+permissions allow-list, a Cursor glob rule), put it in that tool's own config
+directory. Never fork the shared instructions. For Claude Code, for example,
+a project `.claude/settings.json` that lets the agent run the verification
+loop without prompting every time:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run pytest:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(uv run mypy:*)",
+      "Bash(uv run austial:*)"
+    ]
+  }
+}
+```
+
+## Give the agent the docs, not just the rules
+
+`AGENTS.md` tells an agent how to behave. It cannot hold the whole API. The
+docs site publishes two machine-readable files, regenerated on every build:
+
+| File | Use it for |
+|---|---|
+| [`/llms.txt`](https://docs.austial.com/llms.txt) | A short index: page titles, one-line summaries, links. Good default for tools that fetch pages on demand. |
+| [`/llms-full.txt`](https://docs.austial.com/llms-full.txt) | Every page concatenated as plain text. Add it as an indexed docs source (for example Cursor's `@Docs`), or have an agent fetch it once at the start of a task. |
+
+A reliable pattern is to start any non-trivial task with:
+
+```
+Read https://docs.austial.com/llms.txt, then fetch the pages relevant to
+this task before writing code.
+```
+
+## Verify the setup
+
+1. Open the project in your tool and ask: *"What command do I run to verify
+   my changes in this project?"* It should answer with the ruff, mypy and
+   pytest loop from `AGENTS.md`.
+2. Ask it to add a `cats` feature. It should reach for
+   `austial g resource cats`, not hand-write a FastAPI router.
+3. In CI, run `sh setup-agents.sh --check` so a deleted or stale link is
+   caught.
+
+## The setup script
+
+{/* publish: setup-agents.sh */}
+
+```sh
+#!/usr/bin/env sh
+# Link every AI coding tool's instructions file to a single AGENTS.md.
+#
+#   sh setup-agents.sh            create symlinks (downloads AGENTS.md if absent)
+#   sh setup-agents.sh --copy     copy instead of symlink (no symlink support)
+#   sh setup-agents.sh --force    replace real files sitting at a link path
+#   sh setup-agents.sh --check    verify only, change nothing (for CI)
+set -eu
+
+SOURCE="AGENTS.md"
+SOURCE_URL="https://docs.austial.com/AGENTS.md"
+MODE="link"
+FORCE=0
+CHECK=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --copy) MODE="copy" ;;
+    --force) FORCE=1 ;;
+    --check) CHECK=1 ;;
+    -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
+    *) echo "unknown option: $arg" >&2; exit 2 ;;
+  esac
+done
+
+# path:relative-link-target
+TARGETS="
+CLAUDE.md:AGENTS.md
+GEMINI.md:AGENTS.md
+CONVENTIONS.md:AGENTS.md
+.windsurfrules:AGENTS.md
+.clinerules:AGENTS.md
+.rules:AGENTS.md
+.github/copilot-instructions.md:../AGENTS.md
+"
+
+status=0
+
+if [ ! -f "$SOURCE" ]; then
+  if [ "$CHECK" -eq 1 ]; then
+    echo "missing: $SOURCE" >&2
+    exit 1
+  fi
+  echo "downloading $SOURCE_URL"
+  curl -fsSL "$SOURCE_URL" -o "$SOURCE"
+fi
+
+for entry in $TARGETS; do
+  path="${entry%%:*}"
+  target="${entry#*:}"
+
+  if [ "$CHECK" -eq 1 ]; then
+    if [ -L "$path" ]; then
+      [ "$(readlink "$path")" = "$target" ] || { echo "stale link: $path"; status=1; }
+    elif [ -f "$path" ]; then
+      cmp -s "$path" "$SOURCE" || { echo "drifted copy: $path"; status=1; }
+    else
+      echo "missing: $path"; status=1
+    fi
+    continue
+  fi
+
+  mkdir -p "$(dirname "$path")"
+
+  if [ -L "$path" ]; then
+    rm "$path"
+  elif [ -e "$path" ]; then
+    if [ "$FORCE" -eq 1 ] || cmp -s "$path" "$SOURCE"; then
+      rm "$path"
+    else
+      echo "skipped $path (exists and differs; use --force to replace)"
+      continue
+    fi
+  fi
+
+  if [ "$MODE" = "copy" ]; then
+    cp "$SOURCE" "$path"
+    echo "copied  $path"
+  else
+    ln -s "$target" "$path"
+    echo "linked  $path -> $target"
+  fi
+done
+
+exit "$status"
+```

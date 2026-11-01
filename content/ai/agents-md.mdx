@@ -1,0 +1,184 @@
+---
+title: AGENTS.md Template
+---
+
+# AGENTS.md template
+
+`AGENTS.md` is the one file every AI coding tool should read before it
+touches your project. This page holds the canonical Austial template. Copy
+it into the root of your app, fill in the **Project facts** block, and
+[link it to every tool with symlinks](/ai/setup).
+
+```bash
+curl -fsSL https://docs.austial.com/AGENTS.md -o AGENTS.md
+```
+
+The file below is generated from this page at build time, so the download
+and the page never drift apart.
+
+{/* publish: AGENTS.md */}
+
+````markdown
+# AGENTS.md
+
+This is an **Austial** application: a NestJS-style, batteries-included web
+framework for Python, built on FastAPI. Austial is not FastAPI, Django, or
+NestJS. It looks like all three, and guessing from them produces code that
+does not run. When you are unsure of an API, read the docs instead of
+inventing one:
+
+- Docs: https://docs.austial.com
+- Whole doc set as one file for LLMs: https://docs.austial.com/llms-full.txt
+- Page index: https://docs.austial.com/llms.txt
+
+## Project facts (fill these in)
+
+- App name / purpose: <what this service does>
+- Database: <postgres | sqlite> via `austial.orm`
+- Auth: <JWT via austial.auth | API key | none>
+- Multi-tenant: <yes | no>
+- Deployed as: <uvicorn src.main:app on ... >
+
+## Commands
+
+```bash
+uv sync --extra dev          # install, including dev tools
+cp .env.example .env         # first time only
+uv run austial serve         # dev server on :8000 with reload
+uv run austial g resource <name>   # scaffold a full CRUD feature module
+uv run ruff check . --fix && uv run ruff format .
+uv run mypy src tests
+uv run pytest -q
+```
+
+**Definition of done:** `ruff check`, `ruff format --check`, `mypy src tests`
+and `pytest` all pass. Never report work as finished without running them.
+
+## Layout
+
+```
+src/
+├── main.py              # AustialFactory.create(AppModule) + global pipes/filters
+├── app_module.py        # root @Module: imports every feature module
+└── modules/<snake_name>/
+    ├── <name>_module.py
+    ├── <name>_controller.py
+    ├── <name>_service.py
+    ├── entities/<name>_entity.py
+    └── dto/create_<name>_dto.py, update_<name>_dto.py
+tests/unit/, tests/e2e/      # files named *_spec.py
+```
+
+- One folder per feature. File names use underscore suffixes
+  (`cats_controller.py`), never dots.
+- Imports are absolute from the project root: `from src.modules.cats...`.
+- Prefer `uv run austial g resource <name>` over hand-writing a feature. It
+  also patches `app_module.py`.
+
+## The mental model
+
+Request pipeline, in order: **guards -> pipes -> interceptors -> handler ->
+exception filters**. Middleware runs before all of it.
+
+1. **Everything must be registered.** A controller goes in a module's
+   `controllers=[...]`, a provider in `providers=[...]`, and the module in
+   an `imports=[...]` chain that reaches `AppModule`. A missing registration
+   shows up as a missing route or a DI error, not an import error.
+2. **Dependency injection is by `__init__` type hint.** Providers are
+   singletons (`Scope.DEFAULT`) unless marked `Scope.TRANSIENT`. There is no
+   request scope. Never instantiate a service yourself with `Foo()`.
+3. **Repositories** are injected as
+   `repo: Repository[Cat] = InjectRepository(Cat)`, and the owning module
+   needs `OrmModule.for_feature([Cat])`. The root needs one
+   `OrmModule.for_root(...)`.
+4. **Request data** uses marker defaults: `Body()`, `Param()`, `Query()`,
+   `Headers()`. DTOs are plain pydantic `BaseModel`s. Route paths use `:id`
+   and `:key*` (catch-all that also matches `/`), not `{id}`.
+5. **Errors:** raise Austial exceptions (`NotFoundException`,
+   `BadRequestException`, `ConflictException`, ...). Do not hand-build error
+   responses. The global `AllExceptionsFilter` renders
+   `statusCode/message/error/timestamp/path`.
+6. **Guards are the security boundary.** Every non-public route must be
+   covered by `AuthGuard` (and `RolesGuard` / `TenantGuard` where relevant).
+   Mark intentionally open routes with `@Public()`.
+
+## Import map
+
+| You need | Import from |
+|---|---|
+| `Module Controller Injectable Get Post Put Patch Delete Body Param Query Headers UseGuards UseInterceptors UsePipes UseFilters HttpCode Header Scope Global Inject`, all `*Exception` classes, `CanActivate ExecutionContext NestInterceptor NestMiddleware PipeTransform ExceptionFilter Catch ValidationPipe AustialFactory Reflector` | `austial` |
+| `ConfigModule ConfigService` | `austial.config` |
+| `OrmModule DataSource Entity Column PrimaryGeneratedColumn Repository InjectRepository FindOptions In NotIn IsNull NotNull ManyToOne OneToMany` | `austial.orm` |
+| `AuthModule AuthConfig AuthGuard AuthService CurrentUser Public JwtStrategy Argon2Hasher TotpStrategy` | `austial.auth` |
+| `AuthzModule RolesGuard Roles Permissions AuthorizeObject PermissionService` | `austial.authz` |
+| `TenancyModule TenantGuard TenantContext RequireTenant Tenanted` | `austial.tenancy` |
+| `SecurityModule SecurityConfig RateLimit RateLimitGuard IdempotencyKeyGuard CsrfInterceptor SecureHeadersMiddleware PIIRedactor EnvelopeEncryptor` | `austial.security` |
+| `AuditModule AuditConfig AuditLogService AuditEvent Audited OrmAuditStore` | `austial.audit` |
+| `JobsModule JobsConfig JobQueue Job Cron Worker` | `austial.jobs` |
+| `StorageModule StorageConfig StorageService SignedUrlService` | `austial.storage` |
+| `MigrationsModule MigrationsConfig MigrationRunner` | `austial.migrations` |
+| `I18nModule I18nConfig I18nService LocaleMiddleware` | `austial.i18n` |
+| `HealthCheckService MemoryHealthIndicator DatabaseHealthIndicator` | `austial.terminus` |
+| `Test` (testing module) | `austial.testing` |
+
+If a symbol is not in this table, check
+https://docs.austial.com/llms-full.txt before using it.
+
+## Do
+
+- Write async handlers and services. The ORM is async end to end.
+- Return typed values or DTOs from handlers, and validate input with DTOs.
+- Filter every query on a `Tenanted` entity by `tenant_id`, and set it
+  explicitly on insert from `TenantContext.require()`.
+- Use `repository.insert(...)` when the primary key is assigned by the
+  application (UUIDs). `save()` would issue an UPDATE.
+- Use `IsNull()` / `NotNull()` to filter on NULL. `{"col": None}` compiles to
+  `= NULL` and never matches.
+- Use `append_only=True` entities for audit and ledger data.
+- Write a test for every new route (`austial.testing.Test`, `httpx`
+  `ASGITransport`) and assert error bodies, not just 200s.
+- Add a new Alembic revision for every schema change. Read the generated
+  file before committing it.
+
+## Do not
+
+- Do not use FastAPI `Depends()` for things Austial's DI already provides.
+- Do not import SQLAlchemy in application code, or build SQL with f-strings.
+  Use `Repository`, `FindOptions` and `QueryBuilder` with bound params.
+- Do not log or audit-log PII, tokens or secrets. Pass records through
+  `PIIRedactor` first.
+- Do not edit a migration that has been applied. Add a new one.
+- Do not hardcode secrets. Read them with `ConfigService.get_or_throw(...)`.
+- Do not rely on `synchronize=True` outside local development and tests.
+- Do not ship the in-memory defaults (see below) to production.
+
+## Not production-safe by default
+
+These ship as in-memory or local reference implementations. Replace each with
+a persistent or shared one before running more than one worker or surviving a
+restart:
+
+| Component | Default | Production need |
+|---|---|---|
+| Refresh tokens | `InMemoryRefreshTokenStore` | ORM/Redis-backed `RefreshTokenStore` |
+| Rate limiting | `InMemoryRateLimitStore` | shared store, plus `trusted_proxy_hops` behind a proxy |
+| Idempotency keys | `InMemoryIdempotencyStore` | persistent store |
+| Audit log | `InMemoryAuditStore` | `OrmAuditStore` or a SIEM store |
+| Background jobs | in-memory `JobBackend` (process-local) | persistent `JobBackend` |
+| File storage | `driver="local"` | `driver="s3"` |
+| Schema | `synchronize=True` | Alembic migrations (`austial-migrate`) |
+
+## Production gates
+
+Before calling a feature production-ready, confirm:
+
+1. All checks in "Definition of done" pass.
+2. Secrets come from the environment and `jwt_secret` /
+   `signed_url_secret` are 32+ characters.
+3. `DataSource.initialize()` runs in a `startup` event handler, because
+   `uvicorn src.main:app` never calls `bootstrap()`.
+4. `GET /health` is wired to `DatabaseHealthIndicator`.
+5. Global `ValidationPipe` and `AllExceptionsFilter` are registered, and
+   `AuthGuard` is global or on every non-public controller.
+6. Full checklist: https://docs.austial.com/ai/production
+````

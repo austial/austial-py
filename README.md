@@ -36,7 +36,10 @@ austial-py-doc/
 │   ├── overview/                       # Controllers, Providers, Modules, ...
 │   ├── fundamentals/                    # Custom Providers, Dynamic Modules, ...
 │   ├── techniques/                       # Configuration, Database, Testing, ...
+│   ├── ai/                                # AI agent setup, reference, production checklist
 │   └── cli/                               # CLI reference
+├── scripts/
+│   └── generate-agent-files.mjs      # builds llms.txt, llms-full.txt, AGENTS.md, setup-agents.sh
 ├── mdx-components.js
 ├── next.config.mjs
 └── package.json
@@ -45,6 +48,21 @@ austial-py-doc/
 Each folder under `content/` has its own `_meta.js` controlling sidebar
 title/order -- see [Nextra's `_meta` file docs](https://nextra.site/docs/file-conventions/meta-file)
 for the full format.
+
+## Agent files
+
+`npm run dev` and `npm run build` first run `scripts/generate-agent-files.mjs`,
+which writes four git-ignored files into `public/`:
+
+| File | Source |
+|---|---|
+| `llms.txt` | page titles and summaries, in sidebar order |
+| `llms-full.txt` | every page concatenated as plain text |
+| `AGENTS.md` | the fenced block after `{/* publish: AGENTS.md */}` in `content/ai/agents-md.mdx` |
+| `setup-agents.sh` | the fenced block after `{/* publish: setup-agents.sh */}` in `content/ai/setup.mdx` |
+
+Edit the MDX pages, never the generated files. Any fenced block preceded by a
+`{/* publish: <filename> */}` comment is published to `public/<filename>`.
 
 ## Contributing
 

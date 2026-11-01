@@ -4,5 +4,6 @@ export default {
   overview: "Overview",
   fundamentals: "Fundamentals",
   techniques: "Techniques",
+  ai: "AI Agents",
   cli: "CLI",
 };

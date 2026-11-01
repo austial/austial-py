@@ -1,0 +1,64 @@
+---
+title: Overview
+---
+
+# Building with AI agents
+
+Austial looks like NestJS, runs on FastAPI, and is written in Python. That is
+exactly the combination that trips up an AI coding tool: it pattern-matches
+to one of the three, writes `Depends()` where DI should be, or invents a
+decorator that does not exist. This section gives every tool the context it
+needs to build **correctly** and to **finish production-ready**, not just to
+produce something that runs on a laptop.
+
+It has four layers. Use as many as you need.
+
+| Layer | What it is | Page |
+|---|---|---|
+| **Instructions** | One `AGENTS.md` in your repo: commands, layout, rules, gotchas | [AGENTS.md template](/ai/agents-md) |
+| **Tool wiring** | Symlinks so Claude Code, Copilot, Gemini, Windsurf, Cline, Aider and Zed all read that same file | [Tool setup](/ai/setup) |
+| **Reference** | Imports, decorators, request pipeline and patterns in a form an agent can scan | [Framework reference](/ai/reference) |
+| **Gates** | What "production-ready" means for an Austial service, as a checklist an agent can run through | [Production readiness](/ai/production) |
+
+[Playbooks](/ai/playbooks) tie them together with task recipes and prompts.
+
+## Five-minute start
+
+```bash
+austial new my-app && cd my-app
+curl -fsSL https://docs.austial.com/AGENTS.md -o AGENTS.md
+curl -fsSL https://docs.austial.com/setup-agents.sh -o setup-agents.sh
+sh setup-agents.sh
+```
+
+Then open the project in your AI tool of choice and ask for a feature. Fill
+in the **Project facts** block at the top of `AGENTS.md` first. It is the one
+part of the file only you can write, and it is what lets the agent make the
+right call between, say, SQLite and Postgres or JWT and API keys.
+
+## Why a single file with symlinks
+
+- **No drift.** One file means the rules Claude Code follows are the rules
+  Copilot follows.
+- **Reviewable.** A change to agent behaviour is a normal diff in a normal
+  pull request.
+- **Tool-agnostic.** Switching tools, or a teammate using a different one,
+  costs nothing.
+
+## What the agent gets right, and what it still needs you for
+
+With the template in place an agent reliably gets framework mechanics right:
+module registration, DI, the request pipeline, error shapes, repository
+usage, and the verification loop (`ruff`, `mypy`, `pytest`).
+
+It cannot know your business rules, your threat model, or your deployment
+target. Those belong in the **Project facts** block and in code review.
+Treat the [production checklist](/ai/production) as a review aid for you, not
+a substitute for one.
+
+## Keeping it current
+
+`AGENTS.md` and `setup-agents.sh` are generated from these docs on every site
+build, along with `/llms.txt` and `/llms-full.txt`. Re-download them when you
+upgrade Austial. In CI, `sh setup-agents.sh --check` fails the build if a
+symlink goes missing.

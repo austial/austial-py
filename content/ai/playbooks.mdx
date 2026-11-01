@@ -1,0 +1,163 @@
+---
+title: Playbooks
+---
+
+# Playbooks
+
+Task recipes for agents, and the prompts to start them. Each recipe is the
+shortest path that ends with something that passes the
+[production gates](/ai/production), not just something that runs.
+
+## The loop every task follows
+
+```
+1. Read      AGENTS.md, then the docs page for the feature you are touching
+2. Plan      list the files you will create or change, and the tests you will add
+3. Build     smallest change that works; scaffold with `austial g` when it fits
+4. Verify    ruff check, ruff format --check, mypy src tests, pytest -q
+5. Review    walk the diff against /ai/production; list what does not apply
+```
+
+Step 4 is not optional. If a check fails, fix the cause instead of silencing
+it.
+
+## Starter prompts
+
+Paste one of these as the first message of a session.
+
+**New feature**
+
+```
+Read AGENTS.md and https://docs.austial.com/llms.txt. Add a "invoices"
+feature: list, create, get, and cancel, scoped per tenant, with an audit
+event on cancel. Use `austial g resource` as the starting point. Write e2e
+tests including the denied cases. Run the full verification loop and show me
+the output before you say you are done.
+```
+
+**Review before merge**
+
+```
+Review the current diff against https://docs.austial.com/ai/production. For
+each section list what applies, whether it is satisfied (cite file and line),
+and what is missing. Do not mark anything satisfied without evidence.
+```
+
+**Harden an existing service**
+
+```
+Audit this service against https://docs.austial.com/ai/production section
+by section. Report findings first, ordered by severity, and wait for my
+go-ahead before changing anything.
+```
+
+## Recipe: add a CRUD feature
+
+```bash
+uv run austial g resource invoices
+```
+
+This creates the module, controller, service, entity and DTOs, and patches
+`app_module.py`. Then, by hand:
+
+1. Add real columns to `entities/invoices_entity.py`, and real fields to both
+   DTOs. The generated `name` column is a placeholder.
+2. Register the entity in `OrmModule.for_root(entities=[...])` at the root.
+3. Generate and read a migration:
+   `austial-migrate revision -m "add invoices" --autogenerate`.
+4. Put guards on the controller: `@UseGuards(AuthGuard, TenantGuard, RolesGuard)`.
+5. Write tests, then run the verification loop.
+
+## Recipe: protect a route
+
+```python
+from austial import Controller, Get, UseGuards
+from austial.auth import AuthGuard, CurrentUser
+from austial.authz import Roles, RolesGuard
+
+
+@Controller("reports")
+@UseGuards(AuthGuard, RolesGuard)
+class ReportsController:
+    @Get()
+    @Roles("admin", "ops")
+    async def list(self, user=CurrentUser()):
+        ...
+```
+
+Then test three cases: no token (401), valid token without the role (403),
+valid token with the role (200).
+
+## Recipe: add a tenant-scoped entity
+
+```python
+from austial.orm import Column, Entity, PrimaryGeneratedColumn
+from austial.tenancy import Tenanted
+
+
+@Entity("invoices")
+class Invoice(Tenanted):
+    id: int = PrimaryGeneratedColumn()
+    number: str = Column(nullable=False)
+```
+
+In the service, take the tenant from `TenantContext.require()`, set
+`tenant_id` on insert, and filter **every** read, update and delete by it.
+Test that tenant A cannot read, update or delete tenant B's row.
+
+## Recipe: add a background job
+
+```python
+from austial import Injectable
+from austial.jobs import Job
+
+
+@Injectable()
+class RemittanceJobs:
+    @Job("send-remittance", max_attempts=5, backoff_seconds=60)
+    async def send(self, *, remittance_id: str) -> None:
+        ...
+```
+
+Register `JobsModule.for_root(JobsConfig())` and the provider class, enqueue
+with `JobQueue.enqueue("send-remittance", payload=..., idempotency_key=...)`.
+Make the handler safe to run twice, because retries are the point. Before
+production, replace the in-memory backend (see [step 4](/ai/production#4-replace-the-in-memory-defaults)).
+
+## Recipe: change the schema safely
+
+1. Edit the entity.
+2. `austial-migrate revision -m "describe the change" --autogenerate`.
+3. **Read the generated revision.** Fix renames (drop + create becomes
+   `op.alter_column`), enums, server defaults. Add a backfill if existing rows
+   need values.
+4. `austial-migrate upgrade head` against a scratch database, then
+   `downgrade -1` and `upgrade head` again to prove it reverses.
+5. Never edit a revision that has shipped. Add a new one.
+
+## Recipe: debug a DI or routing failure
+
+| Symptom | Check first |
+|---|---|
+| Route missing | Controller in `controllers=[...]`? Module imported by `AppModule`? |
+| `Cannot resolve ...` | Provider in some module's `providers`? Constructor hints are real classes, not strings? |
+| Repository injection fails | `OrmModule.for_feature([Entity])` in the module, entity in `for_root(entities=...)` |
+| Guard never runs | Applied with `@UseGuards` or `use_global_guards`? Guard class registered as a provider if it has constructor dependencies? |
+| `CurrentUser()` is `None` | `AuthGuard` did not run for that route |
+
+Reproduce it in a test with `Test.create_testing_module(...)` before changing
+code. A failing test that names the missing registration is faster than
+guessing.
+
+## Anti-patterns agents fall into
+
+| Looks right | Why it is wrong here | Do this |
+|---|---|---|
+| `router = APIRouter()` and `@router.get(...)` | Bypasses modules, DI, guards and the filter chain | `@Controller` + `@Get` inside a module |
+| `Depends(get_db)` and a SQLAlchemy `Session` | The ORM is async and DI-managed; SQLAlchemy is not part of the app API | `Repository` via `InjectRepository` |
+| `raise HTTPException(404)` | Skips the consistent error body | `raise NotFoundException("...")` |
+| `{id}` in a route string | Austial rewrites `:id`; mixing styles confuses readers | `@Get(":id")` |
+| Calling `Service()` in a handler | Singleton state and dependencies are skipped | Constructor-inject it |
+| `where={"deleted_at": None}` | `= NULL` never matches | `IsNull()` |
+| Catching `Exception` and returning `{"error": ...}` | Hides failures from the filter chain and the audit trail | Let it propagate, or raise a specific exception |
+| `synchronize=True` in production | Skips review of schema changes | Alembic migrations |
