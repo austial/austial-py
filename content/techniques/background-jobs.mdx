@@ -1,0 +1,226 @@
+---
+title: Background jobs
+---
+
+# Background jobs
+
+`austial.jobs` runs work off the request path. It provides a `JobQueue`
+(enqueue / cancel / status), a `Worker` (background loop with retries and
+exponential backoff), `@Cron` for scheduled jobs, `@Job` for enqueueable
+ones, a pluggable `JobBackend` (in-memory reference impl ships out of the
+box), and a jobs-scoped `IdempotencyStore` for deduplicating enqueue calls.
+
+The design mirrors `@nestjs/schedule` + BullMQ: the framework provides the
+scheduler, queue and worker; product code declares handlers on `@Injectable`
+classes. Redis / Arq / Dramatiq wiring is deferred -- the in-memory backend
+is a drop-in default for tests and single-node deployments. Product code
+swaps it via `JobsModule.for_root(config, backend=MyBackend())`.
+
+## Setup
+
+```python
+from austial import Module
+from austial.jobs import JobsConfig, JobsModule
+
+
+@Module(imports=[JobsModule.for_root(JobsConfig())])
+class AppModule:
+    pass
+```
+
+`JobsModule` is registered `@Global()` by default, so `JobQueue`,
+`JobRegistry` and `Worker` are injectable everywhere. `JobsConfig` has
+sensible defaults (`concurrency=4`, `default_max_attempts=3`,
+`default_backoff_seconds=30`, `poll_interval_seconds=1.0`) -- override per
+environment.
+
+## Declaring handlers
+
+```python
+from austial import Injectable
+from austial.jobs import Cron, Job
+
+
+@Injectable()
+class Payments:
+    @Job("send-remittance", max_attempts=5, backoff_seconds=60)
+    async def send(self, *, remittance_id: str) -> None:
+        # Do the work. Raise on failure -- the worker retries.
+        ...
+
+    @Cron("@daily")
+    async def daily_reconciliation(self) -> None:
+        ...
+
+    @Cron("*/5 * * * *", name="poll-partner-feed", jitter_seconds=15)
+    async def poll(self) -> None:
+        ...
+```
+
+A single method may carry both decorators (a cron that can also be triggered
+manually). The registry looks each handler up by name at dispatch time --
+rename a method freely, don't rename its `@Job("...")` name once it's
+enqueuable in prod.
+
+### Schedule strings
+
+`@Cron` accepts:
+
+- Standard 5-field cron: `"*/5 * * * *"`, `"0 9 * * 1-5"`, ...
+- Shorthand: `"@hourly"`, `"@daily"`, `"@weekly"`, `"@monthly"`, `"@yearly"`.
+- Fixed offset: `"@every 30s"`, `"@every 5m"`, `"@every 2h"`.
+
+The parser is hand-rolled -- no third-party dependency. It supports `*`,
+`N`, `A-B`, `*/N` and comma-separated combos per field, which covers the
+common cases in a fintech backend. A product that needs the exotic corners
+of cron (`L`, `W`, `#`) can swap in croniter and rebuild `Schedule` in its
+own module.
+
+### Discovery
+
+Handlers register with the `JobRegistry`. Two paths:
+
+```python
+# Explicit -- clearest at boot time.
+registry.register_job(spec, payments.send)
+
+# Implicit -- walks an instance's methods and picks up @Job/@Cron metadata.
+registry.discover(payments)
+```
+
+Product bootstrap code calls `discover(instance)` on each injectable that
+carries job handlers, right after the DI container instantiates it.
+
+## Enqueueing
+
+Inject `JobQueue` and call `enqueue(...)`:
+
+```python
+from datetime import datetime, timedelta
+
+from austial import Injectable
+from austial.jobs import JobQueue
+
+
+@Injectable()
+class RemittanceService:
+    def __init__(self, queue: JobQueue):
+        self._queue = queue
+
+    async def submit(self, remittance_id: str) -> str:
+        return await self._queue.enqueue(
+            "send-remittance",
+            payload={"remittance_id": remittance_id},
+            idempotency_key=f"remittance:{remittance_id}",
+        )
+
+    async def submit_later(self, remittance_id: str) -> str:
+        return await self._queue.enqueue(
+            "send-remittance",
+            payload={"remittance_id": remittance_id},
+            run_at=datetime.utcnow() + timedelta(minutes=5),
+        )
+```
+
+`enqueue` returns the job id. `run_at` schedules the first attempt in the
+future. `idempotency_key` deduplicates against a jobs-scoped store: a second
+call with the same key returns the id of the first without enqueuing a
+duplicate. The store is independent from `austial.security`'s idempotency
+store -- that one caches HTTP responses for retry replay; this one prevents
+double-enqueue of the same background job.
+
+`cancel(job_id)` transitions a `pending` job to `cancelled`; it returns
+`False` if the job has already started running or finished. `status(job_id)`
+returns the current `JobStatus` (`pending`, `running`, `succeeded`,
+`failed`, `cancelled`) or `None` if the id is unknown.
+
+## Running the worker
+
+The `Worker` is an injectable, but in most deployments you run it as a
+separate process using the bundled CLI:
+
+```bash
+austial-worker run src.app_module:AppModule
+```
+
+The CLI resolves the module, wires the in-memory backend, discovers every
+`@Job`/`@Cron` handler on the module's providers, and enters the poll-and-
+execute loop until it receives `SIGINT` / `SIGTERM`.
+
+The CLI also has one-off commands for shell ops:
+
+```bash
+austial-worker enqueue send-remittance --payload '{"remittance_id":"r_123"}'
+austial-worker status <job_id>
+```
+
+Embedding the worker in the same process (dev, tests) is one line:
+
+```python
+import asyncio
+from austial.jobs import Worker
+
+worker: Worker = ...  # from the DI container
+
+asyncio.create_task(worker.run())
+```
+
+## Idempotency
+
+Two independent forms of idempotency:
+
+1. **Enqueue-side.** `idempotency_key` on `enqueue(...)` deduplicates
+   dispatch: two callers who both want to send remittance `r_123` will
+   agree on one job id. Suitable for user-triggered actions (submit
+   button, webhook receiver, retry after a network glitch).
+
+2. **Handler-side.** The `idempotent=True` flag on `@Job` is a hint that
+   the handler is safe to retry -- important when the worker retries a
+   partial failure. Product code guarantees this with unique keys on the
+   underlying tables (e.g. an `INSERT ... ON CONFLICT DO NOTHING` on a
+   business-key column, or a "already sent?" check at the top of the
+   handler).
+
+The framework won't stop a non-idempotent handler from being retried on
+failure. `idempotent=False` is a documentation aid; a genuinely non-
+retryable handler should also set `max_attempts=1`.
+
+## Error handling and retries
+
+An exception in a `@Job` handler is caught by the worker. If the attempt
+count is still below `max_attempts`, the job is scheduled for another try
+at `now + backoff * 2^(attempts-1)` seconds (exponential backoff). Once
+retries are exhausted, the record is marked `failed` and its `error` field
+carries the `repr()` of the last exception.
+
+```python
+@Job("charge-card", max_attempts=5, backoff_seconds=15)
+async def charge(self, *, order_id: str) -> None:
+    # first retry after 15s, then 30s, 60s, 120s (exp base=15)
+    ...
+```
+
+The base backoff can be set globally on `JobsConfig.default_backoff_seconds`
+and per-handler on `@Job(backoff_seconds=...)`. Both are honoured; the
+per-handler value wins.
+
+## Custom backends
+
+`JobBackend` is a `Protocol` with five async methods (`enqueue`, `pop_due`,
+`mark`, `cancel`, `get`). A Redis-backed implementation would use `LPUSH`
++ `BRPOPLPUSH` on a sorted set keyed by `next_attempt_at`; a Postgres one
+would use `SELECT ... FOR UPDATE SKIP LOCKED` inside a transaction. Swap
+it in at module import:
+
+```python
+from austial.jobs import JobsModule
+from my_app.jobs import PostgresJobBackend
+
+
+JobsModule.for_root(
+    JobsConfig(concurrency=32),
+    backend=PostgresJobBackend(engine),
+)
+```
+
+The rest of the module (queue, worker, registry, decorators) is unchanged.

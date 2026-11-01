@@ -1,0 +1,285 @@
+---
+title: Security
+---
+
+# Security
+
+`austial.security` bundles the baseline defences every fintech backend needs
+before it ships: hardened response headers, per-route rate limiting,
+idempotency-key replay, double-submit-cookie CSRF, structured PII redaction
+for logs, and app-level column encryption. Each primitive is a small,
+injectable class the DI container wires for you; the module is registered
+`@Global()` so any feature module can pull the piece it needs.
+
+The primitives map cleanly onto OWASP ASVS V5 (validation), V6 (secrets and
+cryptography), V8 (data protection), V9 (transport) and OWASP API Top-10
+API4 (unrestricted resource consumption), API6 (unrestricted access to
+business flows) and API8 (security misconfiguration).
+
+## Setup
+
+```python
+from austial import Module
+from austial.security import SecurityConfig, SecurityModule
+
+
+@Module(
+    imports=[
+        SecurityModule.for_root(
+            SecurityConfig(
+                csp="default-src 'self'; frame-ancestors 'none'",
+                encryption_keys={"2026-09": _load_kek("2026-09")},
+                active_encryption_key="2026-09",
+            ),
+        ),
+    ],
+)
+class AppModule:
+    pass
+```
+
+`SecurityConfig` accepts:
+
+- `csp` — Content-Security-Policy header value. Default denies everything but
+  same-origin and blocks framing.
+- `hsts_max_age` — `Strict-Transport-Security` `max-age` (default 1 year).
+- `permissions_policy` — Permissions-Policy value; default disables
+  geolocation, microphone and camera.
+- `encryption_keys` — `{version: 32-byte KEK}` for the `EnvelopeEncryptor`.
+- `active_encryption_key` — the version to encrypt new writes with; older
+  versions stay readable.
+- `default_rate_limit` — `(limit, period_seconds)` used when a route has no
+  `@RateLimit` override. Default `(60, 60)`.
+- `trusted_proxy_hops` — how many reverse proxies you operate in front of the app. Default `0`:
+  `X-Forwarded-For` is ignored and the socket peer is the client. See
+  [Rate limiting](#rate-limiting).
+- `idempotency_ttl_seconds` — how long an `Idempotency-Key` record is kept.
+
+## Secure response headers
+
+Mount `SecureHeadersMiddleware` module-wide to stamp defensive headers on
+every response:
+
+```python
+from austial import MiddlewareConsumer
+from austial.security import SecureHeadersMiddleware
+
+
+class AppModule:
+    def configure(self, consumer: MiddlewareConsumer) -> None:
+        consumer.apply(SecureHeadersMiddleware).for_routes("*")
+```
+
+Headers set (each `setdefault`, so a handler can still override for a specific
+response):
+
+- `Content-Security-Policy`
+- `Strict-Transport-Security: max-age=…; includeSubDomains`
+- `X-Content-Type-Options: nosniff`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `X-Frame-Options: DENY`
+- `Permissions-Policy`
+
+## Rate limiting
+
+`RateLimitGuard` is a fixed-window limiter keyed on `(client_ip, method, path)`.
+The budget is `SecurityConfig.default_rate_limit` unless a route or its
+controller carries `@RateLimit(limit, period_seconds)`:
+
+```python
+from austial import Controller, Post, UseGuards
+from austial.security import RateLimit, RateLimitGuard
+
+
+@Controller("/auth")
+@UseGuards(RateLimitGuard)
+class AuthController:
+    @Post("/login")
+    @RateLimit(5, 60)  # 5 attempts per minute
+    async def login(self, body: LoginRequest) -> LoginResponse:
+        ...
+```
+
+The client IP is the socket peer. `X-Forwarded-For` is client-controlled, so it is ignored unless you
+set `SecurityConfig.trusted_proxy_hops = n`; the client is then the `n`-th entry counted from the
+**right** (each trusted proxy appends the address it saw, so entries to the left of those can be
+forged). If the header has fewer than `n` entries it did not come through your proxy and is ignored.
+Trusting the left-most entry would let an attacker mint a fresh bucket per request.
+
+The backing store is a `RateLimitStore` protocol; the default
+`InMemoryRateLimitStore` is process-local. For multi-worker deployments
+supply a Redis-backed store via `SecurityModule.for_root(config,
+rate_limit_store=RedisStore())`.
+
+On a breach the guard raises `RateLimitExceededError` (HTTP 429) with a
+`retry_after` attribute your exception filter can turn into a `Retry-After`
+response header.
+
+To key on something other than IP + route (session id, api key, tenant id)
+subclass `RateLimitGuard` and override `build_key(request)`.
+
+## Idempotency
+
+`IdempotencyKeyGuard` enforces the semantics every payments API needs: a
+retried `POST`/`PUT`/`PATCH`/`DELETE` with the same `Idempotency-Key` header
+replays the earlier response instead of executing the mutation twice.
+
+```python
+from austial import Controller, Post, UseGuards
+from austial.security import IdempotencyKeyGuard, IdempotencyRecord, IdempotencyStore
+
+
+@Controller("/payments")
+@UseGuards(IdempotencyKeyGuard)
+class PaymentsController:
+    def __init__(self, store: IdempotencyStore):
+        self._store = store
+
+    @Post("/")
+    async def create(self, request, body: CreatePayment) -> Payment:
+        # If the guard flagged a replay, echo the cached body.
+        cached = getattr(request.state, "idempotent_replay", None)
+        if cached is not None:
+            return cached.body
+
+        payment = await self._service.create(body)
+        self._store.put(
+            IdempotencyRecord(
+                key=request.state.idempotency_key,
+                request_hash=request.state.idempotency_request_hash,
+                status_code=201,
+                body=payment,
+                stored_at=time.time(),
+            )
+        )
+        return payment
+```
+
+Behaviour:
+
+- Missing `Idempotency-Key` — pass through (product code may still require it
+  via a validation pipe).
+- New key — populate `request.state.idempotency_key` and
+  `request.state.idempotency_request_hash` so the handler can persist the
+  outcome.
+- Same key + same body hash within TTL — flag `request.state.idempotent_replay`
+  so the handler returns the cached response.
+- Same key + different body — raise `IdempotencyConflictError` (HTTP 409).
+
+The default `InMemoryIdempotencyStore` keeps records for
+`SecurityConfig.idempotency_ttl_seconds` (24 hours by default); swap it for a
+persistent store in production.
+
+## CSRF (double-submit cookie)
+
+For cookie-authenticated flows attach `CsrfInterceptor` to any controller
+that mutates state. The interceptor compares the `X-CSRF-Token` header
+against the `csrf_token` cookie in constant time.
+
+```python
+from austial import Controller, Post, UseInterceptors
+from austial.security import CsrfInterceptor
+
+
+@Controller("/settings")
+@UseInterceptors(CsrfInterceptor)
+class SettingsController:
+    @Post("/notifications")
+    async def update(self, body: NotificationsUpdate) -> None:
+        ...
+```
+
+Read-only methods (`GET`, `HEAD`, `OPTIONS`) skip the check. A request that
+carries `Authorization: Bearer …` also skips the check — a bearer token that
+an attacker cannot possess is a stronger primitive than a CSRF cookie. A
+missing or mismatched token raises `ForbiddenException` (HTTP 403).
+
+Rotate the cookie value at login and again on every privilege change; the
+interceptor is only the read-side check.
+
+## PII redaction
+
+`PIIRedactor` masks common PII patterns before you hand a record to a logger
+or an audit sink. It recognises emails, international phone numbers, Indian
+PAN, Aadhaar and passport numbers, IBANs (mod-97 verified) and card numbers
+(Luhn verified).
+
+```python
+from austial import Injectable
+from austial.security import PIIRedactor
+
+
+@Injectable()
+class AuditLogger:
+    def __init__(self, redactor: PIIRedactor, sink: LogSink):
+        self._redactor = redactor
+        self._sink = sink
+
+    def record(self, event: dict) -> None:
+        self._sink.emit(self._redactor.redact(event))
+```
+
+`redact` accepts a string, dict or list and recurses; non-matching text
+passes through unchanged. Values that fail their check (Luhn, mod-97) are
+also passed through, so log spam like `1234 5678 9012 3456` is not falsely
+redacted.
+
+## Envelope encryption
+
+`EnvelopeEncryptor` gives you app-level column encryption with AES-256-GCM
+and an embedded key version, so a rotation swaps `active_encryption_key`
+without a bulk re-encrypt — old rows keep decrypting under their historical
+version.
+
+```python
+from austial import Injectable
+from austial.security import EnvelopeEncryptor
+
+
+@Injectable()
+class VaultService:
+    def __init__(self, enc: EnvelopeEncryptor):
+        self._enc = enc
+
+    def store(self, account_number: str) -> str:
+        return self._enc.encrypt(account_number)
+
+    def read(self, ciphertext: str) -> str:
+        return self._enc.decrypt(ciphertext)
+```
+
+The wire format is base64 of `b"v1:<version>:" || nonce (12 B) ||
+ciphertext || tag (16 B)`. Any of the following raises
+`EncryptionKeyError`:
+
+- A key that is not exactly 32 bytes.
+- An `active_encryption_key` that is missing from `encryption_keys`.
+- A ciphertext whose embedded version is not in the current key map.
+- A ciphertext whose GCM tag does not authenticate (tampered).
+
+Rotation flow:
+
+1. Add the new version to `encryption_keys`.
+2. Set `active_encryption_key` to the new version.
+3. Deploy. New writes use the new key; existing rows keep decrypting under
+   their historical version.
+4. Optionally re-encrypt lazily on read-then-write, or run a background job
+   to migrate rows in bulk.
+
+Never remove a historical key that any row still references.
+
+## OWASP mapping
+
+| Primitive | ASVS | API Top-10 |
+| --- | --- | --- |
+| `SecureHeadersMiddleware` | V9 (transport), V14 (config) | API8 (security misconfiguration) |
+| `RateLimitGuard` | V11 (rate limits) | API4 (unrestricted resource consumption) |
+| `IdempotencyKeyGuard` | V11 (business logic) | API6 (unrestricted access to business flows) |
+| `CsrfInterceptor` | V13 (API/web) | API8 |
+| `PIIRedactor` | V8 (data protection) | — |
+| `EnvelopeEncryptor` | V6 (cryptography), V8 (data protection) | — |
+
+The framework never claims a checkbox on its own — you still need a WAF, TLS
+termination, secret rotation, and a monitoring pipeline — but these
+primitives keep the classes of bug they cover from surfacing in application
+code.

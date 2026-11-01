@@ -1,0 +1,262 @@
+---
+title: Audit log
+---
+
+# Audit log
+
+`austial.audit` ships a WORM (write-once, read-many) audit log: an
+append-only `AuditLogEntry` persisted through `austial.orm`, an injectable
+`AuditLogService`, and an `@Audited(...)` interceptor that records a
+success/failure event around a controller handler.
+
+The framework guarantees three things:
+
+1. Recorded events are immutable in memory (`AuditEvent` is a frozen
+   dataclass) and append-only in the database (`AuditLogEntry` is
+   `@Entity(append_only=True)`, so the entity manager rejects any
+   `update()`/`delete()`).
+2. Retention-driven eviction (`evict_older_than`) honours per-record
+   `legal_hold` flags — a record under legal hold is never removed, even
+   when it is past its retention cutoff.
+3. Default retention is 1,825 days (5 years), which matches the minimum
+   record-retention rule in the IFSCA AML/CFT Guidelines (rule 10.1).
+   Product code overrides it upward for stricter jurisdictions; the
+   framework never silently trims below the default.
+
+Product code supplies the storage and the SIEM forwarding — the framework
+does not decide whether events go to Postgres, S3 Object Lock, Splunk HEC,
+or all three at once.
+
+## Setup
+
+```python
+from austial import Module
+from austial.audit import AuditConfig, AuditModule
+
+
+@Module(
+    imports=[
+        AuditModule.for_root(
+            AuditConfig(retention_days=1825),  # IFSCA AML rule 10.1
+        ),
+    ],
+)
+class AppModule:
+    pass
+```
+
+`AuditModule` is registered `@Global()` by default so `AuditLogService`
+and `AuditedInterceptor` are injectable everywhere without a re-import.
+
+`AuditModule.for_root(...)` accepts a `store=` override — pass an
+`OrmAuditStore(repo)` in production, or a SIEM-backed store you write. The
+default is `InMemoryAuditStore`, which is fine for tests and unsafe for
+production because it does not survive a process restart.
+
+## Recording an event
+
+```python
+from austial import Injectable
+from austial.audit import AuditEvent, AuditLogService
+
+
+@Injectable()
+class KycService:
+    def __init__(self, audit: AuditLogService):
+        self._audit = audit
+
+    async def deny(self, case_id: str, reason: str, actor: str) -> None:
+        # ... do the work ...
+        await self._audit.record(
+            AuditEvent(
+                action="kyc.deny",
+                resource_type="Case",
+                resource_id=case_id,
+                actor=actor,
+                outcome="success",
+                metadata={"reason": reason},
+            )
+        )
+```
+
+`AuditEvent` is a frozen dataclass — `id` is a server-generated UUIDv4
+and `timestamp` defaults to `datetime.now(UTC)`. Once you have handed the
+event to `record`, no code path can mutate it.
+
+The `AuditLogEntry.timestamp` column is `TIMESTAMP WITH TIME ZONE`, matching the timezone-aware
+`AuditEvent.timestamp`; generate your migration from the entity so the column is created that way.
+
+Do not put PII, tokens, or secrets in `metadata`. The audit log is
+long-lived by design; anything that lands in it lives for the full
+retention window and often ends up in an external SIEM.
+
+## `@Audited` on a controller handler
+
+Most audit coverage does not need to run inside services — it belongs on
+the request boundary, where the actor, tenant, and request id are already
+known. Use the interceptor for that.
+
+```python
+from austial import Controller, Post, UseInterceptors
+from austial.audit import Audited, AuditedInterceptor
+
+
+@Controller("/funds")
+@UseInterceptors(AuditedInterceptor)
+class FundsController:
+    @Post()
+    @Audited(
+        "funds.create",
+        resource_type="Fund",
+        resource_id_from="result.id",
+    )
+    def create(self, dto):
+        # ... returns {"id": "F42", "name": ...}
+        ...
+
+    @Delete(":id")
+    @Audited(
+        "funds.delete",
+        resource_type="Fund",
+        resource_id_from="path:id",
+    )
+    def delete(self, id: str):
+        ...
+```
+
+`resource_id_from` resolves the resource identifier:
+
+- `"path:<name>"` reads `request.path_params[<name>]`.
+- `"result.<key>"` (dotted for nested lookups) reaches into the response
+  after the handler has returned successfully.
+- `None` (the default) falls back to
+  `request.state.audit_resource_id` if product code has set it.
+
+The interceptor reads `request.state.user`, `request.state.tenant` (when
+`austial.tenancy` is wired), and `request.state.request_id` (typically
+set by `LoggingMiddleware`), so the actor/tenant/correlation-id chain is
+consistent with the rest of the request pipeline.
+
+On success it records `outcome="success"` after the handler returns; on
+exception it records `outcome="failure"`, puts the exception class name
+and message in `metadata`, then re-raises so the framework's exception
+filter runs unchanged.
+
+Pass `capture_result=True` when the response is small and auditable
+(e.g. a KYC decision object). Do not enable it on responses containing
+customer PII, tokens, or full payment payloads.
+
+The captured value is run through the same `jsonable_encoder` FastAPI uses for response bodies
+before it is stored, so a handler returning a pydantic response DTO (the normal case) or a value
+containing a `datetime` is encoded to plain JSON-safe primitives -- not stored as the raw object,
+which would fail with a driver-level serialization error against `OrmAuditStore`'s `metadata_json`
+(a real `JSON` column) once persisted, even though it round-trips silently through the in-memory
+store's plain Python dict.
+
+## Persisting the log
+
+The default store keeps events in memory. In production, wire the
+ORM-backed store against the `AuditLogEntry` entity:
+
+```python
+from austial.audit import AuditLogEntry, AuditModule, OrmAuditStore
+from austial.orm import InjectRepository, OrmModule, Repository
+
+
+@Module(
+    imports=[
+        OrmModule.for_root(...),
+        OrmModule.for_feature([AuditLogEntry]),
+    ],
+)
+class PersistenceModule:
+    pass
+
+
+@Injectable()
+class _AuditStoreFactory:
+    def __init__(self, repo: Repository[AuditLogEntry] = InjectRepository(AuditLogEntry)):
+        self.store = OrmAuditStore(repo)
+```
+
+`OrmAuditStore.record()` writes with `Repository.insert()` (the event's UUID is the primary key, so
+`save()` would be an UPDATE and the append-only guard would reject it).
+
+`AuditLogEntry` is declared `@Entity("audit_log", append_only=True)` —
+`EntityManager` raises `AppendOnlyViolationError` on any `update()`,
+`delete()`, or `remove()` against it. In production, revoke `UPDATE` and
+`DELETE` on the underlying table at the database role level too; the
+framework guard is a defence in depth, not a substitute for
+least-privilege.
+
+## Querying
+
+`AuditLogService.query(...)` and the underlying `AuditStore.query(...)` accept
+`subject`/`actor` (aliases for the same filter), `action`, `tenant_id`, `since`,
+`until`, and `limit`. Multi-tenant products exposing a query endpoint (e.g. a
+platform-operator console) must always pass `tenant_id` when the caller is
+scoped to one tenant — omitting it returns events across every tenant, since
+`tenant_id=None` means "no filter", not "current tenant":
+
+```python
+# a tenant's own compliance officer: only their tenant's events
+await audit.query(tenant_id=current_tenant_id)
+
+# a cross-tenant operator role: an explicit, caller-chosen tenant
+await audit.query(tenant_id=requested_tenant_id)
+```
+
+## Retention and legal hold
+
+`AuditLogService.evict_older_than(cutoff)` removes events older than
+`cutoff` from the store. `evict_expired()` is a convenience wrapper that
+uses `AuditConfig.retention_days`:
+
+```python
+# nightly job, wired via austial.scheduling or a cron in your infra
+async def prune(audit: AuditLogService) -> None:
+    evicted = await audit.evict_expired()
+    ...
+```
+
+Both methods honour `legal_hold`. In the in-memory store,
+`set_legal_hold(event_id, hold=True)` flags a specific event; in the ORM
+store, the `AuditLogEntry.legal_hold` column carries the flag and admin
+processes toggle it out of band (`AuditLogEntry` itself is append-only,
+so the flip lives outside the ORM path — typically a `pg_amend` role or a
+manual SQL migration).
+
+The `OrmAuditStore.evict_older_than` implementation returns `0` — an
+append-only ORM entity cannot be deleted through the ORM. Production
+deployments that need retention-driven eviction handle it at the database
+layer, usually per-partition `DROP TABLE` from a job that first checks
+for active legal holds.
+
+## Errors
+
+- `AuditError` — base class (500 by default).
+- `AuditStoreUnavailableError` — the store is unreachable (503).
+- `LegalHoldViolationError` — strict-mode eviction refused to remove a
+  held record (409). Not raised by the default flow, which silently
+  preserves held rows.
+
+All extend `HttpException`, so `AllExceptionsFilter` maps them without a
+translation layer.
+
+## Compliance posture
+
+- **OWASP ASVS V7 (Logging and Error Handling)** — V7.1 (log security
+  events), V7.2 (structured, tamper-resistant), V7.3 (no secrets in
+  logs). The framework satisfies the append-only + structured-event
+  guarantees; keeping secrets out is on the caller — do not put tokens,
+  PANs, or full customer records in `metadata`.
+- **ISO/IEC 27001 Annex A.5.24 (Information security incident planning
+  and preparation)** — audit trails are the evidentiary basis for
+  incident triage; the WORM guarantee here is what makes them
+  admissible.
+- **ISO/IEC 27001 Annex A.8.15 (Logging)** — retained for the required
+  period (default 5 years), protected against tampering (append-only
+  entity, DB role separation), and reviewable via
+  `AuditLogService.query(...)`.
+- **IFSCA AML/CFT Guidelines rule 10.1** — records retained for a
+  minimum of five years, matched by the default retention window.

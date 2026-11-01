@@ -1,0 +1,164 @@
+---
+title: Multi-tenancy
+---
+
+# Multi-tenancy
+
+`austial.tenancy` scopes every request to a tenant. It provides a
+request-scoped `TenantContext`, a `TenantGuard` that populates it from the
+JWT's `tenant` claim, a `Tenanted` entity mixin that adds a `tenant_id`
+column, and a `@RequireTenant` decorator that marks routes as tenant-only.
+
+The tenant boundary is enforced at the perimeter (the guard); the persistence
+boundary stays explicit — product code writes `.where(tenant_id=current)`
+in queries. That keeps the filter visible in every query plan review rather
+than magically injected.
+
+## Setup
+
+```python
+from austial import Module
+from austial.tenancy import TenancyModule
+
+
+@Module(imports=[TenancyModule.for_root()])
+class AppModule:
+    pass
+```
+
+`TenancyModule` is registered `@Global()` by default so `TenantContext` and
+`TenantGuard` are injectable everywhere.
+
+## Reading the current tenant
+
+```python
+from austial import Injectable
+from austial.tenancy import TenantContext
+
+
+@Injectable()
+class InvoicesService:
+    def __init__(self, ctx: TenantContext):
+        self._ctx = ctx
+
+    def list_mine(self):
+        tenant_id = self._ctx.current_id()      # raises if unset
+        # ... query with .where(tenant_id=tenant_id)
+```
+
+`TenantContext.get()` returns `TenantContextValue | None`;
+`TenantContext.require()` raises `MissingTenantError` (403) when unset. Use
+`require` in code paths where the tenant must be present.
+
+The class methods are useful outside a DI context (mixins, pure functions,
+background jobs holding a snapshot):
+
+```python
+from austial.tenancy import TenantContext, TenantContextValue
+
+token = TenantContext.set(TenantContextValue(tenant_id="acme"))
+try:
+    ...  # code runs with tenant="acme"
+finally:
+    TenantContext.reset(token)
+```
+
+Contextvars are used under the hood, so the value is isolated across `await`
+points and threadpool executors.
+
+## Guarding routes
+
+```python
+from austial import Controller, Get, UseGuards
+from austial.auth import AuthGuard
+from austial.tenancy import RequireTenant, TenantGuard
+
+
+@Controller("/invoices")
+@UseGuards(AuthGuard, TenantGuard)
+@RequireTenant()
+class InvoicesController:
+    @Get()
+    def list(self, ctx: TenantContext):
+        return {"tenant": ctx.current_id()}
+```
+
+`TenantGuard` runs after `AuthGuard`. It reads the `tenant` claim from the
+authenticated principal, populates `TenantContext`, and stores a reset token
+on `request.state` for teardown.
+
+- On success the tenant id is also published on `request.state.tenant`, which
+  [`@Audited`](/techniques/audit-log) reads, so audit rows carry the tenant.
+- Handlers or controllers with `@RequireTenant()` and no claim: 403
+  (`MissingTenantError`).
+- Path parameter `tenant_id` disagrees with the claim: 403
+  (`TenantMismatchError`).
+
+Handlers without `@RequireTenant` and without a claim pass through — this
+lets `@Public` routes coexist in the same controller when needed.
+
+### Deny-by-default
+
+For a product where every non-public route is tenant-scoped, subclass the guard and set
+`require_by_default = True`, so a forgotten `@RequireTenant()` cannot ship a route that runs without
+a tenant. Let your public routes through *before* delegating (the tenancy package knows nothing about
+`@Public`):
+
+```python
+from austial.auth.decorators import is_public
+
+class AppTenantGuard(TenantGuard):
+    require_by_default = True
+
+    async def can_activate(self, context):
+        if is_public(context.get_handler()) or is_public(context.get_class()):
+            return True
+        return await super().can_activate(context)
+```
+
+## Tenanted entities
+
+```python
+from austial.orm import Entity, PrimaryGeneratedColumn, Column
+from austial.tenancy import Tenanted
+
+
+@Entity("invoices")
+class Invoice(Tenanted):
+    id: int = PrimaryGeneratedColumn()
+    number: str = Column(nullable=False)
+    total_cents: int = Column(nullable=False)
+```
+
+The mixin adds `tenant_id: str` (indexed, non-nullable). Set it explicitly
+at insert from `TenantContext.require().tenant_id` so a row without a tenant
+is a hard write error rather than a silent misfile.
+
+**mypy caveat:** `dataclass_transform` (what makes `@Entity()` type-check a
+synthesized `__init__`) only recognises fields declared on a class that is
+itself part of the transform chain. `Tenanted` is a plain mixin, not
+`@Entity()`-decorated, so mypy does not see `tenant_id` as a constructor
+parameter of the entity that inherits it — passing `tenant_id=...` type-checks
+as an "unexpected keyword argument" even though it works correctly at
+runtime. If strict mypy on entity construction matters more than reusing the
+mixin, declare the column directly on the entity instead (a one-line
+`Column(index=True, default=None)`, same shape `Tenanted` uses internally).
+
+## Errors
+
+- `MissingTenantError` — the tenant context is absent when required. Maps to 403.
+- `TenantMismatchError` — a path/body tenant disagrees with the claim. Maps to 403.
+
+Both extend `ForbiddenException` so the framework's exception dispatch renders
+them without extra work; product filters can inspect the sub-type if they want
+a domain-specific response body.
+
+## Security posture (OWASP API Security Top 10)
+
+- **API1 broken object-level authorisation**: every tenant-scoped query
+  filters by `tenant_id` (product code); the guard guarantees the value.
+- **API5 broken function-level authorisation**: `@RequireTenant` marks routes
+  that must have a tenant; the guard fails-closed on absence.
+- Guard runs after `AuthGuard`, so a missing/invalid JWT rejects the request
+  before this guard runs — the tenant claim is trusted only when its
+  container has been verified.

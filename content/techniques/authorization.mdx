@@ -1,0 +1,145 @@
+---
+title: Authorization
+---
+
+# Authorization
+
+`austial.authz` provides role- and permission-based access control on top of
+`austial.auth`. The framework enforces "does this principal have the claim?";
+product code decides "what roles does this user have?" by populating the
+JWT's `roles` and `permissions` claims at login time.
+
+## Setup
+
+```python
+from austial import Module
+from austial.authz import AuthzModule
+
+
+@Module(imports=[AuthzModule.for_root()])
+class AppModule:
+    pass
+```
+
+Registered `@Global()` by default -- `RolesGuard` and `PermissionService`
+are injectable everywhere.
+
+## Guarding routes
+
+```python
+from austial import Controller, Delete, Get, UseGuards
+from austial.auth import AuthGuard
+from austial.authz import AuthorizeObject, Permissions, Roles, RolesGuard
+
+
+def _owns_invoice(principal, request) -> bool:
+    return request.path_params.get("owner_id") == principal.subject
+
+
+@Controller("/invoices")
+@UseGuards(AuthGuard, RolesGuard)
+class InvoicesController:
+    @Roles("ops", "admin")
+    @Get()
+    def list(self):
+        return {"invoices": []}
+
+    @Permissions("write:invoice")
+    @Get("/:id")
+    def get(self):
+        return {"id": ...}
+
+    @Roles("admin")
+    @AuthorizeObject(_owns_invoice)
+    @Delete("/:id")
+    def delete(self):
+        return {"deleted": True}
+```
+
+Semantics (all checks pass = 200; any check fails = 403):
+
+- `@Roles(*names)` — caller must hold **any** of the listed roles.
+- `@Permissions(*names)` — caller must hold **all** of the listed permissions.
+- `@AuthorizeObject(rule)` — `rule(principal, request) -> bool` runs last;
+  returning `False` (or raising) rejects the request. Use for object-level
+  checks (ownership, tenant match, status).
+
+Class-level and handler-level metadata are unioned — a class-level `@Roles`
+is added to whatever the handler declares.
+
+### Deny-by-default
+
+A handler that declares none of `@Roles`, `@Permissions` or `@AuthorizeObject` is **allowed** by
+the stock guard, so a forgotten decorator is silently open to every authenticated caller. To make a
+policy mandatory, subclass and set `deny_undeclared = True`; an undeclared handler is then a 403.
+Let `@Public` routes through before delegating:
+
+```python
+from austial.auth.decorators import is_public
+
+class StrictRolesGuard(RolesGuard):
+    deny_undeclared = True
+
+    async def can_activate(self, context):
+        if is_public(context.get_handler()) or is_public(context.get_class()):
+            return True
+        return await super().can_activate(context)
+```
+
+## Programmatic checks
+
+```python
+from austial.authz import PermissionService
+
+
+class ReportsService:
+    def export(self, principal) -> bytes:
+        if not PermissionService.has_all_permissions(principal, ("read:report",)):
+            raise PermissionError("nope")
+        ...
+```
+
+Useful in services, background jobs and event handlers where decorators
+don't apply.
+
+## Errors
+
+- `InsufficientRolesError` — required roles absent (403).
+- `InsufficientPermissionsError` — required permissions absent (403).
+- `ForbiddenException` — object rule denied, or metadata present without a
+  principal.
+
+Every error carries the requested vs actual claims so log observability
+(never response bodies) can pinpoint the mismatch.
+
+## Populating claims at login
+
+Product code decides what roles/permissions a user has and includes them in
+the JWT at issue time:
+
+```python
+tokens = await auth.issue_tokens(
+    user.id,
+    claims={
+        "tenant": user.tenant_id,
+        "roles": user.role_names,
+        "permissions": user.permission_names,
+    },
+)
+```
+
+Keep the list bounded (dozens, not thousands) — a bloated JWT hurts every
+request. If permissions are large or fine-grained, put an opaque
+`session_id` in the claims and look permissions up server-side per request.
+
+## Security posture (OWASP API Security Top 10)
+
+- **API1 broken object-level authorisation**: `@AuthorizeObject(rule)` is
+  the first-class primitive for the ownership/tenant check that global
+  role checks cannot express.
+- **API3 broken object-property-level authorisation**: keep response DTOs
+  narrow (see `austial.common.pipes`); RolesGuard cannot substitute for
+  field-level filtering.
+- **API5 broken function-level authorisation**: every mutating handler must
+  carry either `@Roles`/`@Permissions` or `@Public`. A code review that
+  spots a handler without either is a bug report.

@@ -1,0 +1,222 @@
+---
+title: File storage
+---
+
+# File storage
+
+`austial.storage` gives every request a uniform way to read and write blobs
+— user uploads, generated PDFs, exports, KYC documents. It ships a driver
+contract, two backends (local filesystem for dev, S3 for prod), a service
+that layers path-safety, size limits, content-type inference and pluggable
+virus scanning on top of the driver, and a `SignedUrlService` that mints
+short-lived HMAC-signed download URLs.
+
+The framework does not define the HTTP surface. Product code writes a
+`StorageController` that accepts uploads and streams signed downloads —
+`StorageService` and `SignedUrlService` are injected into it.
+
+## Setup
+
+```python
+from pathlib import Path
+
+from austial import Module
+from austial.storage import StorageConfig, StorageModule
+
+
+@Module(
+    imports=[
+        StorageModule.for_root(
+            StorageConfig(
+                signed_url_secret="a-real-secret-at-least-32-characters",
+                driver="local",
+                local_base_dir=Path("./var/storage"),
+            ),
+        ),
+    ],
+)
+class AppModule:
+    pass
+```
+
+`StorageConfig` accepts:
+
+- `signed_url_secret` — HMAC-SHA256 signing key (at least 32 characters;
+  `StorageConfig` fails at construction otherwise, per OWASP ASVS V6).
+- `driver` — `"local"` (default) or `"s3"`.
+- `local_base_dir` — required when `driver="local"`; a directory the process
+  can read and write.
+- `s3_bucket`, `s3_region`, `s3_endpoint_url` — required when `driver="s3"`.
+- `max_object_size_bytes` — refuses payloads above this size at the
+  `StorageService.put` boundary (default 100 MiB).
+- `allowed_content_types` — optional allow-list; empty tuple means "any".
+
+`StorageModule` is registered `@Global()` by default so `StorageService` and
+`SignedUrlService` are injectable everywhere.
+
+## Local vs S3
+
+The default `LocalDriver` writes under `local_base_dir/<key>` and keeps
+per-object metadata in an adjacent `.<name>.meta.json`. It resolves every
+key against the base directory and refuses paths that escape it, on top of
+the key-safety check performed by `StorageService`.
+
+The `S3Driver` imports `boto3` lazily. If `boto3` isn't installed the
+constructor raises with a message pointing at the install command; the
+class itself still imports so tests and type-checkers work in a lean dev
+environment. When you're ready for S3:
+
+```python
+StorageModule.for_root(
+    StorageConfig(
+        signed_url_secret="...",
+        driver="s3",
+        s3_bucket="swadely-uploads",
+        s3_region="ap-south-1",
+    ),
+)
+```
+
+Product code should inject `StorageService`, never the driver directly —
+that keeps size limits, path-safety, content-type inference and virus
+scanning centralised.
+
+## Put, get, list
+
+```python
+from austial import Injectable
+from austial.storage import StorageService
+
+
+@Injectable()
+class DocumentsService:
+    def __init__(self, storage: StorageService):
+        self._storage = storage
+
+    async def save(self, tenant: str, name: str, body: bytes) -> str:
+        stored = await self._storage.put(
+            f"{tenant}/{name}",
+            body,
+            metadata={"tenant": tenant},
+        )
+        return stored.key  # persist alongside the domain record
+
+    async def read(self, key: str) -> bytes:
+        obj = await self._storage.get(key)
+        return obj.data or b""
+
+    async def list_for_tenant(self, tenant: str) -> list[str]:
+        return [obj.key async for obj in self._storage.list(f"{tenant}/")]
+```
+
+`put` returns a `StoredObject` with `key`, `size`, `content_type`, `etag`,
+`last_modified` and `metadata`. `get` additionally populates `data`. `stat`
+returns everything except `data`. `delete` is idempotent.
+
+Every object key is checked before it reaches the driver: `../foo`,
+`/etc/passwd`, `foo\x00bar`, empty strings and Windows drive letters raise
+`PathTraversalError` (subclass of `BadRequestException`, so
+`AllExceptionsFilter` renders `400`). Content-type is inferred from the
+suffix if not passed. Payloads above `max_object_size_bytes` raise
+`ObjectTooLargeError`.
+
+## Signed URLs for public-safe downloads
+
+`SignedUrlService` mints URL *fragments* — the framework doesn't know your
+public base URL. The product controller prepends it:
+
+```python
+from datetime import timedelta
+
+from austial import Controller, Get, Param, Query
+from austial.storage import InvalidSignedUrlError, SignedUrlService, StorageService
+
+
+@Controller("/files")
+class FilesController:
+    def __init__(self, storage: StorageService, signed: SignedUrlService):
+        self._storage = storage
+        self._signed = signed
+
+    @Get("/:key/link")
+    def issue(self, key: str) -> dict[str, str]:
+        fragment = self._signed.issue(key, ttl=timedelta(minutes=5))
+        return {"url": f"/files/{key}{fragment}"}
+
+    @Get("/:key")
+    async def download(self, key: str, exp: int, m: str, sig: str):
+        # rebuild the query string exactly as issued
+        fragment = f"?exp={exp}&m={m}&sig={sig}"
+        self._signed.verify(fragment, expected_key=key, method="GET")
+        obj = await self._storage.get(key)
+        return obj.data
+```
+
+`verify` raises `InvalidSignedUrlError` (subclass of `ForbiddenException`,
+so the framework renders `403`) on:
+
+- an expired `exp`;
+- a tampered `sig`;
+- a wrong `method` (a `GET` URL replayed as `PUT`);
+- a mismatched key (a URL for `a.pdf` used against `b.pdf`).
+
+The signature covers `method\nkey\nexp` under HMAC-SHA256, truncated to 24
+bytes and URL-safe-base64 encoded. That's enough to authenticate a
+short-lived download without leaking a cookie or an auth header into a
+public URL.
+
+## Virus scanning
+
+The framework does not ship a real scanner — ClamAV integration and
+third-party APIs are product concerns. It does ship the contract:
+
+```python
+from austial.storage import ScanResult, VirusScanHook
+
+
+class ClamAVHook(VirusScanHook):
+    async def scan(self, key: str, data: bytes) -> ScanResult:
+        # call clamd, VirusTotal, S3 GuardDuty, whatever
+        return ScanResult(clean=True, signature=None)
+```
+
+Plug it in at module setup:
+
+```python
+StorageModule.for_root(
+    StorageConfig(...),
+    virus_scan=ClamAVHook(),
+)
+```
+
+`StorageService.put` awaits the hook before writing. An infected payload
+raises `MalwareDetectedError` (subclass of `BadRequestException`) with the
+scanner's signature name. `NoopVirusScan` is the default and always
+reports clean — an explicit choice so a product that forgets to plug in a
+real scanner has to opt out in code, not by accident.
+
+## Standards
+
+- **ISO/IEC 27001 A.8.24 (Use of cryptography)** — signed URLs use
+  HMAC-SHA256 with a ≥32-character shared secret; verification is
+  constant-time via `hmac.compare_digest`.
+- **OWASP ASVS V12 (File and Resources)** — key-safety rejects path
+  traversal, absolute paths, null bytes and control characters; size
+  limits are enforced at the service boundary; the virus-scan hook is a
+  first-class hook rather than an afterthought.
+- **OWASP ASVS V6 (Cryptographic Storage)** — signing secrets have to be
+  ≥128 bits of entropy (enforced as ≥32 characters at config load).
+
+## Errors
+
+| Error | HTTP | When |
+| --- | --- | --- |
+| `PathTraversalError` | 400 | key contains `..`, absolute path, null byte |
+| `ObjectTooLargeError` | 400 | payload above `max_object_size_bytes` |
+| `MalwareDetectedError` | 400 | `VirusScanHook` reported `clean=False` |
+| `ObjectNotFoundError` | 404 | `get` or `stat` on a missing key |
+| `InvalidSignedUrlError` | 403 | signed URL expired, tampered, or method-mismatched |
+
+Each subclasses the matching `austial.common.exceptions` type so
+`AllExceptionsFilter` maps them to the right status without any product
+translation layer.

@@ -53,6 +53,16 @@ async def find_post(self, user_id: int, post_id: int):
     ...
 ```
 
+A trailing `*` on a param name (`:key*`) declares a catch-all that also
+matches `/`, translated to FastAPI's `{key:path}` converter instead of the
+plain `{key}`. Use it for path-shaped values such as storage keys:
+
+```python
+@Get("files/:key*")
+async def download(self, key: str = Param("key")) -> Response:
+    ...  # matches GET /files/a/b/c.pdf with key == "a/b/c.pdf"
+```
+
 Because Python has no parameter *decorators*, request data is bound the same
 way FastAPI already does it — through type-hinted parameters, optionally
 given an explicit default from `austial`'s param helpers:

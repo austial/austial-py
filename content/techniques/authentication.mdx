@@ -1,0 +1,245 @@
+---
+title: Authentication
+---
+
+# Authentication
+
+`austial.auth` provides authentication primitives — password hashing, JWT
+access tokens, TOTP for multi-factor authentication, a refresh-token store
+contract, and an `AuthGuard` that verifies bearer tokens on every request.
+
+The framework does not define your user model or the persistence layer.
+Instead it gives you strategies and a guard; you wire them together against
+your own user entity. This mirrors the `@nestjs/passport` + `@nestjs/jwt`
+split.
+
+## Setup
+
+```python
+from austial import Module
+from austial.auth import AuthConfig, AuthModule
+
+
+@Module(
+    imports=[
+        AuthModule.for_root(
+            AuthConfig(
+                jwt_secret="a-real-secret-at-least-32-characters",
+                issuer="fundos",
+            )
+        ),
+    ],
+)
+class AppModule:
+    pass
+```
+
+`AuthConfig` accepts:
+
+- `jwt_secret` — HS256 signing secret (at least 32 characters; the strategy
+  fails at startup otherwise, per OWASP ASVS V6).
+- `issuer` — the `iss` claim; typically your app name.
+- `algorithm` — `"HS256"` (default) or `"RS256"`.
+- `access_ttl` — access-token lifetime (default 15 minutes).
+- `refresh_ttl` — refresh-token lifetime (default 14 days).
+- `totp_digits`, `totp_window` — TOTP configuration.
+
+`AuthModule` is registered `@Global()` by default so any module can inject
+`JwtStrategy`, `TotpStrategy`, `PasswordHasher`, `AuthService` and
+`AuthGuard` without a re-import.
+
+## Password hashing (Argon2id)
+
+```python
+from austial import Injectable
+from austial.auth import Argon2Hasher
+
+
+@Injectable()
+class UsersService:
+    def __init__(self, hasher: Argon2Hasher):
+        self._hasher = hasher
+
+    def register(self, password: str) -> str:
+        return self._hasher.hash(password)  # PHC-string, safe to persist
+
+    def check(self, password: str, stored: str) -> None:
+        self._hasher.verify(password, stored)  # raises PasswordVerificationError
+        if self._hasher.needs_rehash(stored):
+            # opportunistically upgrade on next successful login
+            ...
+```
+
+Defaults are calibrated to OWASP's 2024 interactive-login profile
+(≥19 MiB memory, 2 iterations, 1 lane). Override in the constructor if
+your infrastructure allows heavier parameters.
+
+## JWT access tokens
+
+```python
+from austial.auth import JwtStrategy
+
+
+def sign_login(jwt: JwtStrategy, user_id: str, tenant_id: str) -> str:
+    return jwt.sign(user_id, claims={"tenant": tenant_id, "roles": ["ops"]})
+
+
+def whoami(jwt: JwtStrategy, token: str) -> str:
+    payload = jwt.verify(token)   # raises TokenExpiredError / InvalidTokenError
+    return payload.subject
+```
+
+Tokens carry `iss`, `iat`, `exp` and `jti` in addition to your application
+claims. The `jti` gives you a hook for per-token revocation without changing
+the wire format.
+
+## TOTP multi-factor authentication
+
+```python
+from austial.auth import TotpStrategy
+
+
+def enrol(totp: TotpStrategy, account: str) -> tuple[str, str, list[str]]:
+    secret = totp.generate_secret()
+    uri = totp.provisioning_uri(secret, account)  # QR-code payload
+    recovery = totp.generate_recovery_codes()
+    return secret, uri, recovery
+
+
+def check(totp: TotpStrategy, secret: str, code: str) -> bool:
+    return totp.verify(secret, code)  # one-window drift allowed
+```
+
+Persist the secret against the user record. Persist recovery codes
+**hashed** (via `Argon2Hasher`) so a database leak does not compromise them.
+
+## Refresh tokens
+
+Refresh tokens are opaque strings (not JWTs) that the store persists so
+they can be revoked. Framework ships an `InMemoryRefreshTokenStore` for
+tests and local dev; product code supplies a persistent implementation
+against its ORM:
+
+```python
+from austial.auth import RefreshTokenStore
+
+# supply a persistent implementation
+AuthModule.for_root(config, refresh_token_store=MyOrmRefreshTokenStore())
+```
+
+Pass a **class**, not just an instance, when the store itself needs DI (a repository, another
+service): `for_root` registers it with `useClass`, so the container resolves its own constructor
+dependencies once the app boots, instead of you having to build it by hand before the DI container
+exists. `password_hasher` accepts the same class-or-instance shape. An instance (as above) still
+works for a store with no dependencies of its own.
+
+`AuthService` orchestrates `issue_tokens`, `refresh` and `logout`:
+
+```python
+from austial.auth import AuthService
+
+
+class LoginController:
+    def __init__(self, auth: AuthService, users: UsersService):
+        self._auth = auth
+        self._users = users
+
+    async def login(self, dto):
+        user = self._users.by_email(dto.email)
+        self._auth.verify_password(dto.password, user.password_hash)
+        self._auth.require_mfa(user.totp_secret, dto.totp_code)
+        return await self._auth.issue_tokens(user.id, claims={"tenant": user.tenant_id})
+```
+
+Rotation on refresh is atomic (the old refresh token is revoked as the new
+one is issued). `logout_everywhere(subject)` revokes every active refresh
+token for a user — call it on password change, MFA re-enrolment, or an
+admin action.
+
+`AuthService.refresh`'s `claims` argument also accepts a **callable** — `(record:
+RefreshTokenRecord) -> dict | Awaitable[dict]` — instead of a fixed dict, for when the new access
+token's claims depend on the rotated token itself (its `session_id`, or the subject's *current*
+tenant/roles, which may have changed since the refresh token was issued):
+
+```python
+async def claims_for(record):
+    session = await sessions.get_active(record.session_id)
+    membership = await memberships.find_one_by({"tenant_id": session.tenant_id, "user_id": record.subject})
+    return {"tenant": session.tenant_id, "roles": [membership.role], "sid": session.id}
+
+pair = await auth.refresh(opaque_refresh_token, claims=claims_for)
+```
+
+A `PasswordVerificationError`/`AuthenticationError` (or anything else) raised inside the callable
+propagates to the caller of `refresh()` as-is.
+
+## Guarding routes
+
+```python
+from austial import Controller, Get, UseGuards
+from austial.auth import AuthGuard, CurrentUser, Public
+
+
+@Controller("/me")
+@UseGuards(AuthGuard)
+class MeController:
+    @Get()
+    def me(self, user=CurrentUser()):
+        return {"id": user.subject, "claims": user.claims}
+
+    @Public()
+    @Get("/robots.txt")
+    def robots(self):
+        return "User-agent: *\nDisallow:"
+```
+
+`AuthGuard` reads the `Authorization: Bearer <jwt>` header, verifies it with
+`JwtStrategy`, and populates `request.state.user` with an `AuthPrincipal`.
+`CurrentUser()` retrieves the principal in a handler parameter — resolved
+*after* every guard for the route has run (including a global one registered
+via `app.use_global_guards(AuthGuard, ...)`, which is the common case: nothing
+above requires `@UseGuards(AuthGuard)` on every controller). `@Public()` skips
+the guard for a specific route or an entire controller, and `CurrentUser()`
+then resolves to `None`.
+
+Under the hood `CurrentUser()` is `austial.common.FromRequestState("user")`: a
+handler parameter bound to `request.state.<attribute>`, read only once the
+router's guard loop has finished (a plain FastAPI `Depends` would resolve
+before that loop runs, over an empty `request.state`, however the guard was
+registered). Any guard that publishes something onto `request.state` — a
+product `TenantGuard` subclass, a session guard — can use the same helper for
+its own param:
+
+```python
+from austial.common import FromRequestState
+
+def CurrentTenant() -> Any:
+    return FromRequestState("tenant", default=None)
+```
+
+To layer additional checks (session freshness, per-tenant claims) subclass
+`AuthGuard` and override `after_verify`.
+
+## Errors
+
+All auth failures extend `UnauthorizedException` (mapping to `401`), with
+sub-types for programmatic handling:
+
+- `AuthenticationError` — generic parent.
+- `InvalidTokenError` — malformed, tampered, wrong issuer.
+- `TokenExpiredError` — `exp` in the past.
+- `MfaRequiredError` — password OK but MFA still pending.
+
+Never surface which failure occurred to the client verbatim; log the sub-type
+and return a generic `401` message to callers.
+
+## Security posture (OWASP ASVS L2)
+
+- V2 auth: Argon2id with OWASP-2024 parameters; password verification runs
+  in constant time via `argon2-cffi`.
+- V3 session: short-lived (15-minute) access tokens, opaque rotating refresh
+  tokens with server-side revocation and per-user bulk revoke.
+- V6 crypto: minimum 32-character HS256 secret enforced at startup; RS256
+  is a one-line change.
+- V13 API: bearer authentication only; guard verifies before every handler
+  unless explicitly `@Public`.

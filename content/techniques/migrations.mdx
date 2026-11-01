@@ -1,0 +1,182 @@
+---
+title: Migrations
+---
+
+# Migrations
+
+`austial.migrations` wires [Alembic](https://alembic.sqlalchemy.org) to `austial.orm`'s
+`DataSource`, so a product can generate and apply schema migrations without leaving the
+framework. Alembic runs against the same SQLAlchemy `MetaData` the ORM builds from your
+`@Entity()` classes — `DataSource.get_metadata()` is the single documented seam where
+that metadata crosses the ORM's public API boundary (see [Database](/techniques/database)
+for the ORM itself).
+
+The framework ships:
+
+- `MigrationsModule.for_root(...)` — dynamic module that registers `MigrationRunner`
+  in the DI container.
+- `MigrationRunner` — an injectable service with `revision`, `upgrade`, `downgrade`,
+  `current` and `history` methods.
+- `alembic_env(config, metadata)` — the online/offline runner your `env.py` delegates
+  to, so upgrading Alembic itself never forces a `env.py` regeneration.
+- `austial-migrate` — a standalone Typer CLI (`revision`, `upgrade`, `downgrade`,
+  `current`, `history`, `init`) that runs without booting the DI container, so
+  migrations can happen before the application imports cleanly at deploy time.
+
+## Setup
+
+Install the package (already there if you use `austial` as an umbrella dependency,
+otherwise `uv add austial-migrations`) and register the module:
+
+```python
+from austial import Module
+from austial.migrations import MigrationsConfig, MigrationsModule
+from austial.orm import DataSource
+
+from src.entities import Cat, Owner
+
+_metadata = DataSource(...).get_metadata()  # cheap: no connection opens
+
+
+@Module(
+    imports=[
+        MigrationsModule.for_root(
+            MigrationsConfig(script_location="alembic"),
+            url="postgresql+psycopg://user:pass@localhost/mydb",
+            metadata=_metadata,
+        ),
+    ],
+)
+class AppModule:
+    pass
+```
+
+`MigrationsConfig` accepts:
+
+- `script_location` — on-disk directory holding `env.py` + `versions/` (default
+  `"alembic"`).
+- `version_table` — Alembic bookkeeping table (default `"alembic_version"`).
+- `compare_type` — pass through to Alembic's autogenerate (default `True`).
+- `compare_server_default` — same (default `True`).
+
+`MigrationsModule` is registered `@Global()` by default; any module can then inject
+`MigrationRunner`.
+
+## Bootstrapping the ``alembic/`` directory
+
+Once, per project:
+
+```bash
+austial-migrate init
+```
+
+Writes an `env.py`, a `script.py.mako`, an empty `versions/` folder and a short README
+at `script_location`. The generated `env.py` is a one-line delegation to
+`austial.migrations.alembic_env`, so future framework-side changes to how migrations run
+online/offline never require regenerating it.
+
+Its `target_metadata` comes from `context.config.attributes["target_metadata"]` — the
+runner sets this before invoking Alembic, and the CLI resolves it from the
+`AUSTIAL_METADATA_MODULE` env var (see below).
+
+## Generating and applying migrations
+
+From inside the application (typical during local development):
+
+```python
+from austial import Injectable
+from austial.migrations import MigrationRunner
+
+
+@Injectable()
+class SchemaAdmin:
+    def __init__(self, runner: MigrationRunner):
+        self._runner = runner
+
+    def bump(self, message: str) -> str:
+        return self._runner.revision(message, autogenerate=True)
+
+    def deploy(self) -> None:
+        self._runner.upgrade("head")
+```
+
+From a shell (the standard deploy path):
+
+```bash
+export AUSTIAL_DATABASE_URL="postgresql+psycopg://user:pass@localhost/mydb"
+export AUSTIAL_METADATA_MODULE="src.app_module:target_metadata"
+
+austial-migrate revision -m "add users table" --autogenerate
+austial-migrate upgrade head
+austial-migrate current
+austial-migrate history
+austial-migrate downgrade -1
+```
+
+The CLI reads its URL from, in order: an explicit `--url` flag, the
+`AUSTIAL_DATABASE_URL` env var, or `sqlalchemy.url` in a local `alembic.ini`. For
+autogenerate, the CLI additionally imports `target_metadata` from the dotted path in
+`AUSTIAL_METADATA_MODULE` (`"my_pkg.module:attribute_name"`); every other subcommand
+works without it.
+
+## `env.py` template
+
+The generated `env.py` is deliberately short — the framework owns everything below the
+`alembic_env(...)` call:
+
+```python
+from __future__ import annotations
+
+from logging.config import fileConfig
+
+from alembic import context
+
+from austial.migrations import alembic_env
+
+target_metadata = context.config.attributes.get("target_metadata")
+
+if context.config.config_file_name is not None:
+    try:
+        fileConfig(context.config.config_file_name)
+    except Exception:
+        pass
+
+alembic_env(context.config, target_metadata)
+```
+
+If you want to write `env.py` yourself (e.g. because you already have a heavily
+customised Alembic setup), just call `alembic_env(context.config, your_metadata)` at the
+bottom and the framework will handle online/offline, `NullPool` engine construction, and
+threading the `version_table` / `compare_type` / `compare_server_default` settings
+through.
+
+## Autogenerate caveats
+
+Alembic's autogenerate compares SQLAlchemy metadata against the current DB and writes
+its best guess into a new revision file. Well-known gaps every product should read
+before trusting it blindly:
+
+- **Rename detection**: Alembic sees a rename as a drop + create. Edit the generated
+  revision to use `op.alter_column(...)`/`op.rename_table(...)` before applying.
+- **CHECK constraints and server defaults**: often not inferred; the two `compare_*`
+  flags help but do not close the gap entirely.
+- **Postgres `ENUM` types**: create/drop is emitted, but rename/reorder isn't — hand-edit.
+- **Data migrations**: never inferred. Add `op.bulk_insert(...)` or a plain `op.execute()`
+  step yourself when the schema change needs backfill.
+
+Always read the generated revision before committing it. Alembic's own documentation
+[Autogenerate caveats](https://alembic.sqlalchemy.org/en/latest/autogenerate.html#what-does-autogenerate-detect-and-what-does-it-not-detect)
+is the reference; nothing in `austial.migrations` changes that contract.
+
+## Change management (ISO/IEC 27002 A.8.32)
+
+`austial.migrations` is the schema-change control point ISO/IEC 27002 A.8.32
+("Change management") expects a production system to have: every DDL change lives in a
+version-controlled revision file, applied in order, reversibly, with a persisted
+`alembic_version` bookmark. Pair it with the usual code-review workflow — one PR per
+migration, reviewed by someone other than the author — and the audit trail A.8.32 asks
+for falls out of standard git + CI, not a separate change-management system.
+
+Never edit an already-applied revision file. Add a new revision that fixes it forward;
+`downgrade` is a rollback tool for staging or a fresh incident, not a way to rewrite
+history in place.

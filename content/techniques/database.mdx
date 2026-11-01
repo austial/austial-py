@@ -164,6 +164,11 @@ class CatsService:
         return await self.repository.find_one_by({"id": id})
 ```
 
+`InjectRepository(Cat)` is typed `Any` (the marker `Container` actually resolves at DI time is an
+implementation detail), so it type-checks as the default for a parameter annotated
+`Repository[Cat]` — the same trick every other param-marker helper (`Body()`, `Inject()`, ...)
+uses.
+
 ```python
 @Module(
     imports=[OrmModule.for_feature([Cat])],
@@ -175,9 +180,31 @@ class CatsModule:
 
 `Repository[T]` methods: `find(options)`, `find_one(options)`, `find_by(criteria)`,
 `find_one_by(criteria)`, `count(options)`, `save(entity | [entities])` (INSERT when the primary
-key is unset, else a full-column UPDATE), `remove(entity | [entities])`, `update(criteria,
+key is unset, else a full-column UPDATE), `insert(entity | [entities])` (always an INSERT — see
+below), `remove(entity | [entities])`, `update(criteria,
 partial)` and `delete(criteria)` (bulk, no prior SELECT — same distinction as TypeORM's
 `Repository.update()`/`.delete()` vs. `.save()`/`.remove()`), and `create_query_builder(alias)`.
+
+### Application-assigned keys: `insert()`
+
+`save()` picks INSERT or UPDATE from the primary key, so an entity whose key you assign yourself
+(a UUID, a natural key) cannot be inserted through it — it would issue an UPDATE that matches
+nothing. Use `insert()` (on `Repository` and `EntityManager`), which always issues an INSERT and
+still stamps `CreateDateColumn`/`UpdateDateColumn`:
+
+```python
+await self.repository.insert(Invoice(id=str(uuid.uuid4()), number="INV-1", tenant_id=tenant_id))
+```
+
+A duplicate key raises the driver's integrity error. It is the only write an `append_only` entity
+with a pre-set key will accept.
+
+### Mixins
+
+`@Entity()` also collects `Column()`/relation markers from plain (non-entity) base classes, so a
+mixin can contribute columns to every entity that inherits it — `austial.tenancy.Tenanted` is one.
+Attributes declared on the entity class itself win over the mixin's; mixin columns are appended after
+the class's own and are regular constructor fields.
 
 `FindOptions` supports `where` (a dict is one AND-of-equality group, a `list[dict]` is
 OR-of-AND-groups), `relations` (single-level eager-loading via `LEFT JOIN`), `order_by`, `skip`,
@@ -191,6 +218,17 @@ from austial.orm import In, NotIn
 
 pending = await repository.find(FindOptions(where={"status": In(["PENDING", "MANUAL_REVIEW"])}))
 active = await repository.find(FindOptions(where={"status": NotIn(["REJECTED"])}))
+```
+
+`IsNull()` and `NotNull()` compile to `IS NULL` / `IS NOT NULL`. A plain `None` value is `= NULL`, which
+never matches, so use these to filter on an unset nullable column — and to claim a row atomically, for
+example consuming a single-use token with `update({"token_hash": h, "used_at": IsNull()}, {"used_at": now})`
+and checking `affected == 1`:
+
+```python
+from austial.orm import IsNull
+
+unused = await repository.find(FindOptions(where={"used_at": IsNull()}))
 ```
 
 Comparing a native Postgres `ENUM` column this way (equality or `In`/`NotIn`) "just works" without
@@ -219,7 +257,8 @@ append_only=True)`.
 This is enforced at the `EntityManager` level — the single choke point every `Repository` method
 funnels through — not by convention in your service code:
 
-- `repository.save(entity)` still works for the INSERT path (primary key unset); calling it again
+- `repository.insert(entity)` works for any key (including an application-assigned one);
+  `repository.save(entity)` still works for the INSERT path (primary key unset); calling it again
   on an already-persisted instance (primary key set, which `save()` would otherwise treat as a
   full-column UPDATE) raises.
 - `repository.update(criteria, partial)`, `repository.remove(entity)`, and

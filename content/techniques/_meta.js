@@ -1,7 +1,16 @@
 export default {
   configuration: "Configuration",
   database: "Database",
+  migrations: "Migrations",
   validation: "Validation",
+  authentication: "Authentication",
+  authorization: "Authorization",
+  "multi-tenancy": "Multi-tenancy",
+  security: "Security",
+  "audit-log": "Audit Log",
+  "background-jobs": "Background Jobs",
+  "file-storage": "File Storage",
+  i18n: "Internationalization",
   "health-checks": "Health Checks",
   testing: "Testing",
 };

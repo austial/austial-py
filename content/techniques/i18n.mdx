@@ -1,0 +1,188 @@
+---
+title: Internationalization
+---
+
+# Internationalization
+
+`austial.i18n` translates application strings on the server. It mirrors the
+frontend convention we already use: **one JSON file per module per locale**,
+merged into a `<module>.<key>` lookup namespace. The intended use is
+application-level code — controller responses, error messages that reach the
+end user, i18n-aware label prefixes. Framework internals (log lines, startup
+banners, developer-facing exceptions) stay in English.
+
+## Layout
+
+```
+locales/
+    en/
+        health.json     # {"check": {"database_label": "Database"}}
+        app.json        # {"welcome": "Hello, {name}!"}
+    fr/
+        health.json
+        app.json
+```
+
+The loader walks `locales/<locale>/<module>.json` and merges every file into
+a `{module: tree}` dict for that locale. The first segment of a translation
+key names the module (JSON filename); the rest is a dotted path into that
+file's tree:
+
+```python
+service.t("health.check.database_label")   # -> "Database"
+```
+
+Locales are auto-discovered from the top-level directory names.
+
+## Setup
+
+```python
+from pathlib import Path
+
+from austial import Module
+from austial.i18n import I18nConfig, I18nModule
+
+
+@Module(
+    imports=[
+        I18nModule.for_root(
+            I18nConfig(
+                locales_dir=Path("i18n/locales"),
+                default_locale="en",
+                fallback_chain={"en-IN": ["en"], "fr-CA": ["fr"]},
+            )
+        ),
+    ]
+)
+class AppModule:
+    pass
+```
+
+`I18nModule` is registered `@Global()` by default, so `I18nService` and
+`I18nContext` are injectable everywhere without re-importing.
+
+## Translating in code
+
+```python
+from austial import Injectable
+from austial.i18n import I18nService
+
+
+@Injectable()
+class HealthController:
+    def __init__(self, i18n: I18nService):
+        self._i18n = i18n
+
+    def readable_status(self, kind: str) -> str:
+        # Looks up "<module>.<subkey>", using the request's locale.
+        return self._i18n.t(f"health.check.{kind}_label")
+```
+
+Pass `locale=` to override the request's locale (batch jobs, notifications
+sent in the recipient's preferred language, tests):
+
+```python
+self._i18n.t("app.welcome", locale="fr", name="Alice")
+```
+
+`I18nService.has("health.check.queue_label")` returns `True` when the key
+resolves to a string in the effective locale (walking the fallback chain
+and the default locale). `available_locales()` returns the set of locales
+the loader found on disk. `add_locale(locale, translations)` registers or
+replaces a locale in-memory — for tests and hot-reload flows.
+
+## Interpolation
+
+The default placeholder syntax is `{name}`:
+
+```json
+{"welcome": "Hello, {name}!"}
+```
+
+```python
+i18n.t("app.welcome", name="Alice")   # -> "Hello, Alice!"
+```
+
+Switch to `{{name}}` (i18next-style) by setting `interpolation="double_brace"`
+on `I18nConfig`.
+
+A missing variable is substituted with `""` and a warning is logged — in
+`strict=True` mode it raises `MissingTranslationError` instead.
+
+## Fallback chain
+
+Lookup order for `t("health.check.database_label", locale="fr-CA")`:
+
+1. `fr-CA` translations.
+2. Each locale listed in `I18nConfig.fallback_chain["fr-CA"]` (in order).
+3. The `default_locale`.
+4. If still nothing: return the key itself (or raise
+   `MissingTranslationError` when `strict=True`).
+
+The default locale is always tried last; you do not need to list it.
+
+## Locale middleware
+
+`LocaleMiddleware` decides which locale a request is in, and pushes it into
+`I18nContext` for the duration of that request. Precedence (highest first):
+
+1. A dedicated fallback header (default `X-Locale`), useful when the frontend
+   already knows the user's preference from their stored profile.
+2. `Accept-Language`, parsed with `q`-weighting. The first tag that has
+   translations loaded wins; the language subtag is tried when the exact
+   region tag is not deployed (`en-IN` → `en`).
+3. The configured `default_locale`.
+
+Register it like any other Nest middleware — in your `AppModule.configure()`:
+
+```python
+from austial.common.middleware import MiddlewareConsumer
+from austial.i18n import LocaleMiddleware
+
+
+@Module(imports=[I18nModule.for_root(config)])
+class AppModule:
+    def configure(self, consumer: MiddlewareConsumer) -> None:
+        consumer.apply(LocaleMiddleware).for_routes("*")
+```
+
+Inside a handler:
+
+```python
+from austial import Injectable
+from austial.i18n import I18nContext, I18nService
+
+
+@Injectable()
+class InvoicesController:
+    def __init__(self, i18n: I18nService, ctx: I18nContext):
+        self._i18n = i18n
+        self._ctx = ctx
+
+    def show(self):
+        # ctx.current_locale() -> the request's locale, resolved by middleware.
+        return {"locale": self._ctx.current_locale(), "greeting": self._i18n.t("app.welcome", name="Alice")}
+```
+
+## Strict mode
+
+`I18nConfig(strict=True)` turns any missing key or missing interpolation
+variable into a `MissingTranslationError` (500). Useful in CI and staging;
+production usually wants the default lenient mode where a missing key
+degrades to a visible-but-usable label.
+
+## Malformed files
+
+The loader logs a warning (via `austial.common.logger.Logger`) when a JSON
+file fails to parse, or when a file's top-level value is not an object, then
+continues loading the rest. A bad locale file never crashes the app on boot;
+it shows up loudly in the startup logs.
+
+## What this package is not for
+
+Framework internals — the log lines, exception messages you see as a
+developer, the `[Austial]` startup banner — stay in English. `austial.i18n`
+is for application code (product backends, landing page copy served from the
+API, notifications sent to the end user). This mirrors the workspace rule in
+`CLAUDE.md`: no hardcoded user-facing strings in app code; all messages,
+labels and prefixes live in i18n JSON locale files, keyed by module.
