@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from austial.cli.generators.agent_files import link_agent_files
 from austial.cli.generators.base import render, write_file
 from austial.cli.naming import to_kebab_case
 
@@ -16,16 +17,26 @@ def create_new_project(
     austial_source_path: str | None = None,
     skip_install: bool = False,
     skip_git: bool = False,
+    skip_agents: bool = False,
 ) -> Path:
     project_dir = (directory or Path.cwd() / name).resolve()
     project_slug = to_kebab_case(name)
-    ctx = {"project_name": name, "project_slug": project_slug, "austial_source_path": austial_source_path}
+    ctx = {
+        "project_name": name,
+        "project_slug": project_slug,
+        "austial_source_path": austial_source_path,
+        "agents": not skip_agents,
+    }
 
     write_file(project_dir / "pyproject.toml", render("project/pyproject.toml.j2", **ctx))
     write_file(project_dir / "README.md", render("project/readme.j2", **ctx))
     write_file(project_dir / ".env.example", render("project/env_example.j2", **ctx))
     write_file(project_dir / ".gitignore", render("project/gitignore.j2", **ctx))
     write_file(project_dir / ".pre-commit-config.yaml", render("project/pre_commit_config.yaml.j2", **ctx))
+
+    if not skip_agents:
+        write_file(project_dir / "AGENTS.md", render("project/agents_md.j2", **ctx))
+        link_agent_files(project_dir)
 
     write_file(project_dir / "src" / "__init__.py", "")
     write_file(project_dir / "src" / "main.py", render("project/main.py.j2", **ctx))

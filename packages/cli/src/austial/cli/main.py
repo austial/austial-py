@@ -46,6 +46,11 @@ def new_project(
     directory: str | None = typer.Option(None, "--directory", "-d", help="Target directory (defaults to ./<name>)."),
     skip_install: bool = typer.Option(False, "--skip-install", help="Don't run `uv sync` after scaffolding."),
     skip_git: bool = typer.Option(False, "--skip-git", help="Don't run `git init` after scaffolding."),
+    skip_agents: bool = typer.Option(
+        False,
+        "--skip-agents",
+        help="Don't write AGENTS.md or the per-tool symlinks (CLAUDE.md, GEMINI.md, ...).",
+    ),
     link: str | None = typer.Option(
         None,
         "--link",
@@ -62,6 +67,7 @@ def new_project(
         austial_source_path=link,
         skip_install=skip_install,
         skip_git=skip_git,
+        skip_agents=skip_agents,
     )
     console.print(f"[bold green]\u2714[/bold green] Project created at [bold]{project_dir}[/bold]")
     console.print("\nNext steps:")

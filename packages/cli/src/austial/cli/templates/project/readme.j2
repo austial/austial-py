@@ -66,3 +66,12 @@ uv run pre-commit run --all-files   # run every hook once, on demand
 Once installed, `git commit` runs formatting/linting/type-checks automatically,
 and `git push` also runs the test suite -- mirroring a typical Nest project's
 husky + lint-staged setup.
+{% if agents %}
+
+## AI coding tools
+
+`AGENTS.md` holds the rules every AI tool should follow in this project (commands, layout, framework
+conventions, production gates). `CLAUDE.md`, `GEMINI.md`, `.windsurfrules`, `.clinerules`, `.rules`,
+`CONVENTIONS.md` and `.github/copilot-instructions.md` are symlinks to it, so there is one file to edit.
+Fill in its **Project facts** block first. See https://docs.austial.com/ai/setup.
+{% endif %}
