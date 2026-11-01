@@ -15,7 +15,7 @@ from austial.common.decorators.guards import UseGuards
 from austial.common.decorators.injectable import Inject, Injectable, Optional_
 from austial.common.decorators.interceptors import UseInterceptors
 from austial.common.decorators.modules import Global, Module
-from austial.common.decorators.params import Body, Headers, Param, Query, Req, Res
+from austial.common.decorators.params import Body, FromRequestState, GuardStateMarker, Headers, Param, Query, Req, Res
 from austial.common.decorators.pipes import UsePipes
 
 __all__ = [
@@ -39,6 +39,8 @@ __all__ = [
     "Global",
     "Module",
     "Body",
+    "FromRequestState",
+    "GuardStateMarker",
     "Headers",
     "Param",
     "Query",

@@ -15,6 +15,7 @@ from collections.abc import Callable
 from fastapi import APIRouter, Request, Response
 
 from austial.common.decorators.controllers import ControllerMetadata, RouteMetadata
+from austial.common.decorators.params import GuardStateMarker
 from austial.common.exceptions.http_exceptions import ForbiddenException
 from austial.common.filters.all_exceptions_filter import AllExceptionsFilter
 from austial.common.guards.base import ExecutionContext
@@ -143,6 +144,15 @@ class RouterBuilder:
     ) -> Callable:
         original_sig = inspect.signature(handler, eval_str=True)  # bound method -> `self` already excluded
 
+        # Params bound via `FromRequestState(...)` (e.g. `austial.auth.CurrentUser()`) read
+        # `request.state` as it stands *after* the guard loop below -- FastAPI must never resolve
+        # them itself (that would happen before the guard loop even runs, over an empty state), so
+        # they are stripped from `new_sig` entirely and injected manually inside `endpoint()`.
+        deferred_params: dict[str, GuardStateMarker] = {
+            name: p.default for name, p in original_sig.parameters.items() if isinstance(p.default, GuardStateMarker)
+        }
+        fastapi_params = [p for name, p in original_sig.parameters.items() if name not in deferred_params]
+
         request_param_name = next(
             (name for name, p in original_sig.parameters.items() if p.annotation is Request), None
         )
@@ -160,7 +170,7 @@ class RouterBuilder:
             extra_params.append(
                 inspect.Parameter(_RESPONSE_PARAM_NAME, kind=inspect.Parameter.KEYWORD_ONLY, annotation=Response)
             )
-        new_sig = original_sig.replace(parameters=[*original_sig.parameters.values(), *extra_params])
+        new_sig = original_sig.replace(parameters=[*fastapi_params, *extra_params])
         is_coroutine = inspect.iscoroutinefunction(handler)
 
         async def endpoint(**kwargs):
@@ -186,6 +196,11 @@ class RouterBuilder:
                     for pipe in pipes:
                         value = pipe.transform(value, metadata)
                     kwargs[name] = value
+
+                # Populated only now, after every guard above has had the chance to write to
+                # `request.state` -- see `deferred_params`'s construction above.
+                for name, marker in deferred_params.items():
+                    kwargs[name] = getattr(request.state, marker.attribute, marker.default)
 
                 async def call_handler():
                     return await handler(**kwargs) if is_coroutine else handler(**kwargs)

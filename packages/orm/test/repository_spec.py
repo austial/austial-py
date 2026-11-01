@@ -44,6 +44,7 @@ async def test_save_updates_in_place_when_primary_key_is_set():
 
     assert updated.id == saved.id
     reloaded = await repo.find_one_by({"id": saved.id})
+    assert reloaded is not None
     assert reloaded.age == 4
 
     all_cats = await repo.find()
@@ -73,6 +74,7 @@ async def test_find_by_and_find_one_by():
 
     assert len(await repo.find_by({"age": 3})) == 1
     found = await repo.find_one_by({"name": "Jerry"})
+    assert found is not None
     assert found.name == "Jerry"
     assert await repo.find_one_by({"name": "Nonexistent"}) is None
     await ds.destroy()
@@ -116,6 +118,7 @@ async def test_bulk_update_by_criteria_does_not_load_rows_first():
 
     assert result.affected == 1
     reloaded = await repo.find_one_by({"id": tom.id})
+    assert reloaded is not None
     assert reloaded.age == 10
     await ds.destroy()
 

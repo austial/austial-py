@@ -27,7 +27,9 @@ from austial.orm.expression import (
     DeleteSpec,
     In,
     InsertSpec,
+    IsNull,
     NotIn,
+    NotNull,
     TypedParam,
     UpdateSpec,
     WhereFragment,
@@ -93,7 +95,9 @@ def _build_where_fragments(meta: EntityMetadata, alias: str, where: WhereClause 
             if column is None:
                 raise OrmError(f"{meta.entity_cls.__name__!r} has no column {attr_name!r}")
             qualified = quote_ref(alias, column.column_name)
-            if isinstance(value, (In, NotIn)):
+            if isinstance(value, (IsNull, NotNull)):
+                clauses.append(f"{qualified} IS {'NOT ' if isinstance(value, NotNull) else ''}NULL")
+            elif isinstance(value, (In, NotIn)):
                 membership_values = list(value.values)
                 negate = isinstance(value, NotIn)
                 if not membership_values:
@@ -295,11 +299,54 @@ class EntityManager:
         total AUM across matching holdings)."""
         return await self.aggregate(entity, "SUM", column, criteria=criteria, group_by=group_by)
 
-    async def save(self, entity_instance: T | Sequence[T]) -> T | list[T]:
+    @overload
+    async def save(self, entity_instance: Sequence[T]) -> list[T]: ...
+
+    @overload
+    async def save(self, entity_instance: T) -> T: ...
+
+    async def save(self, entity_instance: Any) -> Any:
         instances = _as_list(entity_instance)
         saved = [await self._save_one(instance) for instance in instances]
         is_sequence = isinstance(entity_instance, Sequence) and not isinstance(entity_instance, (str, bytes))
         return saved if is_sequence else saved[0]
+
+    @overload
+    async def insert(self, entity_instance: Sequence[T]) -> list[T]: ...
+
+    @overload
+    async def insert(self, entity_instance: T) -> T: ...
+
+    async def insert(self, entity_instance: Any) -> Any:
+        """INSERT only -- never an UPDATE, whatever the primary key holds.
+
+        ``save()`` decides between INSERT and UPDATE from the primary key (unset -> insert), which
+        makes an entity with an *application-assigned* key (UUIDs, natural keys) impossible to
+        insert: ``save()`` sees the key and issues an UPDATE that matches nothing. ``insert()`` is the
+        explicit path for that case, and the only write an ``append_only`` entity with a pre-set key
+        will accept. A duplicate primary key raises the driver's integrity error.
+        """
+        instances = _as_list(entity_instance)
+        inserted = [await self._insert_one(instance) for instance in instances]
+        is_sequence = isinstance(entity_instance, Sequence) and not isinstance(entity_instance, (str, bytes))
+        return inserted if is_sequence else inserted[0]
+
+    async def _insert_one(self, instance: T) -> T:
+        meta = get_entity_metadata(type(instance))
+        now = datetime.datetime.now(datetime.UTC)
+        for column in meta.columns:
+            if column.update_date or column.create_date:
+                setattr(instance, column.attribute_name, now)
+        insert_columns = [c for c in meta.columns if not (c.generated and c.primary)]
+        values = {c.column_name: getattr(instance, c.attribute_name) for c in insert_columns}
+        values.update(self._owning_relation_values(meta, instance))
+        result = await self._driver.execute_insert(InsertSpec(entity=type(instance), values=values))
+        if result.rows:
+            row = result.rows[0]
+            for c in meta.primary_columns:
+                if c.column_name in row:
+                    setattr(instance, c.attribute_name, row[c.column_name])
+        return instance
 
     def _owning_relation_values(self, meta: EntityMetadata, instance: Any) -> dict[str, Any]:
         """Physical FK-column values for this instance's owning single-valued relations

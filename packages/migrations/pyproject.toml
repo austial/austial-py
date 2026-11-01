@@ -1,0 +1,33 @@
+[project]
+name = "austial-migrations"
+dynamic = ["version"]
+description = "Alembic-backed schema migration runner and CLI for austial.orm entities."
+requires-python = ">=3.11"
+dependencies = [
+    "austial-common",
+    "austial-core",
+    "austial-orm",
+    "alembic>=1.13.0",
+    "typer>=0.12.0",
+]
+
+[project.scripts]
+austial-migrate = "austial.migrations.cli:app"
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/austial"]
+
+[tool.uv.sources]
+austial-common = { workspace = true }
+austial-core = { workspace = true }
+austial-orm = { workspace = true }
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+root = "../.."

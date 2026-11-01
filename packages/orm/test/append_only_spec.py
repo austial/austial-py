@@ -14,7 +14,8 @@ import pytest
 from fixtures.data_source import sqlite_data_source
 from fixtures.entities import LedgerEntry, Order
 
-from austial.orm import AppendOnlyViolationError
+from austial.orm import AppendOnlyViolationError, Column, Entity, PrimaryColumn
+from austial.orm.metadata.column_types import String
 
 
 @pytest.mark.asyncio
@@ -91,4 +92,26 @@ async def test_non_append_only_entity_is_unaffected():
 
     delete_result = await repo.delete(saved.id)
     assert delete_result.affected == 1
+    await ds.destroy()
+
+
+@Entity("keyed_audit", append_only=True)
+class KeyedAudit:
+    id: str = PrimaryColumn(type_=String(length=36))
+    note: str = Column()
+
+
+@pytest.mark.asyncio
+async def test_insert_accepts_an_application_assigned_key_on_an_append_only_entity():
+    ds = await sqlite_data_source([KeyedAudit])
+    repo = ds.get_repository(KeyedAudit)
+
+    inserted = await repo.insert(KeyedAudit(id="evt-1", note="hello"))
+
+    assert inserted.id == "evt-1"
+    reloaded = await repo.find_one_by({"id": "evt-1"})
+    assert reloaded is not None and reloaded.note == "hello"
+    # ``save()`` would treat the pre-set key as an UPDATE, which the append-only guard rejects.
+    with pytest.raises(AppendOnlyViolationError):
+        await repo.save(KeyedAudit(id="evt-2", note="x"))
     await ds.destroy()

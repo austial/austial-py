@@ -14,6 +14,15 @@ dependencies = [
     "austial-terminus",
     "austial-testing",
     "austial-cli",
+    "austial-auth",
+    "austial-tenancy",
+    "austial-authz",
+    "austial-security",
+    "austial-migrations",
+    "austial-audit",
+    "austial-jobs",
+    "austial-storage",
+    "austial-i18n",
 ]
 
 [project.scripts]
@@ -34,6 +43,15 @@ austial-orm = { workspace = true }
 austial-terminus = { workspace = true }
 austial-testing = { workspace = true }
 austial-cli = { workspace = true }
+austial-auth = { workspace = true }
+austial-tenancy = { workspace = true }
+austial-authz = { workspace = true }
+austial-security = { workspace = true }
+austial-migrations = { workspace = true }
+austial-audit = { workspace = true }
+austial-jobs = { workspace = true }
+austial-storage = { workspace = true }
+austial-i18n = { workspace = true }
 
 [tool.hatch.version]
 source = "vcs"

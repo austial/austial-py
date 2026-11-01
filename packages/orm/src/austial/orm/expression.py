@@ -50,6 +50,18 @@ class NotIn:
 
 
 @dataclass
+class IsNull:
+    """Marks a ``FindOptions.where`` value as ``column IS NULL`` (mirrors TypeORM's ``IsNull()``) -- a plain
+    ``None`` compiles to ``column = NULL``, which never matches, so this is the way to filter or atomically
+    claim rows whose nullable column is still unset (``update({"used_at": IsNull()}, {...})``)."""
+
+
+@dataclass
+class NotNull:
+    """The negated counterpart of :class:`IsNull` -- compiles to ``column IS NOT NULL``."""
+
+
+@dataclass
 class WhereFragment:
     """A raw SQL boolean expression plus its *separately* bound parameters -- e.g.
     ``WhereFragment("cat.name = :name", {"name": "Tom"})``. Values are never string-formatted

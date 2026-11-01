@@ -73,8 +73,24 @@ class Repository(Generic[T]):
     ) -> float | list[dict[str, Any]]:
         return await self.manager.sum(self.entity, column, criteria=criteria, group_by=group_by)
 
+    @overload
+    async def save(self, entity_instance: Sequence[T]) -> list[T]: ...
+
+    @overload
+    async def save(self, entity_instance: T) -> T: ...
+
     async def save(self, entity_instance: T | Sequence[T]) -> T | list[T]:
         return await self.manager.save(entity_instance)
+
+    @overload
+    async def insert(self, entity_instance: Sequence[T]) -> list[T]: ...
+
+    @overload
+    async def insert(self, entity_instance: T) -> T: ...
+
+    async def insert(self, entity_instance: T | Sequence[T]) -> T | list[T]:
+        """INSERT without the primary-key heuristic ``save()`` uses; see ``EntityManager.insert``."""
+        return await self.manager.insert(entity_instance)
 
     async def remove(self, entity_instance: T | Sequence[T]) -> None:
         await self.manager.remove(entity_instance)

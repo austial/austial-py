@@ -18,15 +18,8 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 
 from austial.core.metadata import set_metadata
-from austial.orm.decorators.column import (
-    Column,
-    ColumnMarker,
-    CreateDateColumn,
-    PrimaryColumn,
-    PrimaryGeneratedColumn,
-    UpdateDateColumn,
-)
-from austial.orm.decorators.relations import ManyToMany, ManyToOne, OneToMany, OneToOne, RelationMarker, target_resolver
+from austial.orm.decorators.column import ColumnMarker
+from austial.orm.decorators.relations import RelationMarker, target_resolver
 from austial.orm.metadata.column_types import infer_column_type
 from austial.orm.metadata.entity_metadata import ColumnMetadata, EntityMetadata, RelationMetadata
 from austial.orm.metadata.registry import MetadataRegistry
@@ -64,21 +57,29 @@ def _resolve_annotations(cls: type) -> dict[str, Any]:
     return resolved
 
 
-@typing.dataclass_transform(
-    field_specifiers=(
-        Column,
-        PrimaryColumn,
-        PrimaryGeneratedColumn,
-        CreateDateColumn,
-        UpdateDateColumn,
-        OneToOne,
-        OneToMany,
-        ManyToOne,
-        ManyToMany,
-        ColumnMarker,
-        RelationMarker,
-    ),
-)
+def _inherited_markers(cls: type) -> dict[str, tuple[Any, Any]]:
+    """``{attribute: (python_type, marker)}`` for ``Column()``/relation markers declared on plain
+    (non-entity) base classes -- how a mixin such as ``austial.tenancy.Tenanted`` contributes columns.
+
+    Walks the MRO base-first so a nearer base overrides a farther one; an attribute the entity class
+    declares itself always wins (handled by the caller). Bases that are themselves ``@Entity`` classes
+    hold dataclass fields rather than markers, so they contribute nothing here (entities do not inherit
+    mapped columns from one another).
+    """
+    inherited: dict[str, tuple[Any, Any]] = {}
+    for base in reversed(cls.__mro__[1:]):
+        if base is object:
+            continue
+        base_types = _resolve_annotations(base)
+        for attr_name, marker in vars(base).items():
+            if attr_name.startswith("_") or attr_name not in base_types:
+                continue
+            if isinstance(marker, ColumnMarker | RelationMarker):
+                inherited[attr_name] = (base_types[attr_name], marker)
+    return inherited
+
+
+@typing.dataclass_transform()
 def Entity(
     name: str | None = None,
     *,
@@ -105,10 +106,21 @@ def Entity(
         relations: list[RelationMetadata] = []
         dataclass_fields: dict[str, Any] = {}
 
+        # Mapped attributes contributed by mixin bases (own declarations take precedence). They are
+        # appended after the class's own attributes and added to ``__annotations__`` so the
+        # ``@dataclass`` step below makes them constructor fields too.
+        inherited = {name: found for name, found in _inherited_markers(cls).items() if name not in hints}
+        for attr_name, (inherited_type, _) in inherited.items():
+            hints[attr_name] = inherited_type
+        if inherited:
+            cls.__annotations__ = {**getattr(cls, "__annotations__", {}), **{n: t for n, (t, _) in inherited.items()}}
+
         for attr_name, python_type in hints.items():
             if attr_name.startswith("_"):
                 continue
             marker = cls.__dict__.get(attr_name)
+            if attr_name in inherited:
+                marker = inherited[attr_name][1]
 
             if isinstance(marker, ColumnMarker):
                 column_type = marker.type_ or infer_column_type(python_type)

@@ -13,7 +13,9 @@ import dataclasses
 
 from fixtures.entities import Cat, Owner, Toy
 
+from austial.orm import Column, Entity, PrimaryColumn
 from austial.orm.decorators.entity import get_entity_metadata
+from austial.orm.metadata.column_types import String
 from austial.orm.metadata.entity_metadata import RelationType
 from austial.orm.metadata.registry import MetadataRegistry
 
@@ -33,8 +35,10 @@ def test_column_names_are_snake_cased_attribute_names():
 def test_primary_column_is_detected_and_marked_generated():
     meta = get_entity_metadata(Cat)
     assert [c.attribute_name for c in meta.primary_columns] == ["id"]
-    assert meta.column("id").generated is True
-    assert meta.column("id").primary is True
+    id_column = meta.column("id")
+    assert id_column is not None
+    assert id_column.generated is True
+    assert id_column.primary is True
 
 
 def test_many_to_one_and_one_to_many_pair_has_correct_owning_side():
@@ -71,8 +75,8 @@ def test_many_to_many_owning_side_carries_the_join_table():
 
 
 def test_entity_is_a_plain_dataclass_with_every_field_defaulted():
-    assert dataclasses.is_dataclass(Cat)
     cat = Cat(name="Tom")
+    assert dataclasses.is_dataclass(cat)
     assert cat.id is None
     assert cat.name == "Tom"
     assert cat.age is None
@@ -90,3 +94,31 @@ def test_to_many_relation_default_is_a_fresh_list_per_instance():
 def test_metadata_registry_resolves_by_class():
     assert MetadataRegistry.get(Cat) is get_entity_metadata(Cat)
     assert MetadataRegistry.get_by_name(f"{Cat.__module__}.{Cat.__qualname__}") is get_entity_metadata(Cat)
+
+
+class _AuditedMixin:
+    created_by: str = Column(index=True)
+
+
+@Entity("mixin_widgets")
+class _MixinWidget(_AuditedMixin):
+    id: str = PrimaryColumn(type_=String(length=36))
+    label: str = Column()
+
+
+def test_entity_collects_columns_from_mixin_bases():
+    meta = get_entity_metadata(_MixinWidget)
+
+    assert [c.attribute_name for c in meta.columns] == ["id", "label", "created_by"]
+    created_by = meta.column("created_by")
+    assert created_by is not None and created_by.index is True and created_by.nullable is False
+
+
+def test_mixin_columns_are_constructor_fields():
+    # mypy caveat (documented in austial-py-doc content/techniques/multi-tenancy.mdx#tenanted-entities):
+    # dataclass_transform only sees fields declared on a class in the transform chain itself, so a
+    # plain (non-@Entity()) mixin's columns are invisible to the synthesized __init__ signature even
+    # though `_inherited_markers()` makes them real constructor kwargs at runtime.
+    widget = _MixinWidget(id="w1", label="x", created_by="alice")  # type: ignore[call-arg]
+
+    assert widget.created_by == "alice"

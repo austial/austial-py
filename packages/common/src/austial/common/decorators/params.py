@@ -48,3 +48,31 @@ def Body(*, default: Any = ..., embed: bool = False, **kwargs) -> Any:
 def Headers(name: str | None = None, *, default: Any = None, **kwargs) -> Any:
     """Equivalent to Nest's ``@Headers('x-api-key')``: binds a request header."""
     return _Header(default=default, alias=name, **kwargs)
+
+
+class GuardStateMarker:
+    """Marks a handler parameter whose value must come from ``request.state`` *after every guard
+    has run* -- unlike every other param helper above, which FastAPI resolves as an ordinary
+    dependency before the handler (and therefore before the router's own guard loop, which runs
+    inside the handler's wrapper). A plain ``Depends(lambda request: request.state.user)`` would
+    read an empty ``state`` for exactly that reason.
+
+    ``RouterBuilder._build_endpoint`` special-cases this marker: it is excluded from what FastAPI
+    sees (it has no place in the OpenAPI schema -- it never comes from the wire) and is instead
+    populated from ``request.state`` right after the guard loop succeeds. See
+    ``austial.auth.CurrentUser()`` for the canonical use.
+    """
+
+    __slots__ = ("attribute", "default")
+
+    def __init__(self, attribute: str, *, default: Any = None) -> None:
+        self.attribute = attribute
+        self.default = default
+
+
+def FromRequestState(attribute: str, *, default: Any = None) -> Any:  # noqa: N802 - decorator-style naming
+    """Bind a handler parameter to ``request.state.<attribute>``, resolved after every guard for
+    this route has run. ``AuthGuard`` populates ``state.user``, ``TenantGuard`` populates
+    ``state.tenant``; a product guard may publish its own. Missing state resolves to ``default``
+    (e.g. on a ``@Public()`` route no guard ran)."""
+    return GuardStateMarker(attribute, default=default)

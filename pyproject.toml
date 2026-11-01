@@ -49,7 +49,16 @@ exclude = ["packages/cli/src/austial/cli/templates/", "build/"]
 # how `@Entity()`'s `dataclass_transform`-synthesized `__init__` went unchecked before this fix.
 mypy_path = [
     "packages/austial/src",
+    "packages/auth/src",
+    "packages/authz/src",
+    "packages/audit/src",
     "packages/cli/src",
+    "packages/i18n/src",
+    "packages/jobs/src",
+    "packages/migrations/src",
+    "packages/security/src",
+    "packages/storage/src",
+    "packages/tenancy/src",
     "packages/common/src",
     "packages/config/src",
     "packages/core/src",

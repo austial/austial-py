@@ -17,14 +17,23 @@ from austial.core.metadata import (
 
 T = TypeVar("T")
 
-_EXPRESS_PARAM_RE = re.compile(r":([A-Za-z_][A-Za-z0-9_]*)")
+_EXPRESS_PARAM_RE = re.compile(r":([A-Za-z_][A-Za-z0-9_]*)(\*)?")
 
 
 def _to_fastapi_path(path: str) -> str:
     """Translates Nest/Express-style ``:id`` path params into FastAPI/Starlette's
     ``{id}`` syntax, so route paths can be written exactly like in Nest, e.g.
-    ``@Get(":id")`` or ``@Get("users/:id/posts/:postId")``."""
-    return _EXPRESS_PARAM_RE.sub(r"{\1}", path)
+    ``@Get(":id")`` or ``@Get("users/:id/posts/:postId")``.
+
+    A trailing ``*`` on a param (``:key*``) marks it as a catch-all that also
+    matches ``/``, translated to FastAPI's ``{key:path}`` converter instead of
+    the plain ``{key}`` -- e.g. ``@Get("files/:key*")`` captures ``a/b/c.pdf``
+    as a single ``key`` value. Substituted in one pass (rather than a separate
+    wildcard-then-plain pass) because FastAPI's own ``{key:path}`` syntax
+    contains a colon that a second plain-``:name`` pass would re-match and
+    corrupt.
+    """
+    return _EXPRESS_PARAM_RE.sub(lambda m: f"{{{m.group(1)}:path}}" if m.group(2) else f"{{{m.group(1)}}}", path)
 
 
 @dataclass
