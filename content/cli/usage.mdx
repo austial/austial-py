@@ -8,7 +8,7 @@ description: Reference for austial new, austial generate and austial serve, with
 ## `austial new`
 
 ```bash
-austial new <name> [--directory/-d PATH] [--skip-install] [--skip-git] [--link PATH]
+austial new <name> [--directory/-d PATH] [--skip-install] [--skip-git] [--skip-agents] [--link PATH]
 ```
 
 | Flag | Effect |
@@ -16,6 +16,7 @@ austial new <name> [--directory/-d PATH] [--skip-install] [--skip-git] [--link P
 | `--directory`, `-d` | Scaffold into a specific path instead of `./<name>` |
 | `--skip-install` | Don't run `uv sync` after scaffolding |
 | `--skip-git` | Don't run `git init` after scaffolding |
+| `--skip-agents` | Don't write `AGENTS.md` or the per-tool symlinks (see [AI Agents](/ai/setup)) |
 | `--link PATH` | Add an editable `[tool.uv.sources]` entry pointing `austial` at a local framework checkout, instead of resolving it from PyPI |
 
 ```bash

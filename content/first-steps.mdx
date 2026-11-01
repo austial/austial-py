@@ -57,6 +57,7 @@ uv run austial serve
 my-app/
 ├── pyproject.toml          # dependencies=["austial>=..."], dev extras, ruff/mypy config
 ├── .env.example             # PORT=8000 / API_KEY=changeme
+├── AGENTS.md                 # rules for AI coding tools (CLAUDE.md, GEMINI.md, ... are symlinks to it)
 ├── .pre-commit-config.yaml   # ruff + mypy + pytest hooks, same as this framework's own repo
 ├── src/
 │   ├── main.py                # AustialFactory.create(AppModule) -> app.listen(8000)

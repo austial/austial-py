@@ -24,17 +24,25 @@ It has four layers. Use as many as you need.
 
 ## Five-minute start
 
+New projects are set up for you. `austial new` writes `AGENTS.md` and the
+symlinks for every supported tool:
+
 ```bash
 austial new my-app && cd my-app
+```
+
+Open the project in your AI tool and fill in the **Project facts** block at
+the top of `AGENTS.md` first. It is the one part of the file only you can
+write, and it is what lets the agent make the right call between, say, SQLite
+and Postgres or JWT and API keys. Pass `--skip-agents` to opt out.
+
+For an **existing** project, add the same setup by hand:
+
+```bash
 curl -fsSL https://docs.austial.com/AGENTS.md -o AGENTS.md
 curl -fsSL https://docs.austial.com/setup-agents.sh -o setup-agents.sh
 sh setup-agents.sh
 ```
-
-Then open the project in your AI tool of choice and ask for a feature. Fill
-in the **Project facts** block at the top of `AGENTS.md` first. It is the one
-part of the file only you can write, and it is what lets the agent make the
-right call between, say, SQLite and Postgres or JWT and API keys.
 
 ## Why a single file with symlinks
 
