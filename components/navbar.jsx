@@ -2,14 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Menu, Search } from "lucide-react";
-import { cn } from "@/lib/cn";
+import { Menu, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import { GithubIcon } from "./icons";
-import { useNav } from "./nav-context";
+import { toggleSidebar, useSidebarCollapsed } from "@/lib/sidebar-state";
 import { ThemeToggle } from "./theme-toggle";
 
 export function Navbar({ onMenu, onSearch }) {
-  const { sections, active } = useNav();
+  const collapsed = useSidebarCollapsed();
 
   return (
     <header className="navbar-wrap">
@@ -18,28 +17,33 @@ export function Navbar({ onMenu, onSearch }) {
           <Menu size={19} />
         </button>
 
+        <button
+          type="button"
+          className="icon-btn rail-toggle"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!collapsed}
+          aria-controls="docs-rail"
+          aria-keyshortcuts="["
+          title={collapsed ? "Expand sidebar  [" : "Collapse sidebar  ["}
+          onClick={toggleSidebar}
+        >
+          {collapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}
+        </button>
+
         <Link href="/" className="brand">
           <Image src="/icon.svg" alt="" width={26} height={26} priority />
           <span>Austial</span>
           <em>docs</em>
         </Link>
 
-        <ul className="section-tabs">
-          {sections.map((s) => (
-            <li key={s.id}>
-              <Link href={s.href} className={cn("section-tab", s.id === active.id && "active")} aria-current={s.id === active.id ? "true" : undefined}>
-                {s.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <button type="button" className="search-btn" onClick={onSearch}>
+          <Search size={16} aria-hidden />
+          <span className="search-btn-label">Search</span>
+          <kbd aria-hidden>⌘K</kbd>
+          <span className="sr-only"> the documentation</span>
+        </button>
 
         <div className="nav-actions">
-          <button type="button" className="search-btn" onClick={onSearch} aria-label="Search the documentation">
-            <Search size={16} aria-hidden />
-            <span className="search-btn-label">Search</span>
-            <kbd>⌘K</kbd>
-          </button>
           <a className="nav-link" href="https://austial.com">
             austial.com
           </a>

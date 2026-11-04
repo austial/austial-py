@@ -1,17 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Navbar } from "./navbar";
-import { NavProvider, useNav } from "./nav-context";
+import { NavProvider } from "./nav-context";
 import { SearchModal } from "./search";
+import { toggleSidebar } from "@/lib/sidebar-state";
 import { SidebarNav } from "./sidebar";
 
 function Drawer({ open, onClose }) {
-  const { sections, active } = useNav();
-
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => e.key === "Escape" && onClose();
@@ -24,21 +22,12 @@ function Drawer({ open, onClose }) {
       <div className="drawer-backdrop" onClick={onClose} />
       <div className="drawer-panel" role="dialog" aria-modal="true" aria-label="Navigation">
         <div className="drawer-head">
-          <span className="side-label">Sections</span>
+          <span className="side-label">Documentation</span>
           <button type="button" className="icon-btn" aria-label="Close navigation" onClick={onClose}>
             <X size={18} />
           </button>
         </div>
-        <ul className="drawer-tabs">
-          {sections.map((s) => (
-            <li key={s.id}>
-              <Link href={s.href} onClick={onClose} className={cn("section-tab", s.id === active.id && "active")}>
-                {s.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
-        <SidebarNav onNavigate={onClose} />
+        <SidebarNav onNavigate={onClose} showHead={false} />
       </div>
     </div>
   );
@@ -57,6 +46,8 @@ function ShellInner({ children, footer }) {
       } else if (e.key === "/" && !typing) {
         e.preventDefault();
         setSearch(true);
+      } else if (e.key === "[" && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        toggleSidebar();
       }
     };
     document.addEventListener("keydown", onKey);
@@ -71,8 +62,8 @@ function ShellInner({ children, footer }) {
       <div className="ambient" aria-hidden />
       <Navbar onMenu={() => setMenu(true)} onSearch={() => setSearch(true)} />
       <div className="shell">
-        <aside className="rail" aria-label="Documentation">
-          <SidebarNav />
+        <aside className="rail" id="docs-rail" aria-label="Documentation">
+          <SidebarNav collapsible />
         </aside>
         <div className="content-col">
           <main id="content">{children}</main>

@@ -3,7 +3,7 @@
 import { createContext, useContext, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { normalizePages } from "nextra/normalize-pages";
-import { buildSections, findSection } from "@/lib/nav";
+import { buildTree, findGroup } from "@/lib/nav";
 
 const NavContext = createContext(null);
 
@@ -13,12 +13,12 @@ export function NavProvider({ pageMap, children }) {
 
   const value = useMemo(() => {
     const normalized = normalizePages({ list: pageMap, route: pathname });
-    const sections = buildSections(normalized.docsDirectories);
+    const tree = buildTree(normalized.docsDirectories);
     const flat = normalized.flatDocsDirectories;
     return {
       pathname,
-      sections,
-      active: findSection(sections, pathname),
+      tree,
+      group: findGroup(tree.groups, pathname),
       flat,
       index: normalized.activeIndex,
       current: flat[normalized.activeIndex],

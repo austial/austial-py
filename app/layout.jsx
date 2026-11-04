@@ -2,6 +2,7 @@ import { Geist_Mono, Manrope } from "next/font/google";
 import { getPageMap } from "nextra/page-map";
 import { ThemeProvider } from "next-themes";
 import { Shell } from "@/components/shell";
+import { SIDEBAR_INIT_SCRIPT } from "@/lib/sidebar-state";
 import { SiteFooter } from "@/components/site-footer";
 import "./globals.css";
 
@@ -40,6 +41,9 @@ export default async function RootLayout({ children }) {
   const pageMap = await getPageMap();
   return (
     <html lang="en" dir="ltr" suppressHydrationWarning className={`${manrope.variable} ${geistMono.variable}`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: SIDEBAR_INIT_SCRIPT }} />
+      </head>
       <body>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
           <Shell pageMap={pageMap} footer={<SiteFooter />}>
