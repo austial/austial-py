@@ -1,8 +1,12 @@
-import { Footer, Layout, Navbar } from "nextra-theme-docs";
-import { Head } from "nextra/components";
+import { Geist_Mono, Manrope } from "next/font/google";
 import { getPageMap } from "nextra/page-map";
-import "nextra-theme-docs/style.css";
+import { ThemeProvider } from "next-themes";
+import { Shell } from "@/components/shell";
+import { SiteFooter } from "@/components/site-footer";
 import "./globals.css";
+
+const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope", display: "swap" });
+const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono", display: "swap" });
 
 export const metadata = {
   metadataBase: new URL("https://docs.austial.com"),
@@ -25,56 +29,23 @@ export const metadata = {
   },
 };
 
-const logo = (
-  <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-    <img src="/icon.svg" alt="" width={24} height={24} />
-    <b>Austial</b>
-  </span>
-);
-
-const navbar = (
-  <Navbar
-    logo={logo}
-    projectLink="https://github.com/austial/austial-py"
-  />
-);
-
-const footer = (
-  <Footer>
-    <span>
-      MIT {new Date().getFullYear()} &copy;{" "}
-      <a href="https://github.com/austial" target="_blank" rel="noreferrer">
-        Austial
-      </a>
-      . Docs for{" "}
-      <a
-        href="https://github.com/austial/austial-py"
-        target="_blank"
-        rel="noreferrer"
-      >
-        austial-py
-      </a>
-      .
-    </span>
-  </Footer>
-);
+export const viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#080606" },
+    { media: "(prefers-color-scheme: light)", color: "#faf8f6" },
+  ],
+};
 
 export default async function RootLayout({ children }) {
   const pageMap = await getPageMap();
   return (
-    <html lang="en" dir="ltr" suppressHydrationWarning>
-      <Head />
+    <html lang="en" dir="ltr" suppressHydrationWarning className={`${manrope.variable} ${geistMono.variable}`}>
       <body>
-        <Layout
-          navbar={navbar}
-          pageMap={pageMap}
-          docsRepositoryBase="https://github.com/austial/austial-py-doc/blob/main"
-          editLink="Edit this page on GitHub"
-          sidebar={{ defaultMenuCollapseLevel: 1, toggleButton: true }}
-          footer={footer}
-        >
-          {children}
-        </Layout>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+          <Shell pageMap={pageMap} footer={<SiteFooter />}>
+            {children}
+          </Shell>
+        </ThemeProvider>
       </body>
     </html>
   );

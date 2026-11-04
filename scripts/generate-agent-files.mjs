@@ -2,13 +2,15 @@
 //
 //   public/llms.txt        page index (https://llmstxt.org format)
 //   public/llms-full.txt   every page concatenated as plain text
+//   public/md/<route>.md   each page on its own as clean markdown (powers the
+//                          "Copy page" and "Open in AI" actions on the site)
 //   public/<file>          any fenced block preceded by {/* publish: <file> */}
 //                          (AGENTS.md, setup-agents.sh), so the page and the
 //                          download can never drift apart
 //
 // Runs before `next dev` and `next build`. Output is git-ignored.
 
-import { mkdirSync, readFileSync, readdirSync, writeFileSync, chmodSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync, chmodSync, existsSync, rmSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -72,12 +74,54 @@ function describe(body) {
   return out.length > 200 ? out.slice(0, 197).trimEnd() + "..." : out;
 }
 
+/**
+ * Flatten the few JSX wrappers the pages use (Tabs, Callout) into plain markdown:
+ * each tab gets a bold label and its content is dedented, so code fences stay fences.
+ */
+function flattenJsx(body) {
+  const out = [];
+  let labels = [];
+  let tab = 0;
+  let strip = 0;
+  for (const line of body.split("\n")) {
+    const tabs = line.match(/^\s*<Tabs\s+items=\{\[([^\]]*)\]\}/);
+    if (tabs) {
+      labels = [...tabs[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+      tab = 0;
+      continue;
+    }
+    if (/^\s*<Tabs\.Tab/.test(line)) {
+      out.push("", `**${labels[tab++] ?? "Option"}**`, "");
+      strip = 4;
+      continue;
+    }
+    if (/^\s*<\/Tabs\.Tab>/.test(line)) {
+      strip = 0;
+      continue;
+    }
+    if (/^\s*<\/Tabs>/.test(line)) continue;
+    if (/^\s*<Callout/.test(line)) {
+      strip = 2;
+      continue;
+    }
+    if (/^\s*<\/Callout>/.test(line)) {
+      strip = 0;
+      continue;
+    }
+    out.push(strip ? line.replace(new RegExp(`^ {1,${strip}}`), "") : line);
+  }
+  return out.join("\n");
+}
+
 /** Plain-text version of an MDX body: drop imports, JSX wrappers and comments. */
 function toPlainText(body) {
-  return body
-    .replace(/^import .*$/gm, "")
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
-    .replace(/^\s*<\/?(Tabs|Cards)[^>]*>\s*$/gm, "")
+  return flattenJsx(
+    body
+      .replace(/^import .*$/gm, "")
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, ""),
+  )
+    .replace(/^\s*<Cards\.Card\s+title="([^"]+)"\s+href="([^"]+)"\s*\/>\s*$/gm, "- [$1]($2)")
+    .replace(/^\s*<\/?Cards[^>]*>\s*$/gm, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
@@ -160,13 +204,27 @@ function publishBlocks(pages) {
   return written;
 }
 
+// One markdown file per page, at the same path as its URL (/overview/controllers -> md/overview/controllers.md).
+function writePageMarkdown(pages) {
+  const mdDir = join(publicDir, "md");
+  rmSync(mdDir, { recursive: true, force: true });
+  for (const p of pages) {
+    const route = new URL(p.url).pathname.replace(/^\/|\/$/g, "") || "index";
+    const target = join(mdDir, `${route}.md`);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, `> Source: ${p.url}\n\n${toPlainText(p.body)}\n`);
+  }
+  return pages.length;
+}
+
 mkdirSync(publicDir, { recursive: true });
 const pages = collectPages();
 writeFileSync(join(publicDir, "llms.txt"), buildLlmsTxt(pages));
 writeFileSync(join(publicDir, "llms-full.txt"), buildLlmsFull(pages));
 const published = publishBlocks(pages);
+const markdownPages = writePageMarkdown(pages);
 
 const rel = (f) => relative(root, join(publicDir, f));
 console.log(
-  `agent files: ${pages.length} pages -> ${["llms.txt", "llms-full.txt", ...published].map(rel).join(", ")}`,
+  `agent files: ${pages.length} pages -> ${["llms.txt", "llms-full.txt", ...published].map(rel).join(", ")}, plus ${markdownPages} page files in public/md/`,
 );

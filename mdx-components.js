@@ -1,8 +1,8 @@
-import { useMDXComponents as getDocsMDXComponents } from "nextra-theme-docs";
-
-const docsComponents = getDocsMDXComponents();
+import { DocWrapper } from "@/components/doc-wrapper";
+import * as elements from "@/components/mdx/elements";
 
 export const useMDXComponents = (components) => ({
-  ...docsComponents,
+  ...elements,
+  wrapper: DocWrapper,
   ...components,
 });
