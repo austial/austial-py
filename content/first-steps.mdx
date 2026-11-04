@@ -2,7 +2,7 @@
 title: First Steps
 ---
 
-import { Tabs } from "nextra/components";
+import { Callout, Tabs } from "nextra/components";
 
 # First Steps
 
@@ -31,6 +31,17 @@ get it running with auto-reload. Austial requires **Python 3.11+** and uses
 </Tabs>
 
 This installs the `austial` console script.
+
+<Callout type="info">
+  **`austial: command not found`?** The folder these tools install into is not
+  on your `PATH` yet. This is common when uv comes from Homebrew, and uv only
+  warns about it the first time you install.
+
+  - **uv:** run `uv tool update-shell`, then open a new terminal window.
+  - **pipx:** run `pipx ensurepath`, then open a new terminal window.
+
+  To skip the install and run the CLI once, use `uvx austial new my-app`.
+</Callout>
 
 ## Scaffolding a new project
 
