@@ -2,20 +2,20 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronRight, PanelLeftClose } from "lucide-react";
+import { ChevronDown, PanelLeftClose } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { containsRoute } from "@/lib/nav";
 import { toggleSidebar } from "@/lib/sidebar-state";
 import { useNav } from "./nav-context";
 
-function PageLink({ item, pathname, onNavigate, depth = 0 }) {
+function PageLink({ item, pathname, onNavigate, depth = 0, root = false }) {
   const active = item.route === pathname;
   return (
     <li>
       <Link
         href={item.route}
         onClick={onNavigate}
-        className={cn("side-link", active && "active")}
+        className={cn("side-link", root && "root", active && "active")}
         aria-current={active ? "page" : undefined}
         style={{ paddingLeft: `${12 + depth * 12}px` }}
       >
@@ -56,7 +56,7 @@ function Accordion({ groups, initialOpen, pathname, onNavigate }) {
                 onClick={() => setOpenId(open ? null : group.id)}
               >
                 <span className="side-text">{group.label}</span>
-                <ChevronRight size={14} className={cn("side-chevron", open && "open")} aria-hidden />
+                <ChevronDown size={16} strokeWidth={1.75} className={cn("side-chevron", open && "open")} aria-hidden />
               </button>
             </h3>
             <div className="side-panel" id={`side-panel-${group.id}`} data-open={open}>
@@ -100,7 +100,7 @@ export function SidebarNav({ onNavigate, collapsible = false, showHead = true })
 
       <ul className="side-list">
         {tree.roots.map((item) => (
-          <PageLink key={item.route} item={item} pathname={pathname} onNavigate={onNavigate} />
+          <PageLink key={item.route} item={item} pathname={pathname} onNavigate={onNavigate} root />
         ))}
       </ul>
 

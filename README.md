@@ -60,7 +60,8 @@ austial-py-doc/
   are plain links and every top-level folder under `content/` is a group (one open at a
   time; the group holding the current page opens itself). Titles and order come from each
   `_meta.js`, so a new folder shows up as a new group with no code change.
-- The selected page, and the group that contains it, are marked with an accent underline.
+- Group headings are bold uppercase with a chevron (accent and pointing up while open).
+  The selected page is an accent-tinted pill, as on docs.nestjs.com.
 - The whole sidebar collapses with the panel button in the navbar (or the `[` key) and the
   choice is remembered.
 - Import `Tabs`, `Callout` and `Cards` in MDX from `@/components/mdx`. Tab groups

@@ -16,6 +16,7 @@
   --heading: #161111;
   --accent: #d63d17;
   --accent-soft: rgb(214 61 23 / 0.09);
+  --active-ink: #b9330d;
   --link: #c2370f;
   --code-bg: #f6f2ef;
   --inline-code-bg: rgb(22 17 17 / 0.06);
@@ -42,6 +43,7 @@
   --heading: #ffffff;
   --accent: #f2542d;
   --accent-soft: rgb(242 84 45 / 0.14);
+  --active-ink: #f2542d;
   --link: #ff8a62;
   --code-bg: #110e0e;
   --inline-code-bg: rgb(255 255 255 / 0.08);
@@ -270,13 +272,14 @@ kbd {
 /* ----------------------------------------------------------------- sidebar */
 
 .sidebar {
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 1.3;
 }
 .side-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin: 0 0 8px;
 }
 .side-collapse {
   width: 30px;
@@ -295,84 +298,84 @@ kbd {
   padding: 0;
   list-style: none;
 }
+
+/* a row is a top-level page, a group heading, or a page inside a group */
 .side-link,
 .side-group {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   width: 100%;
-  padding: 7px 12px;
+  padding: 5px 12px;
   border: 0;
+  border-radius: 12px;
   background: transparent;
-  color: var(--text);
-  font-weight: 500;
   text-align: left;
   text-decoration: none;
   cursor: pointer;
-  transition: color 0.15s;
-}
-.side-link:hover,
-.side-group:hover {
-  color: var(--heading);
-}
-/* the selected page is marked by an accent underline that grows under its title */
-.side-text {
-  padding-bottom: 3px;
-  background-image: linear-gradient(var(--underline, transparent), var(--underline, transparent));
-  background-repeat: no-repeat;
-  background-position: 0 100%;
-  background-size: 0 2px;
-  transition: background-size 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.side-link:hover .side-text,
-.side-group:hover .side-text {
-  --underline: var(--line-strong);
-  background-size: 100% 2px;
-}
-.side-link.active {
-  color: var(--heading);
-  font-weight: 700;
-}
-.side-link.active .side-text {
-  --underline: var(--accent);
-  background-size: 100% 2px;
-}
-.side-chevron {
-  transition: transform 0.15s;
-}
-.side-chevron.open {
-  transform: rotate(90deg);
+  transition: color 0.15s, background 0.15s;
 }
 
-/* accordion groups: a heading button with the group's pages in a panel that slides open */
+/* headings: uppercase, bold, wide-tracked */
+.side-group,
+.side-link.root {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--heading);
+}
+.side-group:hover,
+.side-link.root:hover {
+  color: var(--accent);
+}
+
+/* pages inside a group: sentence case, muted, indented, with no guide line */
+.side-panel .side-list {
+  padding: 2px 0 8px 15px;
+}
+.side-panel .side-list li + li {
+  margin-top: 2px;
+}
+.side-panel .side-link {
+  font-weight: 500;
+  color: var(--text);
+}
+.side-panel .side-link:hover {
+  color: var(--heading);
+}
+
+/* the selected page: accent text on a soft accent pill */
+.side-link.active,
+.side-panel .side-link.active {
+  background: var(--accent-soft);
+  color: var(--active-ink);
+}
+
+/* chevron: grey and pointing down when closed; accent and pointing up when open */
+.side-chevron {
+  flex: none;
+  color: var(--text-dim);
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+.side-chevron.open {
+  transform: rotate(180deg);
+}
+.side-chevron.open,
+.side-group.has-active .side-chevron {
+  color: var(--active-ink);
+}
+
+/* accordion: each group's pages slide open in a panel */
 .side-sections {
-  margin: 14px 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
-}
-.side-section {
-  margin-top: 2px;
 }
 .side-section h3 {
   margin: 0;
   font: inherit;
-}
-.side-group {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-.side-group[aria-expanded="true"],
-.side-group.has-active {
-  color: var(--heading);
-}
-/* the group that holds the current page is underlined, like the page itself */
-.side-group.has-active .side-text {
-  --underline: var(--accent);
-  background-size: 100% 2px;
 }
 .side-panel {
   display: grid;
@@ -385,11 +388,6 @@ kbd {
 .side-panel-inner {
   min-height: 0;
   overflow: hidden;
-}
-.side-panel .side-list {
-  margin: 2px 0 8px 14px;
-  padding-left: 2px;
-  border-left: 1px solid var(--line);
 }
 
 .sr-only {
@@ -1290,5 +1288,13 @@ a.card:hover .card-title svg {
   *::after {
     transition-duration: 0.001ms !important;
     animation-duration: 0.001ms !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .rail {
+    background:
+      radial-gradient(110% 34% at 100% 0%, var(--accent-soft), transparent 72%),
+      var(--surface);
   }
 }
