@@ -9,7 +9,8 @@
     handler = create_lambda_handler(AppModule)        # Lambda handler: "handler.handler"
 
 The application is built once per cold start, outside the handler, and initialises (lifecycle hooks, async
-providers) during the ASGI lifespan startup that Mangum runs on the first invocation. Needs ``pip install mangum``.
+providers) during the ASGI lifespan startup that Mangum runs on the first invocation.
+Needs ``pip install 'austial-core[lambda]'``.
 """
 
 from __future__ import annotations
@@ -26,5 +27,5 @@ def create_lambda_handler(root_module: type, *, lifespan: str = "auto", **mangum
     try:
         from mangum import Mangum
     except ImportError as exc:
-        raise RuntimeError("create_lambda_handler needs Mangum: pip install mangum") from exc
+        raise RuntimeError("create_lambda_handler needs Mangum: pip install 'austial-core[lambda]'") from exc
     return Mangum(AustialFactory.create(root_module), lifespan=lifespan, **mangum_options)  # type: ignore[arg-type]

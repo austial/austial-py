@@ -1,5 +1,5 @@
 """End-to-end DI wiring: ``OrmModule.for_root()``/``.for_feature()`` + ``@InjectRepository()``
-resolve through ``austial-testing``'s ``Test.create_testing_module(...)``, the same way a real
+resolve through ``austial.testing``'s ``Test.create_testing_module(...)``, the same way a real
 app would wire a service to a repository -- proves the DI seam (``InjectRepository`` reusing
 ``InjectMarker`` directly, no container changes) actually works, not just that its pieces
 type-check in isolation.

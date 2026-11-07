@@ -52,14 +52,20 @@ def test_build_compiles_and_scans_the_module_graph(project: Path) -> None:
 
 
 def test_add_validates_names_and_builds_the_uv_command(project: Path) -> None:
-    assert add_command("cache") == ["uv", "add", "austial-cache"]
-    assert add_command("austial-events") == ["uv", "add", "austial-events"]
+    assert add_command("redis") == ["uv", "add", "austial-microservices[redis]"]
+    assert add_command("austial-orm") == ["uv", "add", "austial-orm"]
+    assert add_command("mongo") == ["uv", "add", "austial-orm[pymongo]"]
+    assert add_command("graphql") == ["uv", "add", "austial-core[strawberry]"]
+    with pytest.raises(TargetError, match="part of austial-core"):  # a module that already ships with `austial`
+        add_command("cache")
     with pytest.raises(TargetError, match="Unknown package"):
         add_command("left-pad")
-    assert {"cache", "events", "websockets", "graphql", "mongo", "prisma"} <= set(KNOWN_PACKAGES)
+    assert {"core", "orm", "auth", "redis", "socketio", "grpc-proto", "mongo", "lambda"} <= set(KNOWN_PACKAGES)
 
-    dry = runner.invoke(app, ["add", "cache", "--dry-run"])
-    assert dry.exit_code == 0 and "uv add austial-cache" in dry.output
+    dry = runner.invoke(app, ["add", "socketio", "--dry-run"])
+    assert dry.exit_code == 0 and "uv add austial-core[socketio]" in dry.output
+    included = runner.invoke(app, ["add", "cache", "--dry-run"])
+    assert included.exit_code == 1 and "part of austial-core" in included.output
     unknown = runner.invoke(app, ["add", "nope", "--dry-run"])
     assert unknown.exit_code == 1 and "Unknown package" in unknown.output
 
@@ -75,9 +81,9 @@ def test_add_runs_uv_in_the_project_root(project: Path, monkeypatch: pytest.Monk
         return Done()
 
     monkeypatch.setattr("subprocess.run", fake_run)
-    result = runner.invoke(app, ["add", "events"])
+    result = runner.invoke(app, ["add", "redis"])
     assert result.exit_code == 0
-    assert calls == [(["uv", "add", "austial-events"], project)]
+    assert calls == [(["uv", "add", "austial-microservices[redis]"], project)]
 
 
 def test_start_command_passes_watch_and_app_through(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:

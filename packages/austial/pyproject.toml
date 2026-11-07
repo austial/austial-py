@@ -7,35 +7,26 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 urls = { Homepage = "https://github.com/austial/austial-py", Repository = "https://github.com/austial/austial-py", Issues = "https://github.com/austial/austial-py/issues" }
 dependencies = [
-    "austial-common",
     "austial-core",
-    "austial-config",
-    "austial-orm",
-    "austial-terminus",
-    "austial-testing",
-    "austial-cli",
-    "austial-auth",
-    "austial-tenancy",
-    "austial-authz",
-    "austial-security",
-    "austial-migrations",
-    "austial-audit",
-    "austial-jobs",
-    "austial-storage",
-    "austial-i18n",
-    "austial-cache",
-    "austial-events",
-    "austial-http",
-    "austial-schedule",
-    "austial-cqrs",
-    "austial-websockets",
     "austial-microservices",
-    "austial-openapi",
-    "austial-graphql",
-    "austial-mongo",
-    "austial-prisma",
-    "austial-commander",
+    "austial-orm",
+    "austial-auth",
+    "austial-cli",
 ]
+
+[project.optional-dependencies]
+# Forwarded to the package that owns the integration, e.g. `pip install 'austial[socketio,redis]'`.
+strawberry = ["austial-core[strawberry]"]
+socketio = ["austial-core[socketio]"]
+redis = ["austial-microservices[redis]"]
+nats = ["austial-microservices[nats]"]
+kafka = ["austial-microservices[kafka]"]
+mqtt = ["austial-microservices[mqtt]"]
+rabbitmq = ["austial-microservices[rabbitmq]"]
+grpc = ["austial-microservices[grpc]"]
+grpc-proto = ["austial-microservices[grpc-proto]"]
+lambda = ["austial-core[lambda]"]
+pymongo = ["austial-orm[pymongo]"]
 
 [project.scripts]
 austial = "austial.cli.main:run"
@@ -48,34 +39,11 @@ build-backend = "hatchling.build"
 packages = ["src/austial"]
 
 [tool.uv.sources]
-austial-common = { workspace = true }
 austial-core = { workspace = true }
-austial-config = { workspace = true }
-austial-orm = { workspace = true }
-austial-terminus = { workspace = true }
-austial-testing = { workspace = true }
-austial-cli = { workspace = true }
-austial-auth = { workspace = true }
-austial-tenancy = { workspace = true }
-austial-authz = { workspace = true }
-austial-security = { workspace = true }
-austial-migrations = { workspace = true }
-austial-audit = { workspace = true }
-austial-jobs = { workspace = true }
-austial-storage = { workspace = true }
-austial-i18n = { workspace = true }
-austial-cache = { workspace = true }
-austial-events = { workspace = true }
-austial-http = { workspace = true }
-austial-schedule = { workspace = true }
-austial-cqrs = { workspace = true }
-austial-websockets = { workspace = true }
 austial-microservices = { workspace = true }
-austial-openapi = { workspace = true }
-austial-graphql = { workspace = true }
-austial-mongo = { workspace = true }
-austial-prisma = { workspace = true }
-austial-commander = { workspace = true }
+austial-orm = { workspace = true }
+austial-auth = { workspace = true }
+austial-cli = { workspace = true }
 
 [tool.hatch.version]
 source = "vcs"

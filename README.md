@@ -176,40 +176,31 @@ workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) (like
 
 ```
 austial-py/
-├── pyproject.toml            # virtual workspace root: [tool.uv.workspace], shared ruff/mypy/pytest config
-├── LICENSE                    # MIT
+├── pyproject.toml              # virtual workspace root: [tool.uv.workspace], shared ruff/mypy/pytest config
+├── LICENSE                     # MIT
 ├── assets/                     # logo.svg (+ logo-dark.svg for dark mode) / icon.svg / apple-icon.png
-├── packages/                    # every installable distribution; each is `austial.<name>` via
-│   │                             # a pkgutil-style namespace-package shim -- imports stay
-│   │                             # `from austial.core import ...` etc, unchanged
-│   ├── austial/                   # umbrella "austial" dist: re-exports common+core's
-│   │   │                          # everyday symbols, depends on ALL packages below,
-│   │   │                          # owns the `austial` console-script entry point
-│   │   └── src/austial/__init__.py
-│   ├── common/                     # "austial-common" -- decorators, guards, interceptors,
-│   │   │                           # pipes, filters, middleware, exceptions, logger
-│   │   └── src/austial/common/
-│   ├── core/                        # "austial-core" -- metadata/reflector, DI container,
-│   │   │                            # router builder, AustialFactory / AustialApplication
-│   │   └── src/austial/core/
-│   ├── config/                       # "austial-config" -- ConfigModule / ConfigService
-│   │   └── src/austial/config/       # (no nestjs/nest equivalent -- mirrors the separate
-│   │                                 #  @nestjs/config repo instead)
-│   ├── orm/                            # "austial-orm" -- DatabaseModule (SQLAlchemy async)
-│   │   └── src/austial/orm/           # (mirrors the separate @nestjs/typeorm repo)
-│   ├── terminus/                       # "austial-terminus" -- HealthCheckService + indicators,
-│   │   ├── test/                       # own health_check_service_spec.py, like Nest's
-│   │   │                               # per-package test/ dirs
-│   │   └── src/austial/terminus/        # (mirrors the separate @nestjs/terminus repo)
-│   ├── testing/                          # "austial-testing" -- Test.create_testing_module(...)
-│   │   └── src/austial/testing/
-│   └── cli/                                # "austial-cli" -- `austial new`/`generate`/`serve`
-│       └── src/austial/cli/                 # + Jinja2 templates (mirrors the separate
-│                                             #  nest-cli repo)
-└── integration/               # cross-package e2e tests -- mirrors Nest's top-level
-                                # `integration/` dir (its per-package unit tests live
-                                # in each package's own `test/`)
+├── packages/                   # the six published distributions; every module is `austial.<name>` via a
+│   │                           # pkgutil-style namespace shim, so imports never mention the distribution
+│   ├── austial/                # umbrella "austial": depends on the five below, re-exports the everyday
+│   │                           # symbols, forwards the optional extras, owns the `austial` console script
+│   ├── core/                   # "austial-core" -- the platform: common (decorators, guards, pipes, filters,
+│   │   │                       # exceptions), core (DI, router, AustialFactory), config, testing, events, cache,
+│   │   │                       # schedule, jobs, cqrs, http, i18n, storage, terminus, commander, websockets,
+│   │   │                       # graphql, openapi
+│   │   └── src/austial/{common,core,config,...}/
+│   ├── microservices/          # "austial-microservices" -- transports (TCP, Redis, NATS, Kafka, MQTT, RabbitMQ, gRPC),
+│   │                           # ClientProxy, hybrid apps; broker libraries are its extras
+│   ├── orm/                    # "austial-orm" -- orm (TypeORM-shaped), migrations, mongo, prisma, audit, tenancy
+│   ├── auth/                   # "austial-auth" -- auth (JWT, TOTP, OAuth2/OIDC, strategies), authz, security
+│   └── cli/                    # "austial-cli" -- `austial new/generate/start/build/graph/...` + Jinja2 templates
+└── integration/                # cross-package e2e and live-broker tests (docker-compose.brokers.yml);
+                                # each package's unit tests live in its own `test/`
 ```
+
+Optional integrations are extras: `pip install 'austial[redis,socketio]'` (or the distribution's own extra): `strawberry`,
+`socketio`, `lambda` (`austial-core`); `redis`, `nats`, `kafka`, `mqtt`, `rabbitmq`, `grpc`, `grpc-proto` (`austial-microservices`);
+`pymongo` (`austial-orm`).
+`scripts/check_package_boundaries.py` (run in CI) keeps a distribution from importing modules of one it does not depend on.
 
 There's deliberately no `src/` at the repo root -- that's what `austial new`
 generates for *your* project, kept out of the framework's own repo. Test files
@@ -264,7 +255,7 @@ git push origin vX.Y.Z
 Pushing that tag triggers [`.github/workflows/publish.yml`](.github/workflows/publish.yml),
 which re-runs the lint/type-check/test gate, builds the sdist + wheel for
 every `packages/*` member once with `uv build --all-packages`, then publishes
-each of the 8 distributions to PyPI via
+each of the 6 distributions to PyPI via
 [trusted publishing](https://docs.pypi.org/trusted-publishers/) (no API token
 stored as a secret) from its own job in a matrix -- one job per PyPI project,
 each minting its own OIDC token, since a trusted-publishing token is scoped
@@ -273,15 +264,11 @@ through one job/one token gets every project but one rejected with `403
 Invalid API Token: OIDC scoped token is not valid for project '<name>'`.
 A final job attaches all the built artifacts to a GitHub release.
 
-One-time setup per distribution: `austial`, `austial-common`,
-`austial-core`, `austial-config`, `austial-orm`, `austial-terminus`,
-`austial-testing` and `austial-cli` are each their own PyPI project and each
-need a trusted publisher added for `austial-py`'s `publish.yml` workflow
-(environment `pypi`) -- on the *existing* `austial` project's
-[publishing settings](https://pypi.org/manage/project/austial/settings/publishing/)
-page for `austial` itself, or via a
-["pending publisher"](https://pypi.org/manage/account/publishing/) for the
-7 project names that don't exist on PyPI yet.
+One-time setup per distribution: `austial`, `austial-core`, `austial-microservices`, `austial-orm`, `austial-auth` and `austial-cli` are each their
+own PyPI project and each need a trusted publisher added for `austial-py`'s `publish.yml` workflow (environment `pypi`),
+on the project's publishing settings page
+(`https://pypi.org/manage/project/<name>/settings/publishing/`), or via a
+["pending publisher"](https://pypi.org/manage/account/publishing/) for a name that doesn't exist on PyPI yet.
 
 ## License
 

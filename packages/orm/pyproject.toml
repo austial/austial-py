@@ -1,10 +1,9 @@
 [project]
 name = "austial-orm"
 dynamic = ["version"]
-description = "A from-scratch, TypeORM-shaped ORM (entities, relations, Repository, QueryBuilder, DataSource) -- mirrors typeorm, with SQLAlchemy Core hidden behind a pluggable Driver as the SQL-compilation/pooling layer."
+description = "Data access: a TypeORM-shaped ORM (entities, relations, Repository, QueryBuilder, DataSource), Alembic migrations, MongoDB models, Prisma wiring, audit log and multi-tenancy."
 requires-python = ">=3.11"
 dependencies = [
-    "austial-common",
     "austial-core",
     "sqlalchemy>=2.0.30",
     # SQLAlchemy's async engine requires greenlet, but SQLAlchemy only pulls it in on some
@@ -12,7 +11,11 @@ dependencies = [
     "greenlet>=3.1.0",
     "aiosqlite>=0.20.0",
     "asyncpg>=0.29.0",
+    "alembic>=1.13.0",
 ]
+
+[project.optional-dependencies]
+pymongo = ["pymongo>=4.9"]                               # austial.mongo
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
@@ -22,7 +25,6 @@ build-backend = "hatchling.build"
 packages = ["src/austial"]
 
 [tool.uv.sources]
-austial-common = { workspace = true }
 austial-core = { workspace = true }
 
 [tool.hatch.version]

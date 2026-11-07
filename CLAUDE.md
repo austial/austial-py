@@ -1,7 +1,7 @@
 # Austial (framework repo)
 
 A NestJS-style, batteries-included web framework for Python on FastAPI. This repo is the **framework**
-(a uv workspace of 29 independently published packages under `packages/`). It has no sample app: the
+(a uv workspace of 6 published distributions under `packages/`; modules keep their `austial.<name>` import paths). It has no sample app: the
 generated project from `austial new` plays that role. The documentation site is a **separate repo**,
 `../austial-py-doc` (Next.js + Nextra, MDX under `content/`).
 
@@ -22,12 +22,18 @@ Run `/code-reviewer` on your own diff before committing or opening a PR.
 
 ## Layout and where things go
 
-| Package | Owns |
+| Distribution | Owns (`austial.<module>`) |
 |---|---|
-| `packages/core` | DI `Container`, module scanner, `RouterBuilder`, `AustialApplication`, lifecycle, request context, `ModuleRef` |
-| `packages/common` | Decorators, pipes, guards, interceptors, filters, exceptions, `StreamableFile`, serializer, mapped types |
-| `packages/austial` | The umbrella `austial` package: re-exports the everyday symbols and owns the CLI entry point |
-| `packages/{orm,config,terminus,testing,cli,auth,authz,tenancy,security,audit,jobs,storage,i18n,migrations,cache,events,http,schedule,cqrs,websockets,microservices,openapi,graphql,mongo,prisma,commander}` | One feature each; `austial.<name>` via a pkgutil namespace shim |
+| `packages/core` (`austial-core`) | The platform. `core` (DI `Container`, module scanner, `RouterBuilder`, `AustialApplication`, lifecycle, request context, `ModuleRef`), `common` (decorators, pipes, guards, interceptors, filters, exceptions), `config`, `testing`, `events`, `cache`, `schedule`, `jobs`, `cqrs`, `http`, `i18n`, `storage`, `terminus`, `commander`, `websockets`, `graphql`, `openapi` |
+| `packages/microservices` (`austial-microservices`) | `microservices`: transports (TCP, in-process, Redis Pub/Sub and Streams, NATS, Kafka, MQTT, RabbitMQ, gRPC JSON and protobuf), `ClientProxy`, hybrid apps |
+| `packages/orm` (`austial-orm`) | Data access: `orm`, `migrations`, `mongo`, `prisma`, `audit`, `tenancy` |
+| `packages/auth` (`austial-auth`) | Identity and access: `auth`, `authz`, `security` |
+| `packages/cli` (`austial-cli`) | The `austial` command and its project templates |
+| `packages/austial` | The umbrella `austial` package: depends on the five above, re-exports the everyday symbols, forwards the optional extras |
+
+A module lives in the distribution that owns its heavy dependencies; optional libraries are **extras** (`austial-core[socketio|strawberry|lambda]`,
+`austial-microservices[redis|nats|kafka|mqtt|rabbitmq|grpc|grpc-proto]`, `austial-orm[pymongo]`), imported lazily. `scripts/check_package_boundaries.py`
+fails when a distribution imports a module owned by one it does not depend on (core must never import orm or auth at module level).
 
 - A new **public** symbol is exported from its package `__init__.py` **and** from
   `packages/austial/src/austial/__init__.py` (+ `__all__`) when it is an everyday import.
@@ -38,9 +44,10 @@ Run `/code-reviewer` on your own diff before committing or opening a PR.
 ## Architecture notes that cause bugs if you forget them
 
 - **One application-wide container.** Module `exports` are not enforced as visibility.
-- **Routes build lazily**, on the first non-lifespan ASGI scope (or `await app.init()`), *after* the ASGI
-  startup handlers. Never resolve providers eagerly at import/`create()` time: a repository over a
-  not-yet-initialised `DataSource` would crash.
+- **Routes build at startup** (after `init()` in the ASGI lifespan, or on the first request when there is no lifespan),
+  after the ASGI startup handlers, so an unresolvable dependency fails the startup. Never resolve providers eagerly at
+  import/`create()` time. `OrmModule` connects the `DataSource` in its own `on_module_init` hook, and repositories reach the
+  manager lazily.
 - **Request pipeline:** guards -> pipes -> interceptors (wrapping) -> handler -> exception filters. The
   default `AllExceptionsFilter` always closes the filter chain.
 - **Scope bubbles up:** anything depending on a `Scope.REQUEST` provider (or the `REQUEST` token) is

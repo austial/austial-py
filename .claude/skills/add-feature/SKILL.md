@@ -10,7 +10,7 @@ Implement: $ARGUMENTS
 Follow this order. Do not skip steps; do not start step 3 before step 2 fails for the right reason.
 
 1. **Scope it.** Name the NestJS equivalent (if any) and what it does. Find the existing code that
-   owns the area (`packages/core` for DI/routing/lifecycle, `packages/common` for decorators, pipes,
+   owns the area (`packages/core/src/austial/core` for DI/routing/lifecycle, `.../austial/common` for decorators, pipes,
    interceptors, filters, exceptions). Read it before designing. Prefer extending over adding a package.
    If the design has a real fork (public API shape, breaking change), ask the user once, briefly.
 2. **Write failing tests first**, in the owning package's `test/` as `*_spec.py`. Cover the happy path,
