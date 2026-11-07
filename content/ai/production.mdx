@@ -33,9 +33,9 @@ uv run pytest -q
 
 - [ ] `src/main.py` registers `ValidationPipe()` and `AllExceptionsFilter()`
       globally so every error has one shape.
-- [ ] `DataSource.initialize()` runs in a `startup` event handler. Under
-      `uvicorn src.main:app` or `austial serve`, `bootstrap()` is never
-      called ([Database](/techniques/database), "Production deployments").
+- [ ] `OrmModule.for_root(...)` is imported once. It connects the `DataSource` on startup and
+      closes it on shutdown; a missing or misconfigured module fails the startup
+      ([Database](/techniques/database), "Connecting and closing").
 - [ ] `synchronize=True` is **off**. The schema comes from migrations.
 - [ ] CORS is configured deliberately. `app.enable_cors()` with no arguments
       allows **every origin, method and header, with credentials**. That is a

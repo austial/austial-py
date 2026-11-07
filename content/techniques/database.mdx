@@ -84,58 +84,23 @@ driver-specific kwargs). `entities`/`synchronize` stay static — they describe 
 not runtime connection config, so they're passed directly to `for_root_async()` itself rather
 than through the factory.
 
-### The one manual step: initializing the `DataSource`
+### Connecting and closing
 
-`austial-core`'s module scanner walks `@Module(imports=[...])` synchronously and eagerly, and
-there's no async module-init lifecycle hook (yet) for `OrmModule` to hook into. So
-`OrmModule.for_root()` only *constructs* the `Driver`/`DataSource` object at module-scan time
-(cheap — no connection opens yet); your entrypoint must explicitly initialize it before serving
-requests, exactly like vanilla (non-Nest) TypeORM:
-
-```python
-from austial import AustialFactory
-from austial.orm import DataSource
-
-from src.app_module import AppModule
-
-app = AustialFactory.create(AppModule)
-
-
-async def bootstrap() -> None:
-    await app.get(DataSource).initialize()
-    await app.listen(8000)
-```
-
-`synchronize=True` (dev/test only — not the production path once migrations exist) makes
-`initialize()` also issue `CREATE TABLE` for every entity in `entities=[...]`.
-
-#### Production deployments (`uvicorn src.main:app` / `austial serve`)
-
-The `bootstrap()` function above only runs for `python src/main.py` — `uvicorn src.main:app` and
-`austial serve` (the deployment target in Docker/production) both just import `src.main:app` and
-hand it straight to uvicorn, so `bootstrap()` is never called and `DataSource.initialize()` never
-runs. For those entry points, register it as an ASGI `"startup"` lifespan event handler instead,
-via `get_http_adapter()`:
+`OrmModule` connects the `DataSource` when the application initialises (`app.listen()`, uvicorn's lifespan startup, or
+`await app.init()` in tests) and closes it on shutdown, as `TypeOrmModule` does. There is nothing to call yourself, and
+repositories can be injected anywhere, including into providers with `on_module_init` hooks. `DataSource.initialize()` is
+idempotent, so older code that calls `await app.get(DataSource).initialize()` keeps working.
 
 ```python
-from austial import AustialFactory
-from austial.orm import DataSource
-
-from src.app_module import AppModule
-
-app = AustialFactory.create(AppModule)
-
-
-@app.get_http_adapter().on_event("startup")
-async def _init_data_source() -> None:
-    await app.get(DataSource).initialize()
+app = AustialFactory.create(AppModule)      # python src/main.py, uvicorn src.main:app and `austial start` all work
 ```
 
-This is safe with any global guard/pipe/interceptor/filter that constructor-injects a
-`Repository` via `@InjectRepository()`, even though route-building resolves those constructors:
-`AustialApplication` defers route-building until the first non-lifespan ASGI scope, so it always
-runs *after* every `"startup"` handler registered here has already completed, for both
-`app.listen()` and the bare-ASGI (`uvicorn`/`austial serve`) entry points.
+`synchronize=True` (dev/test only, not the production path once migrations exist) makes the connection also issue `CREATE TABLE`
+for every entity in `entities=[...]`.
+
+Routes are built during startup, after the application initialises, so a controller whose dependencies can't be resolved (a
+resource generated without `OrmModule.for_root(...)`, say) fails the startup with the error instead of answering `500` to every
+request.
 
 ## Repositories
 

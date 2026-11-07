@@ -110,7 +110,7 @@ exception filters**. Middleware runs before all of it.
 | `Module Controller Injectable Get Post Put Patch Delete All Body Param Query Headers UseGuards UseInterceptors UsePipes UseFilters HttpCode Header Redirect Sse Version Scope Global Inject forward_ref ModuleRef DiscoveryService LazyModuleLoader REQUEST`, `create_lambda_handler Cookies RawBody Render Next NextFunction PassToNext HttpAdapterHost ContextIdStrategy ModuleVisibilityError APP_GUARD APP_PIPE APP_INTERCEPTOR APP_FILTER LoggerService ConsoleLogger LOG_LEVELS AsyncProviderNotInitializedError ParseDatePipe ParseIntPipe ParseFloatPipe ParseBoolPipe ParseUUIDPipe ParseEnumPipe ParseArrayPipe DefaultValuePipe ParseFilePipe UploadedFile Ip HostParam Session StreamableFile MessageEvent TimeoutInterceptor ClassSerializerInterceptor Exclude Expose PartialType PickType OmitType IntersectionType create_param_decorator apply_decorators VersioningType VERSION_NEUTRAL`, all `*Exception` classes, `CanActivate ExecutionContext NestInterceptor NestMiddleware PipeTransform ExceptionFilter Catch ValidationPipe AustialFactory Reflector` | `austial` |
 | `ConfigModule ConfigService` | `austial.config` |
 | `OrmModule DataSource Entity Column PrimaryGeneratedColumn Repository InjectRepository FindOptions In NotIn IsNull NotNull ManyToOne OneToMany` | `austial.orm` |
-| `AuthModule AuthConfig AuthGuard AuthService CurrentUser Public JwtStrategy Argon2Hasher TotpStrategy` | `austial.auth` |
+| `AuthStrategy StrategyGuard StrategyRegistry JwtBearerStrategy AuthModule AuthConfig AuthGuard AuthService CurrentUser Public JwtStrategy Argon2Hasher TotpStrategy` | `austial.auth` |
 | `AuthzModule RolesGuard Roles Permissions AuthorizeObject PermissionService` | `austial.authz` |
 | `TenancyModule TenantGuard TenantContext RequireTenant Tenanted` | `austial.tenancy` |
 | `SecurityModule SecurityConfig RateLimit RateLimitGuard IdempotencyKeyGuard CsrfInterceptor SecureHeadersMiddleware PIIRedactor EnvelopeEncryptor` | `austial.security` |
@@ -124,11 +124,11 @@ exception filters**. Middleware runs before all of it.
 | `HttpModule HttpService HttpStatusError` | `austial.http` |
 | `ScheduleModule SchedulerRegistry Cron Interval Timeout` | `austial.schedule` |
 | `CqrsModule CommandBus QueryBus EventBus CommandHandler QueryHandler EventsHandler Saga AggregateRoot` | `austial.cqrs` |
-| `WebSocketsModule WebSocketGateway SubscribeMessage MessageBody ConnectedSocket WsClient WsServer SocketIoAdapter SocketIoClient SocketIoServer` | `austial.websockets` |
-| `MessagePattern EventPattern Payload ClientsModule ClientProxy Transport MicroserviceOptions ClientOptions JsonCodec build_client_transport build_server_transport create_microservice` | `austial.microservices` |
+| `WebSocketsModule WebSocketGateway SubscribeMessage MessageBody ConnectedSocket WsClient WsServer WsAdapter SocketIoAdapter SocketIoClient SocketIoServer` | `austial.websockets` |
+| `MessagePattern EventPattern Payload ClientsModule ClientProxy Transport MicroserviceOptions ClientOptions JsonCodec GrpcMethod build_client_transport build_server_transport create_microservice` | `austial.microservices` |
 | `ApiTags ApiOperation ApiResponse ApiProperty DocumentBuilder SwaggerModule` | `austial.openapi` |
 | `GraphQLModule inject` | `austial.graphql` |
-| `MongoModule InjectCollection` | `austial.mongo` |
+| `MongoModule InjectCollection Schema Document Index Model InjectModel ModelRegistry model_token schema_of` | `austial.mongo` |
 | `PrismaModule` | `austial.prisma` |
 | `HealthCheckService MemoryHealthIndicator DatabaseHealthIndicator HttpHealthIndicator TcpHealthIndicator DiskHealthIndicator MongoHealthIndicator` | `austial.terminus` |
 | `Command CommandRunner SubCommand Option CommandFactory CommanderError Prompts` | `austial.commander` |
@@ -188,8 +188,8 @@ Before calling a feature production-ready, confirm:
 1. All checks in "Definition of done" pass.
 2. Secrets come from the environment and `jwt_secret` /
    `signed_url_secret` are 32+ characters.
-3. `DataSource.initialize()` runs in a `startup` event handler, because
-   `uvicorn src.main:app` never calls `bootstrap()`.
+3. `OrmModule.for_root(...)` is imported once; it connects the `DataSource` on
+   startup (no manual `initialize()` call) and a bad config fails the startup.
 4. `GET /health` is wired to `DatabaseHealthIndicator`.
 5. Global `ValidationPipe` and `AllExceptionsFilter` are registered, and
    `AuthGuard` is global or on every non-public controller.

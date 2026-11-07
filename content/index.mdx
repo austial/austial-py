@@ -93,13 +93,10 @@ don't go looking for them:
   (see [Module Visibility](/fundamentals/module-visibility)).
 - **Pluggable HTTP platform** — Austial runs on FastAPI/Starlette only; there is no
   Express-or-Fastify-style adapter layer.
-- **Broker transports are lightly tested** — Redis, NATS, Kafka, MQTT, RabbitMQ and gRPC ship, but
-  only gRPC and Redis run against the real client libraries in CI; the rest use fakes (see
-  [Microservices](/techniques/microservices)).
 - **GraphQL beyond Strawberry** — code-first schemas via Strawberry only; no schema-first
   mode or federation helpers (subscriptions work over WebSocket).
-- **ORMs** — the built-in ORM supports PostgreSQL and SQLite; MongoDB and Prisma are wired in
-  at the connection level, not as mapped entities.
+- **SQL ORMs beyond the built-in one** — it supports PostgreSQL and SQLite; there is no TypeORM, Sequelize or
+  MikroORM adapter. MongoDB has Mongoose-style models; Prisma is wired in at the connection level.
 - **RxJS-style interceptor streams** — `CallHandler.handle()` is a plain
   async continuation, not an Observable.
 
