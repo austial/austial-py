@@ -1,0 +1,10 @@
+{
+  "name": "austial",
+  "version": "1.0.0",
+  "description": "Build applications on the Austial framework (NestJS-style Python on FastAPI): an app builder workflow, feature recipes, a production review, and an agent that knows the framework's rules.",
+  "author": { "name": "Austial", "url": "https://github.com/austial" },
+  "homepage": "https://docs.austial.com",
+  "repository": "https://github.com/austial/austial-py",
+  "license": "MIT",
+  "keywords": ["austial", "python", "fastapi", "nestjs", "framework", "backend"]
+}

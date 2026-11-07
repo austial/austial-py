@@ -1,0 +1,17 @@
+{
+  "name": "austial",
+  "owner": { "name": "Austial", "url": "https://github.com/austial" },
+  "metadata": {
+    "description": "Claude Code plugins for building applications with the Austial framework.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "austial",
+      "source": "./plugins/austial",
+      "description": "Build, extend and review applications on the Austial framework (NestJS-style Python on FastAPI): scaffolding, recipes for every feature, and a production review.",
+      "category": "development",
+      "tags": ["python", "fastapi", "nestjs", "framework", "austial"]
+    }
+  ]
+}
