@@ -25,6 +25,16 @@ dependencies = [
     "austial-i18n",
     "austial-cache",
     "austial-events",
+    "austial-http",
+    "austial-schedule",
+    "austial-cqrs",
+    "austial-websockets",
+    "austial-microservices",
+    "austial-openapi",
+    "austial-graphql",
+    "austial-mongo",
+    "austial-prisma",
+    "austial-commander",
 ]
 
 [project.scripts]
@@ -56,6 +66,16 @@ austial-storage = { workspace = true }
 austial-i18n = { workspace = true }
 austial-cache = { workspace = true }
 austial-events = { workspace = true }
+austial-http = { workspace = true }
+austial-schedule = { workspace = true }
+austial-cqrs = { workspace = true }
+austial-websockets = { workspace = true }
+austial-microservices = { workspace = true }
+austial-openapi = { workspace = true }
+austial-graphql = { workspace = true }
+austial-mongo = { workspace = true }
+austial-prisma = { workspace = true }
+austial-commander = { workspace = true }
 
 [tool.hatch.version]
 source = "vcs"

@@ -25,6 +25,7 @@ from austial.common.logger import Logger
 from austial.core.application_context import AustialApplicationContext
 from austial.core.container import Container
 from austial.core.exception_dispatch import dispatch_exception
+from austial.core.http_adapter_host import HttpAdapterHost
 from austial.core.router_builder import RouterBuilder
 from austial.core.routing import GlobalPrefix, RouteInfo, VersioningOptions
 
@@ -48,10 +49,15 @@ class AustialApplication(AustialApplicationContext):
         self._global_prefix: GlobalPrefix | None = None
         self._versioning: VersioningOptions | None = None
         self._static_mounts: list[tuple[str, str, dict[str, Any]]] = []
+        self._views_dir: str | None = None
+        self._microservices: list[Any] = []
+        self._url: str | None = None
+        self._server: Any = None
 
         self._install_fallback_exception_handlers()
         self._install_middleware()
         self._install_lifespan()
+        container.resolve(HttpAdapterHost).http_adapter = fastapi_app
 
     # -- Nest-shaped configuration API ------------------------------------------------
     def use_global_pipes(self, *pipes: Any) -> AustialApplication:
@@ -109,11 +115,35 @@ class AustialApplication(AustialApplicationContext):
         )
         return self
 
+    def connect_microservice(self, options: Any, *, auto_start: bool = True) -> AustialApplication:
+        """Makes this a *hybrid* application: besides HTTP it also serves ``@MessagePattern``/``@EventPattern``
+        handlers over ``options`` (an ``austial.microservices.MicroserviceOptions``). With ``auto_start`` (default)
+        the transport starts and stops with the application; otherwise call ``await start_all_microservices()``."""
+        try:
+            from austial.microservices import attach_microservice
+        except ImportError as exc:  # pragma: no cover - austial-microservices ships with the umbrella package
+            raise RuntimeError("connect_microservice needs the austial-microservices package") from exc
+        server = attach_microservice(self, options)
+        self._microservices.append(server)
+        if auto_start:
+            self._extensions.append(server)
+        return self
+
+    async def start_all_microservices(self) -> None:
+        for server in self._microservices:
+            await server.start()
+
     def use_logger(self, logger: Any) -> AustialApplication:
         """Replaces the framework's logger (a ``LoggerService``, a list of levels, or ``False``) and flushes
         any output held back by ``buffer_logs=True``. Mirrors ``app.useLogger()``."""
         Logger.override_logger(logger)
         Logger.flush()
+        return self
+
+    def set_base_views_dir(self, directory: str) -> AustialApplication:
+        """Where ``@Render("name.html")`` finds its Jinja2 templates, mirrors ``app.setBaseViewsDir()``."""
+        self._ensure_routes_not_built("set_base_views_dir")
+        self._views_dir = directory
         return self
 
     def use_static_assets(self, directory: str, *, prefix: str = "/", **options: Any) -> AustialApplication:
@@ -192,6 +222,7 @@ class AustialApplication(AustialApplicationContext):
             global_filters=self._global_filters,
             global_prefix=self._global_prefix,
             versioning=self._versioning,
+            views_dir=self._views_dir,
         )
         router = builder.build(self._controllers)
         self._fastapi_app.include_router(router)
@@ -230,7 +261,7 @@ class AustialApplication(AustialApplicationContext):
 
         class _MiddlewareDispatcher(BaseHTTPMiddleware):
             async def dispatch(self, request: Request, call_next):
-                applicable = [b for b in bindings if b.matches(request.url.path)]
+                applicable = [b for b in bindings if b.matches(request.url.path, request.method)]
                 if not applicable:
                     return await call_next(request)
 
@@ -250,7 +281,17 @@ class AustialApplication(AustialApplicationContext):
 
         self._fastapi_app.add_middleware(_MiddlewareDispatcher)
 
-    async def listen(self, port: int = 8000, host: str = "0.0.0.0") -> None:
+    def get_url(self) -> str:
+        """The URL the server is listening on, e.g. ``http://127.0.0.1:8000`` -- once :meth:`listen` is running."""
+        if self._url is None:
+            raise RuntimeError("The application isn't listening yet: call `await app.listen(...)` first.")
+        return self._url
+
+    def get_http_server(self) -> Any:
+        """The ``uvicorn.Server`` behind :meth:`listen` (``None`` before it starts)."""
+        return self._server
+
+    async def listen(self, port: int = 8000, host: str = "0.0.0.0", **uvicorn_options: Any) -> None:
         """Boots an ASGI server in-process, mirroring Nest's ``await app.listen(3000)``.
 
         Hands uvicorn ``self`` (the ``AustialApplication`` ASGI wrapper), not the raw
@@ -262,9 +303,12 @@ class AustialApplication(AustialApplicationContext):
         ``get_http_adapter()``.
         """
         self._print_startup_banner(port)
-        config = uvicorn.Config(self, host=host, port=port, log_level="warning")
-        server = uvicorn.Server(config)
-        await server.serve()
+        uvicorn_options.setdefault("log_level", "warning")
+        config = uvicorn.Config(self, host=host, port=port, **uvicorn_options)
+        scheme = "https" if config.is_ssl else "http"
+        self._url = f"{scheme}://{'127.0.0.1' if host in ('0.0.0.0', '::') else host}:{port}"  # noqa: S104
+        self._server = uvicorn.Server(config)
+        await self._server.serve()
 
     def _print_startup_banner(self, port: int) -> None:
         _logger.log("Starting Austial application...", context="NestFactory")

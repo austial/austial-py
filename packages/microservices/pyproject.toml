@@ -1,0 +1,34 @@
+[project]
+name = "austial-microservices"
+dynamic = ["version"]
+description = "Microservices -- @MessagePattern/@EventPattern, TCP and in-process transports, ClientProxy and hybrid apps; mirrors @nestjs/microservices."
+requires-python = ">=3.11"
+dependencies = [
+    "austial-common",
+    "austial-core",
+]
+
+[project.optional-dependencies]
+redis = ["redis>=5.0"]
+nats = ["nats-py>=2.9"]
+kafka = ["aiokafka>=0.11"]
+mqtt = ["aiomqtt>=2.3"]
+rabbitmq = ["aio-pika>=9.4"]
+grpc = ["grpcio>=1.66"]
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/austial"]
+
+[tool.uv.sources]
+austial-common = { workspace = true }
+austial-core = { workspace = true }
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+root = "../.."

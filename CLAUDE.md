@@ -1,7 +1,7 @@
 # Austial (framework repo)
 
 A NestJS-style, batteries-included web framework for Python on FastAPI. This repo is the **framework**
-(a uv workspace of 19 independently published packages under `packages/`). It has no sample app: the
+(a uv workspace of 29 independently published packages under `packages/`). It has no sample app: the
 generated project from `austial new` plays that role. The documentation site is a **separate repo**,
 `../austial-py-doc` (Next.js + Nextra, MDX under `content/`).
 
@@ -27,7 +27,7 @@ Run `/code-reviewer` on your own diff before committing or opening a PR.
 | `packages/core` | DI `Container`, module scanner, `RouterBuilder`, `AustialApplication`, lifecycle, request context, `ModuleRef` |
 | `packages/common` | Decorators, pipes, guards, interceptors, filters, exceptions, `StreamableFile`, serializer, mapped types |
 | `packages/austial` | The umbrella `austial` package: re-exports the everyday symbols and owns the CLI entry point |
-| `packages/{orm,config,terminus,testing,cli,auth,authz,tenancy,security,audit,jobs,storage,i18n,migrations,cache,events}` | One feature each; `austial.<name>` via a pkgutil namespace shim |
+| `packages/{orm,config,terminus,testing,cli,auth,authz,tenancy,security,audit,jobs,storage,i18n,migrations,cache,events,http,schedule,cqrs,websockets,microservices,openapi,graphql,mongo,prisma,commander}` | One feature each; `austial.<name>` via a pkgutil namespace shim |
 
 - A new **public** symbol is exported from its package `__init__.py` **and** from
   `packages/austial/src/austial/__init__.py` (+ `__all__`) when it is an everyday import.
@@ -54,6 +54,12 @@ Run `/code-reviewer` on your own diff before committing or opening a PR.
   lifespan, `create_application_context()` and `compile()`); sync `resolve()` of one that hasn't run raises.
 - **`APP_GUARD`/`APP_PIPE`/`APP_INTERCEPTOR`/`APP_FILTER`** providers are filed under unique tokens by
   `Container.register` and picked up by `RouterBuilder`; the filter chain always ends in `AllExceptionsFilter`.
+- **Strict modules** (`strict_modules=True`) check every injection against the `ModuleGraph` built from `ModuleRecord`s
+  (`imports`/`exports`/`@Global`); default mode stays flat. `INQUIRER` providers are built per consumer; `durable`
+  request providers are keyed by a `ContextIdStrategy`.
+- Feature packages that hook into the app (`schedule`, `cqrs`, `events`, `websockets`, `microservices`, `graphql`) discover
+  their handlers in `on_application_bootstrap` via `DiscoveryService`; a provider that must run hooks has to be a class
+  (factory-built providers are only hooked if already instantiated).
 - Builtin types are never auto-built by the container, and `X | None` hints are unwrapped.
 - Param helpers (`Param`, `Query`, ...) are **default values**, not decorators. Values that must be read
   after guards ran are `DeferredParam`s.

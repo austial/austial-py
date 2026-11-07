@@ -51,6 +51,8 @@ class LifecycleManager:
             return container._singletons[token]
         if definition.use_class is not None and _defines_hook(definition.use_class):
             return container.resolve(token)
+        if definition.use_value is not _UNSET and _defines_hook(definition.use_value):
+            return definition.use_value
         return None
 
     def _targets(self, records: list) -> list[Any]:

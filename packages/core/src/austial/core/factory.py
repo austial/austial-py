@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
 from fastapi import FastAPI
 
@@ -33,13 +34,18 @@ class AustialFactory:
         description: str = "Built with the Austial framework.",
         logger: LoggerService | Sequence[str] | bool | None = None,
         buffer_logs: bool = False,
+        strict_modules: bool = False,
     ) -> AustialApplication:
         """``logger`` replaces the framework's logger for the whole process: a ``LoggerService``, a list of
         levels (``["error", "warn"]``), or ``False`` to silence it. ``buffer_logs=True`` holds startup
-        output until you attach a logger with ``app.use_logger(...)`` (or ``app.init()`` runs)."""
+        output until you attach a logger with ``app.use_logger(...)`` (or ``app.init()`` runs).
+        ``strict_modules=True`` enforces ``imports``/``exports`` as a visibility boundary: a provider can
+        only inject what its module declares, what imported modules export, or what global modules export."""
         _configure_logging(logger, buffer_logs)
         container = Container()
         scan_result = scan_module(root_module, container)
+        if strict_modules:
+            container.enable_strict_modules()
 
         fastapi_app = FastAPI(title=title, version=version, description=description)
 
@@ -56,10 +62,22 @@ class AustialFactory:
                 resolved_middlewares = [
                     container.resolve(mw) if isinstance(mw, type) else mw for mw in binding.middlewares
                 ]
-                resolved_bindings.append(MiddlewareBinding(middlewares=resolved_middlewares, routes=binding.routes))
+                resolved_bindings.append(
+                    MiddlewareBinding(
+                        middlewares=resolved_middlewares, routes=binding.routes, excludes=binding.excludes
+                    )
+                )
             middleware_bindings.extend(resolved_bindings)
 
         return AustialApplication(container, fastapi_app, scan_result.controllers, middleware_bindings)
+
+    @staticmethod
+    def create_microservice(root_module: type, options: Any) -> Any:
+        """A message-driven application with no HTTP server -- mirrors ``NestFactory.createMicroservice()``.
+        ``options`` is an ``austial.microservices.MicroserviceOptions``; call ``await ms.listen()``."""
+        from austial.microservices import create_microservice
+
+        return create_microservice(root_module, options)
 
     @staticmethod
     async def create_application_context(
@@ -67,6 +85,7 @@ class AustialFactory:
         *,
         logger: LoggerService | Sequence[str] | bool | None = None,
         buffer_logs: bool = False,
+        strict_modules: bool = False,
     ) -> AustialApplicationContext:
         """Builds the module graph and runs the lifecycle hooks *without* an HTTP server -- for
         CLIs, workers and scripts. Mirrors ``NestFactory.createApplicationContext()``. Call
@@ -74,6 +93,8 @@ class AustialFactory:
         _configure_logging(logger, buffer_logs)
         container = Container()
         scan_module(root_module, container)
+        if strict_modules:
+            container.enable_strict_modules()
         context = AustialApplicationContext(container)
         await context.init()
         return context

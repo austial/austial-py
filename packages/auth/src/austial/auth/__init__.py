@@ -25,6 +25,17 @@ from austial.auth.errors import (
     TokenExpiredError,
 )
 from austial.auth.jwt_strategy import JwtStrategy, TokenPayload
+from austial.auth.oauth import (
+    AuthorizationRequest,
+    GitHubOAuth,
+    GoogleOAuth,
+    MicrosoftOAuth,
+    OAuth2Provider,
+    OAuthError,
+    OAuthTokens,
+    generate_state,
+    verify_state,
+)
 from austial.auth.refresh_token_store import (
     InMemoryRefreshTokenStore,
     RefreshTokenRecord,
@@ -33,6 +44,15 @@ from austial.auth.refresh_token_store import (
 from austial.auth.totp_strategy import TotpStrategy
 
 __all__ = [
+    "AuthorizationRequest",
+    "GitHubOAuth",
+    "GoogleOAuth",
+    "MicrosoftOAuth",
+    "OAuth2Provider",
+    "OAuthError",
+    "OAuthTokens",
+    "generate_state",
+    "verify_state",
     "Argon2Hasher",
     "AuthConfig",
     "AuthenticationError",

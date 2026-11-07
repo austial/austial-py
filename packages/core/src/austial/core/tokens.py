@@ -16,6 +16,9 @@ APP_PIPE = "APP_PIPE"
 APP_INTERCEPTOR = "APP_INTERCEPTOR"
 APP_FILTER = "APP_FILTER"
 
+# Injecting this into a provider gives it the class that is asking for it (see Container docs).
+INQUIRER = "INQUIRER"
+
 # token -> the kind the container files it under
 GLOBAL_COMPONENT_KINDS = {
     APP_GUARD: "guards",

@@ -22,17 +22,35 @@ _REQUEST_STATE_ATTR = "__austial_context_id__"
 class ContextId:
     """One request-scoped provider cache. Mirrors Nest's ``ContextId``."""
 
-    __slots__ = ("cache", "request")
+    __slots__ = ("cache", "durable_key", "request")
 
-    def __init__(self, request: Any = None) -> None:
+    def __init__(self, request: Any = None, durable_key: Any = None) -> None:
         self.cache: dict[Any, Any] = {}
         self.request = request
+        self.durable_key = durable_key  # shared by requests with the same key: see `durable` providers
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"ContextId(providers={len(self.cache)})"
 
 
+class ContextIdStrategy:
+    """Decides which requests share *durable* providers. ``get_key(request)`` returns a hashable key (a
+    tenant id, say) or ``None`` for "no durable sharing for this request"."""
+
+    def get_key(self, request: Any) -> Any:  # pragma: no cover - interface
+        raise NotImplementedError
+
+
+_strategy: ContextIdStrategy | None = None
+
+
 class ContextIdFactory:
+    @staticmethod
+    def apply_strategy(strategy: ContextIdStrategy | None) -> None:
+        """Installs (or, with ``None``, removes) the process-wide strategy for durable providers."""
+        global _strategy
+        _strategy = strategy
+
     @staticmethod
     def create() -> ContextId:
         """A fresh, empty context -- e.g. for a queue worker or a manual
@@ -46,7 +64,8 @@ class ContextIdFactory:
         state = request.state
         context_id = getattr(state, _REQUEST_STATE_ATTR, None)
         if context_id is None:
-            context_id = ContextId(request)
+            key = _strategy.get_key(request) if _strategy is not None else None
+            context_id = ContextId(request, durable_key=key)
             setattr(state, _REQUEST_STATE_ATTR, context_id)
         return context_id
 

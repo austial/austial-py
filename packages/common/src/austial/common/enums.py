@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 
 
@@ -37,6 +38,15 @@ class RequestMethod(StrEnum):
     OPTIONS = "OPTIONS"
     HEAD = "HEAD"
     ALL = "ALL"
+
+
+@dataclass
+class RouteInfo:
+    """Identifies a route by path and method -- for ``set_global_prefix(exclude=...)`` and middleware
+    targets. A bare string wherever a ``RouteInfo`` is accepted means "this path, any method"."""
+
+    path: str
+    method: RequestMethod = RequestMethod.ALL
 
 
 # `@Version(VERSION_NEUTRAL)` -- the route is served whatever version the request asks for

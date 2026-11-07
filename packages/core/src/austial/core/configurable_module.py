@@ -17,7 +17,8 @@
 
     MailModule.for_root({"host": "smtp.example.com"})
     MailModule.for_root_async(use_factory=lambda cfg: {"host": cfg.get("SMTP")}, inject=[ConfigService])
-    MailModule.for_root_async(use_class=MailOptionsFactory)       # class with a `create()` method
+    MailModule.for_root_async(use_factory=fetch_options)          # an `async def` factory is awaited at init
+    MailModule.for_root_async(use_class=MailOptionsFactory)       # class with a `create()` method (sync or async)
     MailModule.for_root_async(use_existing=MailOptionsFactory)    # reuse an already-provided one
 
 Options (any object -- a dict, a dataclass, a pydantic model) are provided under
@@ -27,6 +28,7 @@ Options (any object -- a dict, a dataclass, a pydantic model) are provided under
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -110,13 +112,19 @@ class ConfigurableModuleBuilder:
                 assert source is not None
                 if use_class is not None:
                     providers.append(use_class)
-                providers.append(
-                    {
-                        "provide": token,
-                        "useFactory": lambda factory: getattr(factory, builder._factory_method)(),
-                        "inject": [source],
-                    }
-                )
+                create = getattr(source, builder._factory_method, None)
+                if inspect.iscoroutinefunction(create):
+                    # `async def create(self)`: an async provider, awaited when the application initialises
+
+                    async def build_options(factory: Any) -> Any:
+                        return await getattr(factory, builder._factory_method)()
+
+                else:
+
+                    def build_options(factory: Any) -> Any:  # type: ignore[misc]
+                        return getattr(factory, builder._factory_method)()
+
+                providers.append({"provide": token, "useFactory": build_options, "inject": [source]})
             module = DynamicModule(module=cls, imports=list(imports or []), providers=providers, exports=[token])
             return apply_extras(module, extras)
 

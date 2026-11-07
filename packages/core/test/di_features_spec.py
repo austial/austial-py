@@ -556,3 +556,31 @@ def test_configurable_module_extras_shape_the_dynamic_module() -> None:
 def _tag(module, tag):
     module.exports.append(f"tag:{tag}")
     return module
+
+
+@Injectable()
+class AsyncMailOptionsFactory:
+    async def create(self) -> dict:
+        await asyncio.sleep(0)
+        return {"host": "from-async-create"}
+
+
+async def test_configurable_module_supports_async_create_and_async_use_factory() -> None:
+    # `async def create()` on a use_class source: the options are an async provider, awaited by compile()/init()
+    assert (await _mail_service(MailModule.for_root_async(use_class=AsyncMailOptionsFactory))).options == {
+        "host": "from-async-create"
+    }
+
+    @Module(providers=[AsyncMailOptionsFactory], exports=[AsyncMailOptionsFactory])
+    class AsyncFactoryModule:
+        pass
+
+    existing = MailModule.for_root_async(use_existing=AsyncMailOptionsFactory, imports=[AsyncFactoryModule])
+    assert (await _mail_service(existing)).options == {"host": "from-async-create"}
+
+    async def fetch_options(settings) -> dict:
+        await asyncio.sleep(0)
+        return {"host": settings.host}
+
+    via_factory = MailModule.for_root_async(use_factory=fetch_options, inject=[SmtpSettings], imports=[SettingsModule])
+    assert (await _mail_service(via_factory)).options == {"host": "from-injected-settings"}

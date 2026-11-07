@@ -28,6 +28,12 @@ def _token_of(provider: Any) -> Any:
     return unwrap(provider["provide"]) if isinstance(provider, dict) else unwrap(provider)
 
 
+def _module_of(entry: Any) -> Any:
+    """The module class behind an ``imports=[...]`` entry (a class, a ``DynamicModule`` or a ``forward_ref``)."""
+    entry = unwrap(entry)
+    return entry.module if isinstance(entry, DynamicModule) else entry
+
+
 def scan_module(root_module: type, container: Container, *, visited: set | None = None) -> ScanResult:
     """Registers ``root_module`` and everything it imports. ``visited`` lets a caller
     (``LazyModuleLoader``) skip modules an earlier scan already registered."""
@@ -81,9 +87,14 @@ def scan_module(root_module: type, container: Container, *, visited: set | None 
         if static_metadata is not None:
             add_providers(record, static_metadata.providers)
             add_controllers(record, static_metadata.controllers)
+            record.imports.extend(m for m in map(_module_of, static_metadata.imports) if m is not None)
+            record.exports.extend(_token_of(e) for e in static_metadata.exports)
+            record.is_global = record.is_global or static_metadata.is_global
         if dynamic is not None:
             add_providers(record, dynamic.providers)
             add_controllers(record, dynamic.controllers)
+            record.imports.extend(m for m in map(_module_of, dynamic.imports) if m is not None)
+            record.exports.extend(_token_of(e) for e in dynamic.exports)
         if first_visit:
             modules_in_order.append(module_cls)
 

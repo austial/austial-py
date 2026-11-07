@@ -16,21 +16,13 @@ from typing import Any
 
 from fastapi.routing import APIRoute
 from starlette.requests import Request
+from starlette.responses import Response
 from starlette.routing import Match
 
-from austial.common.enums import VERSION_NEUTRAL, RequestMethod, VersioningType
+from austial.common.enums import VERSION_NEUTRAL, RequestMethod, RouteInfo, VersioningType
 
 Scope = MutableMapping[str, Any]
 Matcher = Callable[[Scope], "dict[str, Any] | None"]
-
-
-@dataclass
-class RouteInfo:
-    """Identifies a route for ``set_global_prefix(exclude=[...])`` -- a bare string means
-    "this path, any method"."""
-
-    path: str
-    method: RequestMethod = RequestMethod.ALL
 
 
 @dataclass
@@ -153,11 +145,14 @@ class AustialRoute(APIRoute):
     :func:`route_class_for`, which bakes a route's predicates into a subclass."""
 
     austial_matchers: tuple[Matcher, ...] = ()
+    austial_token: object | None = None  # set for routes whose handler takes `Next()`
 
     def matches(self, scope: MutableMapping[str, Any]) -> tuple[Match, MutableMapping[str, Any]]:
         match, child_scope = super().matches(scope)
         if match != Match.FULL:
             return match, child_scope
+        if self.austial_token is not None and self.austial_token in scope.get(DECLINED_KEY, ()):
+            return Match.NONE, {}  # this route already declined the request via `next()`
         extra: dict[str, Any] = {}
         for matcher in self.austial_matchers:
             result = matcher(scope)
@@ -167,7 +162,36 @@ class AustialRoute(APIRoute):
         return match, {**child_scope, **extra}
 
 
-def route_class_for(matchers: list[Matcher]) -> type[APIRoute] | None:
-    if not matchers:
+DECLINED_KEY = "austial.declined"
+
+
+class PassThrough(Response):
+    """What a handler that called ``next()`` answers with: instead of a body, it re-dispatches the request through the
+    application's router with the declining route marked, so the router picks the next matching route (or 404s).
+
+    The body was already read for the declining route, so it is replayed for the next one.
+    """
+
+    def __init__(self, token: object, body: bytes):
+        super().__init__()
+        self.token, self.body = token, body
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        fresh = {k: v for k, v in scope.items() if k not in ("route", "endpoint", "path_params")}
+        fresh[DECLINED_KEY] = frozenset(scope.get(DECLINED_KEY, ())) | {self.token}
+        delivered = False
+
+        async def replay() -> dict[str, Any]:
+            nonlocal delivered
+            if not delivered:
+                delivered = True
+                return {"type": "http.request", "body": self.body, "more_body": False}
+            return await receive()
+
+        await scope["app"].router(fresh, replay, send)
+
+
+def route_class_for(matchers: list[Matcher], *, token: object | None = None) -> type[APIRoute] | None:
+    if not matchers and token is None:
         return None
-    return type("AustialRoute", (AustialRoute,), {"austial_matchers": tuple(matchers)})
+    return type("AustialRoute", (AustialRoute,), {"austial_matchers": tuple(matchers), "austial_token": token})

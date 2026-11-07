@@ -3,13 +3,13 @@ name: Publish
 # Cuts a release whenever a `v*.*.*` tag is pushed (e.g. `git tag -a v0.1.1 &&
 # git push origin v0.1.1`): runs the same lint/type-check/test gate as
 # pre-commit, builds the sdist/wheel for every workspace package once, then
-# publishes each of the 19 distributions to PyPI via trusted publishing (OIDC
+# publishes each of the 29 distributions to PyPI via trusted publishing (OIDC
 # -- no long-lived API token stored as a secret), and finally attaches the
 # built artifacts to a GitHub release.
 #
 # IMPORTANT: publishing runs as a job matrix -- one job per PyPI project,
 # each minting its OWN OIDC token. Trusted-publishing OIDC tokens are scoped
-# to a single PyPI project per mint request; funnelling all 19 projects'
+# to a single PyPI project per mint request; funnelling all 29 projects'
 # files through one `pypa/gh-action-pypi-publish` call in a single job (the
 # previous setup) causes PyPI to reject every project's upload except the
 # one its token happened to get scoped to, with:
@@ -19,7 +19,7 @@ name: Publish
 # therefore a separate OIDC token) per project."
 #
 # One-time setup required on PyPI before the first run of a NEW package: this
-# publishes 19 separate distributions, one per packages/* workspace member
+# publishes 29 separate distributions, one per packages/* workspace member
 # (austial, austial-common, austial-core, austial-config, austial-orm,
 # austial-terminus, austial-testing, austial-cli, austial-auth, austial-authz,
 # austial-tenancy, austial-security, austial-audit, austial-jobs,
@@ -110,6 +110,16 @@ jobs:
           - austial-i18n
           - austial-cache
           - austial-events
+          - austial-http
+          - austial-schedule
+          - austial-cqrs
+          - austial-websockets
+          - austial-microservices
+          - austial-openapi
+          - austial-graphql
+          - austial-mongo
+          - austial-prisma
+          - austial-commander
           - austial-migrations
     environment:
       name: pypi

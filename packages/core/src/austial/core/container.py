@@ -24,7 +24,7 @@ from austial.core.forward_ref import ForwardReference, LazyProvider, unwrap
 from austial.core.metadata import INJECTABLE_METADATA, MODULE_METADATA, get_metadata
 from austial.core.module_ref import ModuleRef
 from austial.core.request_context import REQUEST, get_current_context
-from austial.core.tokens import GLOBAL_COMPONENT_KINDS
+from austial.core.tokens import GLOBAL_COMPONENT_KINDS, INQUIRER
 
 _UNSET = object()
 
@@ -78,16 +78,21 @@ class ProviderDefinition:
     inject: Sequence[Any] = field(default_factory=list)
     scope: Scope = Scope.DEFAULT
     is_async: bool = False  # `use_factory` is a coroutine function, awaited by init_async_providers()
+    durable: bool = False  # request-scoped, but shared by requests with the same context key
 
 
 @dataclass
 class ModuleRecord:
     """What a module contributed to the container, in registration order -- the lifecycle
-    manager walks these to run hooks module by module, dependencies first."""
+    manager walks these to run hooks module by module, dependencies first. ``imports`` and ``exports``
+    feed the module graph (strict visibility, devtools)."""
 
     module: type | None
     providers: list = field(default_factory=list)
     controllers: list = field(default_factory=list)
+    imports: list = field(default_factory=list)  # imported module classes
+    exports: list = field(default_factory=list)  # exported tokens / re-exported module classes
+    is_global: bool = False
 
 
 @dataclass
@@ -116,6 +121,7 @@ class Container:
 
     def __init__(self):
         from austial.core.discovery import DiscoveryService
+        from austial.core.http_adapter_host import HttpAdapterHost
         from austial.core.lazy_module_loader import LazyModuleLoader
         from austial.core.lifecycle import LifecycleManager
 
@@ -123,10 +129,12 @@ class Container:
         self._singletons: dict[Any, Any] = {}
         self._controllers: list[type] = []
         self._scope_cache: dict[Any, bool] = {}
+        self._durable_cache: dict[tuple[Any, Any], Any] = {}
         self._global_components: dict[str, list[Any]] = {kind: [] for kind in GLOBAL_COMPONENT_KINDS.values()}
         self.module_records: list[ModuleRecord] = []
         # Called for a token nothing registered (see TestingModuleBuilder.use_mocker); returns a stand-in or None.
         self.mocker: Callable[[Any], Any] | None = None
+        self.module_graph: Any = None  # set by enable_strict_modules(); consulted on every injection
         self.internal_tokens: set[Any] = set()  # framework-provided tokens, hidden from DiscoveryService
         self.lifecycle = LifecycleManager(self)
         module_ref = ModuleRef(self)
@@ -134,6 +142,7 @@ class Container:
             (ModuleRef, module_ref),
             (DiscoveryService, DiscoveryService(self)),
             (LazyModuleLoader, LazyModuleLoader(self, module_ref)),
+            (HttpAdapterHost, HttpAdapterHost()),
         ):
             self.set_instance(token, instance)
             self.internal_tokens.add(token)
@@ -167,6 +176,13 @@ class Container:
         self._definitions.setdefault(token, ProviderDefinition(token=token, use_value=instance))
         self._scope_cache.clear()
 
+    def enable_strict_modules(self) -> Any:
+        """Enforces module ``imports``/``exports`` as a visibility boundary from now on (see ``ModuleGraph``)."""
+        from austial.core.module_graph import ModuleGraph
+
+        self.module_graph = ModuleGraph(self.module_records, always_visible=set(self.internal_tokens))
+        return self.module_graph
+
     def global_components(self, kind: str) -> list[Any]:
         """Tokens of the providers registered under ``APP_GUARD``/``APP_PIPE``/``APP_INTERCEPTOR``/
         ``APP_FILTER`` (``kind`` is ``"guards"``, ``"pipes"``, ``"interceptors"`` or ``"filters"``),
@@ -192,8 +208,13 @@ class Container:
                 return ProviderDefinition(token=token, use_value=provider["useValue"])
             if "useClass" in provider:
                 use_class = unwrap(provider["useClass"])
-                scope = get_metadata(INJECTABLE_METADATA, use_class, {}).get("scope", Scope.DEFAULT)
-                return ProviderDefinition(token=token, use_class=use_class, scope=scope)
+                meta = get_metadata(INJECTABLE_METADATA, use_class, {})
+                return ProviderDefinition(
+                    token=token,
+                    use_class=use_class,
+                    scope=meta.get("scope", Scope.DEFAULT),
+                    durable=bool(meta.get("durable", False)),
+                )
             if "useFactory" in provider:
                 factory = provider["useFactory"]
                 is_async = inspect.iscoroutinefunction(factory)
@@ -212,8 +233,13 @@ class Container:
             raise ValueError(f"Invalid provider definition: {provider!r}")
         # Plain class shorthand, e.g. `providers=[HealthService]`.
         provider = unwrap(provider)
-        scope = get_metadata(INJECTABLE_METADATA, provider, {}).get("scope", Scope.DEFAULT)
-        return ProviderDefinition(token=provider, use_class=provider, scope=scope)
+        meta = get_metadata(INJECTABLE_METADATA, provider, {})
+        return ProviderDefinition(
+            token=provider,
+            use_class=provider,
+            scope=meta.get("scope", Scope.DEFAULT),
+            durable=bool(meta.get("durable", False)),
+        )
 
     def _definition_for(self, token: Any) -> ProviderDefinition | None:
         definition = self._definitions.get(token)
@@ -270,7 +296,14 @@ class Container:
         return []
 
     # -- resolution -------------------------------------------------------------------
-    def resolve(self, token: Any, *, _resolving: frozenset = frozenset()) -> Any:
+    def _uses_inquirer(self, definition: ProviderDefinition) -> bool:
+        return INQUIRER in self._dependency_tokens(definition)
+
+    def resolve(self, token: Any, *, _resolving: frozenset = frozenset(), _consumer: Any = None) -> Any:
+        """Resolves ``token``. ``_consumer`` is internal: the class asking for it, which is what a provider
+        depending on the ``INQUIRER`` token receives (such a provider is built per consumer, never cached)."""
+        if isinstance(token, str) and token == INQUIRER:
+            return _consumer
         if isinstance(token, str) and token == REQUEST:
             context = get_current_context()
             if context is None or context.request is None:
@@ -288,13 +321,18 @@ class Container:
             raise CircularDependencyError(token)
         next_resolving = _resolving | {token}
 
-        if definition.scope == Scope.TRANSIENT:
-            return self._instantiate(definition, next_resolving)
+        if definition.scope == Scope.TRANSIENT or self._uses_inquirer(definition):
+            return self._instantiate(definition, next_resolving, _consumer)
 
         if self.is_request_bound(token):
             context = get_current_context()
             if context is None:
                 raise RequestScopeError(token)
+            if definition.durable and context.durable_key is not None:
+                key = (context.durable_key, token)
+                if key not in self._durable_cache:
+                    self._durable_cache[key] = self._instantiate(definition, next_resolving)
+                return self._durable_cache[key]
             if token not in context.cache:
                 context.cache[token] = self._instantiate(definition, next_resolving)
             return context.cache[token]
@@ -314,7 +352,7 @@ class Container:
             return unwrap(entry["token"]), bool(entry.get("optional", False))
         return unwrap(entry), False
 
-    def _instantiate(self, definition: ProviderDefinition, resolving: frozenset) -> Any:
+    def _instantiate(self, definition: ProviderDefinition, resolving: frozenset, consumer: Any = None) -> Any:
         if definition.use_value is not _UNSET:
             return definition.use_value
         if definition.use_existing is not _UNSET:
@@ -322,17 +360,22 @@ class Container:
         if definition.use_factory is not None:
             if definition.is_async:
                 raise AsyncProviderNotInitializedError(definition.token)
-            return definition.use_factory(*self._factory_args(definition, resolving))
+            return definition.use_factory(*self._factory_args(definition, resolving, consumer))
         assert definition.use_class is not None
-        kwargs = self._resolve_constructor_args(definition.use_class, resolving)
+        kwargs = self._resolve_constructor_args(definition.use_class, resolving, consumer)
         return definition.use_class(**kwargs)
 
-    def _factory_args(self, definition: ProviderDefinition, resolving: frozenset) -> list[Any]:
+    def _factory_args(self, definition: ProviderDefinition, resolving: frozenset, consumer: Any = None) -> list[Any]:
         args: list[Any] = []
         for entry in definition.inject:
             token, optional = self._factory_token(entry)
+            if token == INQUIRER:
+                args.append(consumer)
+                continue
+            if self.module_graph is not None:
+                self.module_graph.check(definition.token, token)
             try:
-                args.append(self.resolve(token, _resolving=resolving))
+                args.append(self.resolve(token, _resolving=resolving, _consumer=definition.token))
             except ProviderNotFoundError:
                 if not optional:
                     raise
@@ -415,18 +458,24 @@ class Container:
             isinstance(dep.token, type) and get_metadata(INJECTABLE_METADATA, dep.token) is not None
         )
 
-    def _resolve_constructor_args(self, cls: type, resolving: frozenset) -> dict:
+    def _resolve_constructor_args(self, cls: type, resolving: frozenset, consumer: Any = None) -> dict:
         kwargs: dict[str, Any] = {}
         for dep in self._constructor_plan(cls):
             if not self._is_injected(dep):
                 continue  # let the class use its own default
+            if self.module_graph is not None and not dep.lazy:
+                self.module_graph.check(cls, unwrap(dep.token))
             if dep.lazy:
                 kwargs[dep.name] = LazyProvider(self, unwrap(dep.token))
             elif dep.optional:
                 try:
-                    kwargs[dep.name] = self.resolve(dep.token, _resolving=resolving) if dep.token else None
+                    kwargs[dep.name] = (
+                        self.resolve(dep.token, _resolving=resolving, _consumer=cls) if dep.token else None
+                    )
                 except ProviderNotFoundError:
                     kwargs[dep.name] = None
+            elif dep.token == INQUIRER:
+                kwargs[dep.name] = consumer
             else:
-                kwargs[dep.name] = self.resolve(dep.token, _resolving=resolving)
+                kwargs[dep.name] = self.resolve(dep.token, _resolving=resolving, _consumer=cls)
         return kwargs

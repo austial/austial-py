@@ -19,8 +19,28 @@ from typing import Any
 
 from austial.common.logger import Logger
 from austial.core.container import Container
+from austial.core.module_graph import ModuleGraph, ModuleVisibilityError
 from austial.core.module_ref import ModuleRef
 from austial.core.request_context import ContextId
+
+
+class ModuleSelection:
+    """What ``app.select(Module)`` returns: lookups scoped to one module."""
+
+    def __init__(self, context: AustialApplicationContext, module: type, graph: ModuleGraph):
+        self._context = context
+        self.module = module
+        self._graph = graph
+
+    def get(self, token: Any, *, strict: bool = False) -> Any:
+        """Resolves ``token``. With ``strict=True`` it must be visible from this module (declared in it, or
+        exported by a module it imports, or by a global module), else :class:`ModuleVisibilityError`."""
+        if strict and not self._graph.is_visible_from(self.module, token):
+            raise ModuleVisibilityError(self.module, token, self.module)
+        return self._context.get(token)
+
+    def select(self, module: type) -> ModuleSelection:
+        return self._context.select(module)
 
 
 class AustialApplicationContext:
@@ -33,12 +53,32 @@ class AustialApplicationContext:
         self._initialized = False
         self._shutdown_signals: tuple[str, ...] = ()
         self._closing = False
+        # Objects with async start()/stop() (hybrid microservices, ...): started after the init hooks, stopped
+        # before the termination hooks.
+        self._extensions: list[Any] = []
 
     # -- providers --------------------------------------------------------------------
     def get(self, token: Any) -> Any:
         """Fetches a resolved provider straight out of the DI container,
         mirroring Nest's ``app.get(Token)``."""
         return self._container.resolve(token)
+
+    def get_module_graph(self) -> ModuleGraph:
+        """The module graph (imports, providers, controllers, exports) for introspection and devtools."""
+        graph = self._container.module_graph
+        return (
+            graph
+            if graph is not None
+            else ModuleGraph(self._container.module_records, set(self._container.internal_tokens))
+        )
+
+    def select(self, module: type) -> ModuleSelection:
+        """Narrows to one module, like ``app.select(CatsModule)``: ``get`` there can insist on
+        visibility with ``strict=True``."""
+        graph = self.get_module_graph()
+        if module not in graph._by_module:  # noqa: SLF001
+            raise KeyError(f"{getattr(module, '__name__', module)} is not part of this application")
+        return ModuleSelection(self, module, graph)
 
     def resolve(self, token: Any, context_id: ContextId | None = None) -> Any:
         """Like :meth:`get`, but also works for request-scoped providers (built inside
@@ -55,6 +95,8 @@ class AustialApplicationContext:
             Logger.flush()
             await self._container.init_async_providers()
             await self._container.lifecycle.run_init()
+            for extension in self._extensions:
+                await extension.start()
         return self
 
     async def close(self, signal: str | None = None) -> None:
@@ -63,6 +105,8 @@ class AustialApplicationContext:
         if not self._initialized:
             return
         self._initialized = False
+        for extension in reversed(self._extensions):
+            await extension.stop()
         await self._container.lifecycle.run_destroy(signal)
         self._container.lifecycle.reset()
 

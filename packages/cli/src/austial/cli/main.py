@@ -21,8 +21,10 @@ from rich.console import Console
 from austial.cli.generators import (
     COMPONENT_KINDS,
     create_new_project,
+    generate_app,
     generate_component,
     generate_controller,
+    generate_library,
     generate_module,
     generate_resource,
     generate_service,
@@ -43,6 +45,8 @@ _SCHEMATICS = {
     "service": generate_service,
     "provider": generate_service,  # Nest calls a service a "provider"; same schematic
     "resource": generate_resource,
+    "library": generate_library,
+    "app": generate_app,
 }
 
 # Schematics that accept `--flat` (the ones that create a single file rather than a feature folder).
@@ -62,6 +66,7 @@ _ALIASES = {
     "mi": "middleware",
     "d": "decorator",
     "cl": "class",
+    "lib": "library",
 }
 
 _ALL_SCHEMATICS = sorted({*_SCHEMATICS, *COMPONENT_KINDS})
@@ -184,13 +189,111 @@ def info() -> None:
         console.print("[bold]Project[/bold]   [dim](not inside an Austial project)[/dim]")
 
 
+def _project_root_or_exit() -> Path:
+    try:
+        return find_project_root()
+    except ProjectNotFoundError as exc:
+        console.print(f"[bold red]\u2716[/bold red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+
 @app.command("serve")
 def serve(
     host: str = typer.Option("0.0.0.0", help="Bind host."),
     port: int = typer.Option(8000, help="Bind port."),
     reload: bool = typer.Option(True, help="Auto-reload on file changes (dev mode)."),
 ) -> None:
-    """Runs the current project (mirrors `nest start --watch`)."""
+    """Runs the current project with auto-reload (mirrors `nest start --watch`)."""
+    _serve(host, port, reload)
+
+
+@app.command("start")
+def start(
+    host: str = typer.Option("0.0.0.0", help="Bind host."),
+    port: int = typer.Option(8000, help="Bind port."),
+    watch: bool = typer.Option(False, "--watch", "-w", help="Auto-reload on file changes."),
+    target: str = typer.Option("src.main:app", "--app", help="ASGI app to run, e.g. apps.admin.main:app."),
+) -> None:
+    """Runs the project (mirrors `nest start`; add --watch for reload, --app for an app in apps/)."""
+    _serve(host, port, watch, target)
+
+
+@app.command("build")
+def build() -> None:
+    """Byte-compiles the project (src, libs, apps) and checks the module graph imports and scans cleanly."""
+    from austial.cli.tools import TargetError, build_project, load_target, module_graph_for
+
+    root = _project_root_or_exit()
+    failed = build_project(root)
+    if failed:
+        console.print(f"[bold red]\u2716[/bold red] Compilation failed in: {', '.join(failed)}")
+        raise typer.Exit(code=1)
+    try:
+        graph = module_graph_for(load_target("src.app_module:AppModule", root))
+    except TargetError as exc:
+        console.print(f"[bold red]\u2716[/bold red] {exc}")
+        raise typer.Exit(code=1) from exc
+    console.print(f"[bold green]\u2714[/bold green] Build OK: {len(graph.records)} modules scanned")
+
+
+@app.command("add")
+def add(
+    package: str = typer.Argument(..., help="Optional package, e.g. cache, events, websockets (see `austial add x`)."),
+    dry: bool = typer.Option(False, "--dry-run", "-d", help="Print the command without running it."),
+) -> None:
+    """Installs an optional Austial package into the project with uv (mirrors `nest add`)."""
+    import subprocess
+
+    from austial.cli.tools import TargetError, add_command
+
+    try:
+        command = add_command(package)
+    except TargetError as exc:
+        console.print(f"[bold red]\u2716[/bold red] {exc}")
+        raise typer.Exit(code=1) from exc
+    console.print(f"[bold]$ {' '.join(command)}[/bold]")
+    if dry:
+        return
+    raise typer.Exit(code=subprocess.run(command, cwd=_project_root_or_exit()).returncode)
+
+
+@app.command("graph")
+def graph(
+    target: str = typer.Argument("src.app_module:AppModule", help="module.path:RootModule"),
+    fmt: str = typer.Option("mermaid", "--format", "-f", help="mermaid or json."),
+) -> None:
+    """Prints the module graph (imports, providers, controllers, exports), like Nest's devtools graph."""
+    import json
+
+    from austial.cli.tools import TargetError, load_target, module_graph_for
+
+    try:
+        module_graph = module_graph_for(load_target(target, _project_root_or_exit()))
+    except TargetError as exc:
+        console.print(f"[bold red]\u2716[/bold red] {exc}")
+        raise typer.Exit(code=1) from exc
+    typer.echo(json.dumps(module_graph.to_dict(), indent=2) if fmt == "json" else module_graph.to_mermaid())
+
+
+@app.command("repl")
+def repl(target: str = typer.Argument("src.app_module:AppModule", help="module.path:RootModule")) -> None:
+    """Starts a Python REPL with the app booted: get(Token), run(coroutine). Mirrors Nest's REPL."""
+    import code
+
+    from austial.cli.tools import ReplSession, TargetError, load_target
+
+    try:
+        session = ReplSession(load_target(target, _project_root_or_exit()))
+    except TargetError as exc:
+        console.print(f"[bold red]\u2716[/bold red] {exc}")
+        raise typer.Exit(code=1) from exc
+    try:
+        code.interact(banner=session.banner(), local=session.namespace)
+    finally:
+        session.close()
+
+
+def _serve(host: str, port: int, reload: bool, target: str = "src.main:app") -> None:
     import uvicorn
 
     try:
@@ -203,7 +306,7 @@ def serve(
 
     sys.path.insert(0, str(project_root))
     console.print(f"[bold green]\u25b6[/bold green] Serving {project_root.name} on http://{host}:{port}")
-    uvicorn.run("src.main:app", host=host, port=port, reload=reload, app_dir=str(project_root))
+    uvicorn.run(target, host=host, port=port, reload=reload, app_dir=str(project_root))
 
 
 def run() -> None:

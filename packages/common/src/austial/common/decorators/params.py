@@ -168,6 +168,40 @@ def HostParam(name: str | None = None) -> Any:  # noqa: N802
     return _RequestValueMarker(extract)
 
 
+def Cookies(name: str | None = None) -> Any:  # noqa: N802
+    """Equivalent to Nest's ``@Cookies('name')``: one request cookie (``None`` if absent), or all of them
+    as a dict. Set cookies on the response with ``response.set_cookie(...)`` on a ``Res`` parameter."""
+
+    def extract(request: Any) -> Any:
+        return dict(request.cookies) if name is None else request.cookies.get(name)
+
+    return _RequestValueMarker(extract)
+
+
+class _RawBodyMarker(DeferredParam):
+    async def resolve(self, context: Any) -> Any:
+        return await context.get_request().body()
+
+
+def RawBody() -> Any:  # noqa: N802
+    """Equivalent to Nest's ``@RawBody()``: the request body as ``bytes``, exactly as it arrived, for
+    signature checks (webhooks). Starlette caches the body, so reading it here doesn't disturb parsing."""
+    return _RawBodyMarker()
+
+
+class _NextMarker(DeferredParam):
+    async def resolve(self, context: Any) -> Any:
+        from austial.common.next import NextFunction
+
+        return NextFunction()
+
+
+def Next() -> Any:  # noqa: N802
+    """Equivalent to Nest's ``@Next()``: a function that, when called, passes the request on to the next matching
+    route instead of answering it. See :mod:`austial.common.next`."""
+    return _NextMarker()
+
+
 def Session(name: str | None = None) -> Any:  # noqa: N802
     """Equivalent to Nest's ``@Session()``: the session dict (or one key of it). Needs Starlette's
     ``SessionMiddleware`` -- ``app.use(SessionMiddleware, secret_key=...)``."""

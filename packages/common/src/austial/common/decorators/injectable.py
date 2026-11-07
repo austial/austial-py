@@ -11,15 +11,20 @@ from austial.core.metadata import INJECTABLE_METADATA, set_metadata
 T = TypeVar("T")
 
 
-def Injectable(scope: Scope = Scope.DEFAULT) -> Callable[[T], T]:
+def Injectable(scope: Scope = Scope.DEFAULT, *, durable: bool = False) -> Callable[[T], T]:
     """Marks a class as a provider that the DI container can construct.
 
-    Usable as ``@Injectable()`` or ``@Injectable(scope=Scope.TRANSIENT)``,
-    exactly like Nest.
+    Usable as ``@Injectable()`` or ``@Injectable(scope=Scope.TRANSIENT)``, exactly like Nest.
+
+    ``durable=True`` (with ``Scope.REQUEST``) makes the instance live across requests that share a
+    *context key*, chosen by a strategy registered with ``ContextIdFactory.apply_strategy`` -- one
+    instance per tenant instead of one per request. A durable provider must not depend on
+    non-durable request-scoped providers or on the ``REQUEST`` token: it would capture the first
+    request's.
     """
 
     def decorator(cls: T) -> T:
-        set_metadata(INJECTABLE_METADATA, {"scope": scope})(cls)
+        set_metadata(INJECTABLE_METADATA, {"scope": scope, "durable": durable})(cls)
         return cls
 
     return decorator
