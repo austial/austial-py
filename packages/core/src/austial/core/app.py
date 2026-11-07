@@ -121,8 +121,8 @@ class AustialApplication(AustialApplicationContext):
         the transport starts and stops with the application; otherwise call ``await start_all_microservices()``."""
         try:
             from austial.microservices import attach_microservice
-        except ImportError as exc:  # pragma: no cover - austial-microservices ships with the umbrella package
-            raise RuntimeError("connect_microservice needs the austial-microservices package") from exc
+        except ImportError as exc:  # pragma: no cover - austial.microservices ships in austial-core
+            raise RuntimeError("connect_microservice needs austial.microservices (part of austial-core)") from exc
         server = attach_microservice(self, options)
         self._microservices.append(server)
         if auto_start:

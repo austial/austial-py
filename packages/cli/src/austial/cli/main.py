@@ -255,7 +255,9 @@ def add(
     except TargetError as exc:
         console.print(f"[bold red]\u2716[/bold red] {exc}")
         raise typer.Exit(code=1) from exc
-    console.print(f"[bold]$ {' '.join(command)}[/bold]")
+    from rich.markup import escape
+
+    console.print(f"[bold]$ {escape(' '.join(command))}[/bold]")  # `[extra]` is not Rich markup
     if dry:
         return
     raise typer.Exit(code=subprocess.run(command, cwd=_project_root_or_exit()).returncode)

@@ -1,14 +1,14 @@
 [project]
 name = "austial-microservices"
 dynamic = ["version"]
-description = "Microservices -- @MessagePattern/@EventPattern, TCP and in-process transports, ClientProxy and hybrid apps; mirrors @nestjs/microservices."
+description = "Message-driven applications: @MessagePattern / @EventPattern handlers served over TCP, in-process, Redis (Pub/Sub and Streams), NATS, Kafka, MQTT, RabbitMQ and gRPC (JSON or protobuf with streaming), plus ClientProxy and hybrid apps -- mirrors @nestjs/microservices."
 requires-python = ">=3.11"
 dependencies = [
-    "austial-common",
     "austial-core",
 ]
 
 [project.optional-dependencies]
+# Each broker library is imported lazily and raises an install hint when missing.
 redis = ["redis>=5.0"]
 nats = ["nats-py>=2.9"]
 kafka = ["aiokafka>=0.11"]
@@ -25,7 +25,6 @@ build-backend = "hatchling.build"
 packages = ["src/austial"]
 
 [tool.uv.sources]
-austial-common = { workspace = true }
 austial-core = { workspace = true }
 
 [tool.hatch.version]

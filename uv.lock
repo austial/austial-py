@@ -10,34 +10,11 @@ resolution-markers = [
 [manifest]
 members = [
     "austial",
-    "austial-audit",
     "austial-auth",
-    "austial-authz",
-    "austial-cache",
     "austial-cli",
-    "austial-commander",
-    "austial-common",
-    "austial-config",
     "austial-core",
-    "austial-cqrs",
-    "austial-events",
-    "austial-graphql",
-    "austial-http",
-    "austial-i18n",
-    "austial-jobs",
     "austial-microservices",
-    "austial-migrations",
-    "austial-mongo",
-    "austial-openapi",
     "austial-orm",
-    "austial-prisma",
-    "austial-schedule",
-    "austial-security",
-    "austial-storage",
-    "austial-tenancy",
-    "austial-terminus",
-    "austial-testing",
-    "austial-websockets",
 ]
 
 [manifest.dependency-groups]
@@ -556,93 +533,76 @@ wheels = [
 name = "austial"
 source = { editable = "packages/austial" }
 dependencies = [
-    { name = "austial-audit" },
     { name = "austial-auth" },
-    { name = "austial-authz" },
-    { name = "austial-cache" },
     { name = "austial-cli" },
-    { name = "austial-commander" },
-    { name = "austial-common" },
-    { name = "austial-config" },
     { name = "austial-core" },
-    { name = "austial-cqrs" },
-    { name = "austial-events" },
-    { name = "austial-graphql" },
-    { name = "austial-http" },
-    { name = "austial-i18n" },
-    { name = "austial-jobs" },
     { name = "austial-microservices" },
-    { name = "austial-migrations" },
-    { name = "austial-mongo" },
-    { name = "austial-openapi" },
     { name = "austial-orm" },
-    { name = "austial-prisma" },
-    { name = "austial-schedule" },
-    { name = "austial-security" },
-    { name = "austial-storage" },
-    { name = "austial-tenancy" },
-    { name = "austial-terminus" },
-    { name = "austial-testing" },
-    { name = "austial-websockets" },
+]
+
+[package.optional-dependencies]
+grpc = [
+    { name = "austial-microservices", extra = ["grpc"] },
+]
+grpc-proto = [
+    { name = "austial-microservices", extra = ["grpc-proto"] },
+]
+kafka = [
+    { name = "austial-microservices", extra = ["kafka"] },
+]
+lambda = [
+    { name = "austial-core", extra = ["lambda"] },
+]
+mqtt = [
+    { name = "austial-microservices", extra = ["mqtt"] },
+]
+nats = [
+    { name = "austial-microservices", extra = ["nats"] },
+]
+pymongo = [
+    { name = "austial-orm", extra = ["pymongo"] },
+]
+rabbitmq = [
+    { name = "austial-microservices", extra = ["rabbitmq"] },
+]
+redis = [
+    { name = "austial-microservices", extra = ["redis"] },
+]
+socketio = [
+    { name = "austial-core", extra = ["socketio"] },
+]
+strawberry = [
+    { name = "austial-core", extra = ["strawberry"] },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "austial-audit", editable = "packages/audit" },
     { name = "austial-auth", editable = "packages/auth" },
-    { name = "austial-authz", editable = "packages/authz" },
-    { name = "austial-cache", editable = "packages/cache" },
     { name = "austial-cli", editable = "packages/cli" },
-    { name = "austial-commander", editable = "packages/commander" },
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-config", editable = "packages/config" },
     { name = "austial-core", editable = "packages/core" },
-    { name = "austial-cqrs", editable = "packages/cqrs" },
-    { name = "austial-events", editable = "packages/events" },
-    { name = "austial-graphql", editable = "packages/graphql" },
-    { name = "austial-http", editable = "packages/http" },
-    { name = "austial-i18n", editable = "packages/i18n" },
-    { name = "austial-jobs", editable = "packages/jobs" },
+    { name = "austial-core", extras = ["lambda"], marker = "extra == 'lambda'", editable = "packages/core" },
+    { name = "austial-core", extras = ["socketio"], marker = "extra == 'socketio'", editable = "packages/core" },
+    { name = "austial-core", extras = ["strawberry"], marker = "extra == 'strawberry'", editable = "packages/core" },
     { name = "austial-microservices", editable = "packages/microservices" },
-    { name = "austial-migrations", editable = "packages/migrations" },
-    { name = "austial-mongo", editable = "packages/mongo" },
-    { name = "austial-openapi", editable = "packages/openapi" },
+    { name = "austial-microservices", extras = ["grpc"], marker = "extra == 'grpc'", editable = "packages/microservices" },
+    { name = "austial-microservices", extras = ["grpc-proto"], marker = "extra == 'grpc-proto'", editable = "packages/microservices" },
+    { name = "austial-microservices", extras = ["kafka"], marker = "extra == 'kafka'", editable = "packages/microservices" },
+    { name = "austial-microservices", extras = ["mqtt"], marker = "extra == 'mqtt'", editable = "packages/microservices" },
+    { name = "austial-microservices", extras = ["nats"], marker = "extra == 'nats'", editable = "packages/microservices" },
+    { name = "austial-microservices", extras = ["rabbitmq"], marker = "extra == 'rabbitmq'", editable = "packages/microservices" },
+    { name = "austial-microservices", extras = ["redis"], marker = "extra == 'redis'", editable = "packages/microservices" },
     { name = "austial-orm", editable = "packages/orm" },
-    { name = "austial-prisma", editable = "packages/prisma" },
-    { name = "austial-schedule", editable = "packages/schedule" },
-    { name = "austial-security", editable = "packages/security" },
-    { name = "austial-storage", editable = "packages/storage" },
-    { name = "austial-tenancy", editable = "packages/tenancy" },
-    { name = "austial-terminus", editable = "packages/terminus" },
-    { name = "austial-testing", editable = "packages/testing" },
-    { name = "austial-websockets", editable = "packages/websockets" },
+    { name = "austial-orm", extras = ["pymongo"], marker = "extra == 'pymongo'", editable = "packages/orm" },
 ]
-
-[[package]]
-name = "austial-audit"
-source = { editable = "packages/audit" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
-    { name = "austial-orm" },
-    { name = "fastapi" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-    { name = "austial-orm", editable = "packages/orm" },
-    { name = "fastapi" },
-]
+provides-extras = ["grpc", "grpc-proto", "kafka", "lambda", "mqtt", "nats", "pymongo", "rabbitmq", "redis", "socketio", "strawberry"]
 
 [[package]]
 name = "austial-auth"
 source = { editable = "packages/auth" }
 dependencies = [
     { name = "argon2-cffi" },
-    { name = "austial-common" },
     { name = "austial-core" },
+    { name = "cryptography" },
     { name = "httpx" },
     { name = "pyjwt", extra = ["crypto"] },
     { name = "pyotp" },
@@ -651,41 +611,11 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "argon2-cffi", specifier = ">=23.1.0" },
-    { name = "austial-common", editable = "packages/common" },
     { name = "austial-core", editable = "packages/core" },
+    { name = "cryptography", specifier = ">=43.0.0" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.9.0" },
     { name = "pyotp", specifier = ">=2.9.0" },
-]
-
-[[package]]
-name = "austial-authz"
-source = { editable = "packages/authz" }
-dependencies = [
-    { name = "austial-auth" },
-    { name = "austial-common" },
-    { name = "austial-core" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-auth", editable = "packages/auth" },
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-]
-
-[[package]]
-name = "austial-cache"
-source = { editable = "packages/cache" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
 ]
 
 [[package]]
@@ -705,177 +635,54 @@ requires-dist = [
 ]
 
 [[package]]
-name = "austial-commander"
-source = { editable = "packages/commander" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-]
-
-[[package]]
-name = "austial-common"
-source = { editable = "packages/common" }
-dependencies = [
-    { name = "austial-core" },
-    { name = "fastapi" },
-    { name = "pydantic" },
-    { name = "rich" },
-    { name = "starlette" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-core", editable = "packages/core" },
-    { name = "fastapi", specifier = ">=0.115.0" },
-    { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "rich", specifier = ">=13.7.0" },
-    { name = "starlette" },
-]
-
-[[package]]
-name = "austial-config"
-source = { editable = "packages/config" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
-    { name = "pydantic-settings" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-    { name = "pydantic-settings", specifier = ">=2.4.0" },
-]
-
-[[package]]
 name = "austial-core"
 source = { editable = "packages/core" }
 dependencies = [
-    { name = "austial-common" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "jinja2" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
     { name = "python-multipart" },
+    { name = "rich" },
     { name = "starlette" },
+    { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "fastapi", specifier = ">=0.115.0" },
-    { name = "jinja2", specifier = ">=3.1" },
-    { name = "python-multipart", specifier = ">=0.0.9" },
-    { name = "starlette" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
-]
-
-[[package]]
-name = "austial-cqrs"
-source = { editable = "packages/cqrs" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-]
-
-[[package]]
-name = "austial-events"
-source = { editable = "packages/events" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-]
-
-[[package]]
-name = "austial-graphql"
-source = { editable = "packages/graphql" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
-]
-
 [package.optional-dependencies]
+lambda = [
+    { name = "mangum" },
+]
+socketio = [
+    { name = "python-socketio" },
+]
 strawberry = [
     { name = "strawberry-graphql", extra = ["fastapi"] },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-    { name = "strawberry-graphql", extras = ["fastapi"], marker = "extra == 'strawberry'", specifier = ">=0.250" },
-]
-provides-extras = ["strawberry"]
-
-[[package]]
-name = "austial-http"
-source = { editable = "packages/http" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
-    { name = "httpx" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
+    { name = "fastapi", specifier = ">=0.115.0" },
     { name = "httpx", specifier = ">=0.27" },
-]
-
-[[package]]
-name = "austial-i18n"
-source = { editable = "packages/i18n" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-]
-
-[[package]]
-name = "austial-jobs"
-source = { editable = "packages/jobs" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
-    { name = "typer" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
+    { name = "jinja2", specifier = ">=3.1" },
+    { name = "mangum", marker = "extra == 'lambda'", specifier = ">=0.17" },
+    { name = "pydantic", specifier = ">=2.7.0" },
+    { name = "pydantic-settings", specifier = ">=2.4.0" },
+    { name = "python-multipart", specifier = ">=0.0.9" },
+    { name = "python-socketio", marker = "extra == 'socketio'", specifier = ">=5.11" },
+    { name = "rich", specifier = ">=13.7.0" },
+    { name = "starlette" },
+    { name = "strawberry-graphql", extras = ["fastapi"], marker = "extra == 'strawberry'", specifier = ">=0.250" },
     { name = "typer", specifier = ">=0.12.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
 ]
+provides-extras = ["lambda", "socketio", "strawberry"]
 
 [[package]]
 name = "austial-microservices"
 source = { editable = "packages/microservices" }
 dependencies = [
-    { name = "austial-common" },
     { name = "austial-core" },
 ]
 
@@ -909,7 +716,6 @@ requires-dist = [
     { name = "aio-pika", marker = "extra == 'rabbitmq'", specifier = ">=9.4" },
     { name = "aiokafka", marker = "extra == 'kafka'", specifier = ">=0.11" },
     { name = "aiomqtt", marker = "extra == 'mqtt'", specifier = ">=2.3" },
-    { name = "austial-common", editable = "packages/common" },
     { name = "austial-core", editable = "packages/core" },
     { name = "grpcio", marker = "extra == 'grpc'", specifier = ">=1.66" },
     { name = "grpcio", marker = "extra == 'grpc-proto'", specifier = ">=1.66" },
@@ -921,31 +727,15 @@ requires-dist = [
 provides-extras = ["grpc", "grpc-proto", "kafka", "mqtt", "nats", "rabbitmq", "redis"]
 
 [[package]]
-name = "austial-migrations"
-source = { editable = "packages/migrations" }
+name = "austial-orm"
+source = { editable = "packages/orm" }
 dependencies = [
+    { name = "aiosqlite" },
     { name = "alembic" },
-    { name = "austial-common" },
+    { name = "asyncpg" },
     { name = "austial-core" },
-    { name = "austial-orm" },
-    { name = "typer" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "alembic", specifier = ">=1.13.0" },
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-    { name = "austial-orm", editable = "packages/orm" },
-    { name = "typer", specifier = ">=0.12.0" },
-]
-
-[[package]]
-name = "austial-mongo"
-source = { editable = "packages/mongo" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
+    { name = "greenlet" },
+    { name = "sqlalchemy" },
 ]
 
 [package.optional-dependencies]
@@ -955,178 +745,15 @@ pymongo = [
 
 [package.metadata]
 requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-    { name = "pymongo", marker = "extra == 'pymongo'", specifier = ">=4.9" },
-]
-provides-extras = ["pymongo"]
-
-[[package]]
-name = "austial-openapi"
-source = { editable = "packages/openapi" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-]
-
-[[package]]
-name = "austial-orm"
-source = { editable = "packages/orm" }
-dependencies = [
-    { name = "aiosqlite" },
-    { name = "asyncpg" },
-    { name = "austial-common" },
-    { name = "austial-core" },
-    { name = "greenlet" },
-    { name = "sqlalchemy" },
-]
-
-[package.metadata]
-requires-dist = [
     { name = "aiosqlite", specifier = ">=0.20.0" },
+    { name = "alembic", specifier = ">=1.13.0" },
     { name = "asyncpg", specifier = ">=0.29.0" },
-    { name = "austial-common", editable = "packages/common" },
     { name = "austial-core", editable = "packages/core" },
     { name = "greenlet", specifier = ">=3.1.0" },
+    { name = "pymongo", marker = "extra == 'pymongo'", specifier = ">=4.9" },
     { name = "sqlalchemy", specifier = ">=2.0.30" },
 ]
-
-[[package]]
-name = "austial-prisma"
-source = { editable = "packages/prisma" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-]
-
-[[package]]
-name = "austial-schedule"
-source = { editable = "packages/schedule" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
-    { name = "austial-jobs" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-    { name = "austial-jobs", editable = "packages/jobs" },
-]
-
-[[package]]
-name = "austial-security"
-source = { editable = "packages/security" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
-    { name = "cryptography" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-    { name = "cryptography", specifier = ">=43.0.0" },
-]
-
-[[package]]
-name = "austial-storage"
-source = { editable = "packages/storage" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-]
-
-[[package]]
-name = "austial-tenancy"
-source = { editable = "packages/tenancy" }
-dependencies = [
-    { name = "austial-auth" },
-    { name = "austial-common" },
-    { name = "austial-core" },
-    { name = "austial-orm" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-auth", editable = "packages/auth" },
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-    { name = "austial-orm", editable = "packages/orm" },
-]
-
-[[package]]
-name = "austial-terminus"
-source = { editable = "packages/terminus" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-orm" },
-    { name = "httpx" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-orm", editable = "packages/orm" },
-    { name = "httpx", specifier = ">=0.27" },
-]
-
-[[package]]
-name = "austial-testing"
-source = { editable = "packages/testing" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
-    { name = "fastapi" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-    { name = "fastapi", specifier = ">=0.115.0" },
-]
-
-[[package]]
-name = "austial-websockets"
-source = { editable = "packages/websockets" }
-dependencies = [
-    { name = "austial-common" },
-    { name = "austial-core" },
-]
-
-[package.optional-dependencies]
-socketio = [
-    { name = "python-socketio" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "austial-common", editable = "packages/common" },
-    { name = "austial-core", editable = "packages/core" },
-    { name = "python-socketio", marker = "extra == 'socketio'", specifier = ">=5.11" },
-]
-provides-extras = ["socketio"]
+provides-extras = ["pymongo"]
 
 [[package]]
 name = "bidict"

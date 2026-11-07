@@ -1,7 +1,7 @@
 """``Column()``/``PrimaryColumn()``/``PrimaryGeneratedColumn()``/``CreateDateColumn()``/
 ``UpdateDateColumn()`` -- mirrors TypeORM's column decorators.
 
-Python has no field-level decorators, so (exactly like ``Inject()`` in ``austial-common``) each
+Python has no field-level decorators, so (exactly like ``Inject()`` in ``austial.common``) each
 of these is used as the attribute's *default value* instead::
 
     @Entity()

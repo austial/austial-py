@@ -1,16 +1,26 @@
 [project]
 name = "austial-core"
 dynamic = ["version"]
-description = "The DI container, module scanner, router and application bootstrap -- mirrors @nestjs/core."
+description = "Austial's platform: decorators and exceptions, DI container, router and application bootstrap, config, testing, events, cache, scheduling, CQRS, HTTP client, i18n, storage, jobs, health checks, WebSockets, GraphQL, OpenAPI and Commander."
 requires-python = ">=3.11"
 dependencies = [
-    "austial-common",
     "fastapi>=0.115.0",
     "starlette",
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.4.0",
     "uvicorn[standard]>=0.30.0",
     "python-multipart>=0.0.9",
     "jinja2>=3.1",
+    "rich>=13.7.0",
+    "httpx>=0.27",
+    "typer>=0.12.0",
 ]
+
+[project.optional-dependencies]
+# Optional integrations: each is imported lazily and raises an install hint when its library is missing.
+strawberry = ["strawberry-graphql[fastapi]>=0.250"]      # austial.graphql
+socketio = ["python-socketio>=5.11"]                     # austial.websockets: SocketIoAdapter
+lambda = ["mangum>=0.17"]                                # create_lambda_handler
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
@@ -18,9 +28,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/austial"]
-
-[tool.uv.sources]
-austial-common = { workspace = true }
 
 [tool.hatch.version]
 source = "vcs"

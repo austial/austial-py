@@ -1,15 +1,15 @@
 [project]
 name = "austial-auth"
 dynamic = ["version"]
-description = "Authentication primitives -- Argon2 hasher, JWT strategy, TOTP MFA, AuthGuard, refresh-token store -- mirrors @nestjs/passport + @nestjs/jwt."
+description = "Identity and access: authentication (Argon2, JWT, TOTP, OAuth2/OIDC, strategies), authorization (roles, permissions) and security (headers, rate limiting, CSRF, encryption)."
 requires-python = ">=3.11"
 dependencies = [
-    "austial-common",
     "austial-core",
     "argon2-cffi>=23.1.0",
     "pyjwt[crypto]>=2.9.0",
     "pyotp>=2.9.0",
     "httpx>=0.27",
+    "cryptography>=43.0.0",
 ]
 
 [build-system]
@@ -20,7 +20,6 @@ build-backend = "hatchling.build"
 packages = ["src/austial"]
 
 [tool.uv.sources]
-austial-common = { workspace = true }
 austial-core = { workspace = true }
 
 [tool.hatch.version]

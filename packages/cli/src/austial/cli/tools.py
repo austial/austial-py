@@ -9,12 +9,50 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# Optional framework packages `austial add <name>` installs (PyPI name: austial-<name>).
-KNOWN_PACKAGES = (
-    "auth", "authz", "audit", "cache", "commander", "cqrs", "events", "graphql", "http", "i18n", "jobs",
-    "microservices", "migrations", "mongo", "openapi", "orm", "prisma", "schedule", "security", "storage",
-    "tenancy", "terminus", "websockets",
-)  # fmt: skip
+# Austial ships as five distributions plus the `austial` umbrella. Everything in them is already installed by `austial`;
+# `austial add` is for the optional integrations, which are extras of those distributions.
+OPTIONAL_INTEGRATIONS = {
+    "graphql": "austial-core[strawberry]",
+    "socketio": "austial-core[socketio]",
+    "redis": "austial-microservices[redis]",
+    "nats": "austial-microservices[nats]",
+    "kafka": "austial-microservices[kafka]",
+    "mqtt": "austial-microservices[mqtt]",
+    "rabbitmq": "austial-microservices[rabbitmq]",
+    "grpc": "austial-microservices[grpc]",
+    "grpc-proto": "austial-microservices[grpc-proto]",
+    "lambda": "austial-core[lambda]",
+    "mongo": "austial-orm[pymongo]",
+}
+DISTRIBUTIONS = ("core", "microservices", "orm", "auth", "cli")
+# Which distribution each module lives in, for the "already included" hint.
+MODULE_OWNERS = {
+    **dict.fromkeys(
+        (
+            "common",
+            "config",
+            "testing",
+            "events",
+            "cache",
+            "schedule",
+            "cqrs",
+            "http",
+            "commander",
+            "i18n",
+            "storage",
+            "jobs",
+            "terminus",
+            "websockets",
+            "openapi",
+            "microservices",
+        ),
+        "austial-core",
+    ),
+    "microservices": "austial-microservices",
+    **dict.fromkeys(("migrations", "prisma", "audit", "tenancy"), "austial-orm"),
+    **dict.fromkeys(("authz", "security"), "austial-auth"),
+}
+KNOWN_PACKAGES = (*DISTRIBUTIONS, *OPTIONAL_INTEGRATIONS)
 
 
 class TargetError(Exception):
@@ -84,8 +122,16 @@ def build_project(root: Path) -> list[str]:
 
 
 def add_command(name: str) -> list[str]:
-    """The ``uv add`` invocation for ``austial add <name>`` (accepts ``cache`` or ``austial-cache``)."""
+    """The ``uv add`` invocation for ``austial add <name>``: an optional integration (``redis``, ``socketio``,
+    ``mongo``...) or a distribution (``core``, ``orm``, ``auth``, ``cli``). A module that already ships inside a
+    distribution says where it lives."""
     short = name.removeprefix("austial-")
-    if short not in KNOWN_PACKAGES:
-        raise TargetError(f"Unknown package '{name}'. Available: {', '.join(KNOWN_PACKAGES)}")
-    return ["uv", "add", f"austial-{short}"]
+    if short in OPTIONAL_INTEGRATIONS:
+        return ["uv", "add", OPTIONAL_INTEGRATIONS[short]]
+    if short in DISTRIBUTIONS:
+        return ["uv", "add", f"austial-{short}"]
+    if short in MODULE_OWNERS:
+        raise TargetError(
+            f"'{short}' is part of {MODULE_OWNERS[short]}, which `austial` already installs: nothing to add."
+        )
+    raise TargetError(f"Unknown package '{name}'. Available: {', '.join(KNOWN_PACKAGES)}")
