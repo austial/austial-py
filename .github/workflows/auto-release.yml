@@ -1,0 +1,56 @@
+name: Auto release
+
+# Every push to `main` that changes framework code is released: this picks the next version from the commits since the
+# latest `v*` tag (see scripts/next_version.py), tags the pushed commit, then runs publish.yml on that tag, which re-runs the
+# lint/type/test gate and publishes all distributions to PyPI. Versions come from the tag (hatch-vcs).
+#
+# Opt out of one push with `[skip release]` in a commit message. Majors and anything unusual: use the `release` skill.
+#
+# Why `gh workflow run` and not just a tag push: tags pushed with GITHUB_TOKEN do not trigger other workflows,
+# but `workflow_dispatch` is exempt from that rule.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/**"
+      - "pyproject.toml"
+      - "uv.lock"
+
+permissions:
+  contents: write   # push the tag
+  actions: write    # dispatch publish.yml
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false   # releases queue; never cancel one halfway
+
+jobs:
+  tag:
+    name: Tag and publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # tags and history are needed to compute the version
+
+      - name: Pick the next version
+        id: version
+        run: |
+          if [ -n "$(git tag --points-at HEAD)" ]; then
+            echo "HEAD is already tagged; nothing to release."
+          else
+            echo "tag=$(python3 scripts/next_version.py)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Tag and dispatch the publish workflow
+        if: steps.version.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG (automatic release of $GITHUB_SHA)"
+          git push origin "$TAG"
+          gh workflow run publish.yml --ref "$TAG"
