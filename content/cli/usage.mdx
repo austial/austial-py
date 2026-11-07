@@ -53,8 +53,8 @@ reinstalling.
 ```bash
 austial start [--port 8000] [--watch/-w] [--app apps.admin.main:app]   # like `nest start`; --watch reloads on changes
 austial build                                                           # byte-compile src/libs/apps and scan the module graph
-austial add cache                                                       # uv add austial-cache (also: events, websockets, cqrs ...)
-austial add events --dry-run                                            # print the command only
+austial add redis                                                       # uv add austial-microservices[redis] (also: socketio, nats, kafka, mongo ...)
+austial add socketio --dry-run                                          # print the command only
 austial graph [src.app_module:AppModule] [--format mermaid|json]       # the module graph, no server needed
 austial repl  [src.app_module:AppModule]                                # a Python REPL with the app booted
 ```
@@ -63,8 +63,10 @@ austial repl  [src.app_module:AppModule]                                # a Pyth
   generated with `austial generate app`.
 - `build` is a fast pre-flight check, not a bundler: it fails on syntax errors and on module-graph problems (an import or scan error), and
   prints how many modules it scanned.
-- `add` accepts `cache`, `events`, `http`, `schedule`, `cqrs`, `websockets`, `microservices`, `openapi`, `graphql`, `mongo`, `prisma`
-  and the other `austial-*` packages, and runs `uv add austial-<name>` in the project root.
+- `add` installs an optional integration into the project with `uv add`: `graphql` (`austial-core[strawberry]`), `socketio` and `lambda`
+  (extras of `austial-core`), `redis`, `nats`, `kafka`, `mqtt`, `rabbitmq`, `grpc` and `grpc-proto` (extras of `austial-microservices`) and
+  `mongo` (`austial-orm[pymongo]`), or a distribution (`core`, `microservices`, `orm`, `auth`, `cli`). Everything else (`cache`, `events`, `websockets`, ...) already ships with `austial`, and
+  `add` says which distribution it is in.
 - In `repl` there is no top-level `await`: use `run(coroutine)`. Names available: `app` (the application context), `get(Token)`, `run`,
   and your root module.
 

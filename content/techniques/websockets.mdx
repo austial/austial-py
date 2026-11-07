@@ -7,7 +7,7 @@ import { Callout } from "@/components/mdx";
 # WebSockets
 
 ```bash
-pip install austial-websockets      # included in the `austial` umbrella package
+pip install austial      # `austial.websockets` ships in austial-core, which `austial` installs
 ```
 
 A **gateway** is a provider that serves a WebSocket endpoint. Clients and the server exchange JSON text frames
@@ -102,7 +102,7 @@ refuse a connection, check in `handle_connection` and `await client.close(4401)`
 ## Socket.IO
 
 By default the server speaks plain WebSocket text frames (use the browser's `WebSocket`). To serve the same gateways to
-`socket.io-client`, install `pip install 'austial-websockets[socketio]'` and pass an adapter:
+`socket.io-client`, install `pip install 'austial-core[socketio]'` and pass an adapter:
 
 ```python
 from austial.websockets import SocketIoAdapter, WebSocketsModule
