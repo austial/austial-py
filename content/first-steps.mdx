@@ -30,7 +30,22 @@ get it running with auto-reload. Austial requires **Python 3.11+** and uses
   </Tabs.Tab>
 </Tabs>
 
-This installs the `austial` console script.
+This installs the `austial` console script and the framework.
+
+### Packages and extras
+
+`austial` pulls in five distributions, and every module keeps its `austial.<name>` import path:
+
+| Distribution | Modules |
+|---|---|
+| `austial-core` | `common`, `core`, `config`, `testing`, `events`, `cache`, `schedule`, `jobs`, `cqrs`, `http`, `i18n`, `storage`, `terminus`, `commander`, `websockets`, `graphql`, `openapi` |
+| `austial-microservices` | `microservices` |
+| `austial-orm` | `orm`, `migrations`, `mongo`, `prisma`, `audit`, `tenancy` |
+| `austial-auth` | `auth`, `authz`, `security` |
+| `austial-cli` | the `austial` command |
+
+Optional libraries are extras, installed with `pip install 'austial[redis,socketio]'` (or the distribution's own extra): `strawberry` (GraphQL),
+`socketio`, `lambda` (`austial-core`); `redis`, `nats`, `kafka`, `mqtt`, `rabbitmq`, `grpc`, `grpc-proto` (`austial-microservices`); and `pymongo` for MongoDB (`austial-orm`).
 
 <Callout type="info">
   **`austial: command not found`?** The folder these tools install into is not
