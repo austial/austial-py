@@ -49,7 +49,7 @@ Running `module` for a name also patches the nearest `app_module.py`,
 inserting both the import line and the class into the `imports=[...]`
 array — see [App module patching](#app-module-patching) below.
 
-## Guards, pipes, interceptors, filters, middleware, decorators
+## Guards, pipes, interceptors, filters, middleware, decorators, gateways and more
 
 One file each, with a working skeleton:
 
@@ -60,6 +60,10 @@ austial generate interceptor timing    # .../timing_interceptor.py              
 austial generate filter database       # .../database_filter.py                  -> class DatabaseFilter(ExceptionFilter), @Catch(HttpException)
 austial generate middleware audit      # .../audit_middleware.py                 -> class AuditMiddleware(NestMiddleware)
 austial generate decorator roles       # .../roles_decorator.py                  -> def Roles(*values), plus ROLES_KEY
+austial generate gateway chat         # .../chat_gateway.py                    -> @WebSocketGateway("/chat") with a message handler
+austial generate resolver cats         # .../cats_resolver.py                    -> a Strawberry Query type
+austial generate command seed-db       # .../seed_db_command.py                  -> @Command class (austial.commander)
+austial generate listener order        # .../order_listener.py                   -> @OnEvent("order.created") handler
 austial generate class money           # .../money.py                            -> class Money
 austial generate provider mailer       # same as `service`
 ```

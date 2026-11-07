@@ -96,13 +96,17 @@ austial g <schematic> <name>                                 # short alias
 | `filter` | `f` | an `ExceptionFilter` |
 | `middleware` | `mi` | a `NestMiddleware` |
 | `decorator` | `d` | a metadata decorator factory plus its key |
+| `gateway` | `ga` | a `@WebSocketGateway` |
+| `resolver` | `res` | a Strawberry GraphQL query type |
+| `command` | `cmd` | an `austial.commander` command |
+| `listener` | `li` | an `@OnEvent` listener |
 | `class` | `cl` | a plain class |
 | `library` | `lib` | `libs/<name>/`: a module + service apps can share |
 | `app` | | `apps/<name>/`: another application with its own `main.py` |
 
 | Flag | Effect |
 |---|---|
-| `--flat` | For guard, pipe, interceptor, filter, middleware, decorator and class: no folder for the file. Rejected for the others. |
+| `--flat` | For guard, pipe, interceptor, filter, middleware, decorator, gateway, resolver, command, listener and class: no folder for the file. Rejected for the others. |
 | `--dry-run`, `-d` | Print what would be created; write nothing. |
 
 `<name>` may include a path for the component schematics: `auth/api-key`.
