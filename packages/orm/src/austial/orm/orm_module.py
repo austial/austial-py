@@ -4,13 +4,10 @@ Import ``OrmModule.for_root(...)`` in ``AppModule``'s ``imports=[...]`` once, to
 single app-wide ``DataSource``; import ``OrmModule.for_feature([Cat, Owner])`` in whichever
 feature module needs ``@InjectRepository(Cat)``/``@InjectRepository(Owner)``.
 
-Lifecycle gap (see ``data_source.py``'s docstring for the full explanation): ``austial-core``'s
-``module_scanner`` is synchronous and has no async module-init hook, so ``for_root()``/
-``for_root_async()`` only *construct* the ``Driver``+``DataSource`` at module-scan time (cheap --
-``create_async_engine()`` itself is lazy, no connection opens yet). The app entrypoint must still
-call ``await app.get(DataSource).initialize()`` itself before serving requests -- exactly the
-pattern vanilla (non-Nest) TypeORM uses, and the first thing to simplify once ``austial-core``
-grows real lifecycle hooks.
+Lifecycle: ``for_root()`` / ``for_root_async()`` construct the ``Driver`` + ``DataSource`` at module-scan time (cheap:
+``create_async_engine()`` is lazy), and an ``OrmLifecycle`` provider connects it when the application initialises and
+closes it on shutdown. Repositories can be injected anywhere, including into providers with ``on_module_init`` hooks.
+Calling ``await app.get(DataSource).initialize()`` yourself is still allowed (it is idempotent).
 """
 
 from __future__ import annotations
@@ -41,6 +38,21 @@ def _make_repository_factory(entity: type) -> Callable[[DataSource], Any]:
     return factory
 
 
+class OrmLifecycle:
+    """Connects the ``DataSource`` when the application initialises and closes it on shutdown, so no manual
+    ``await app.get(DataSource).initialize()`` is needed. (Calling it yourself still works: it is idempotent.)"""
+
+    def __init__(self, data_source: DataSource):
+        self.data_source = data_source
+
+    async def on_module_init(self) -> None:
+        await self.data_source.initialize()
+
+    async def on_module_destroy(self) -> None:
+        if self.data_source.initialized:
+            await self.data_source.destroy()
+
+
 @Module()
 class OrmModule:
     @staticmethod
@@ -58,7 +70,7 @@ class OrmModule:
         data_source = DataSource(driver, entities, naming_strategy=naming_strategy, synchronize=synchronize)
         return DynamicModule(
             module=OrmModule,
-            providers=[{"provide": DataSource, "useValue": data_source}],
+            providers=[{"provide": DataSource, "useValue": data_source}, OrmLifecycle],
             exports=[DataSource],
         )
 
@@ -84,7 +96,7 @@ class OrmModule:
 
         return DynamicModule(
             module=OrmModule,
-            providers=[{"provide": DataSource, "useFactory": _build_data_source, "inject": list(inject)}],
+            providers=[{"provide": DataSource, "useFactory": _build_data_source, "inject": list(inject)}, OrmLifecycle],
             exports=[DataSource],
         )
 

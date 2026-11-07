@@ -395,6 +395,7 @@ async def test_kafka_transport_with_fake_clients() -> None:
         ClientOptions(name="K", transport=Transport.KAFKA, extra=options, timeout=2),
     )
     assert any(g.startswith("austial-") for g in consumer.groups)  # reply consumers never share a group
+    assert "math" in consumer.groups  # server consumers join the configured group (regression: replicas must share it)
 
 
 async def test_mqtt_transport_with_a_fake_client() -> None:
@@ -546,3 +547,53 @@ async def test_missing_libraries_produce_install_hints(monkeypatch) -> None:
         from austial.microservices.factory import _backend
 
         _backend(Transport.TCP, None, "g", {})
+
+
+# -- Redis Streams (real client library, in-memory server) -----------------------------------
+
+
+def _streams_extra(server) -> dict:
+    return {"client_factory": lambda: fakeredis.aioredis.FakeRedis(server=server), "block_ms": 50}
+
+
+async def test_redis_streams_full_behaviour() -> None:
+    extra = _streams_extra(fakeredis.FakeServer())
+    await exercise(
+        MicroserviceOptions(Transport.REDIS_STREAMS, extra=extra),
+        ClientOptions(name="S", transport=Transport.REDIS_STREAMS, extra=extra, timeout=2),
+    )
+
+
+async def test_redis_streams_deliver_each_message_to_one_replica_of_a_group() -> None:
+    server = fakeredis.FakeServer()
+    extra = _streams_extra(server)
+    handled: dict[str, int] = {"a": 0, "b": 0}
+
+    def replica(name: str):
+        @Controller()
+        class Counter:
+            @MessagePattern("count")
+            def count(self, n: int = Payload()):
+                handled[name] += 1
+                return n
+
+        @Module(controllers=[Counter])
+        class Mod:
+            pass
+
+        return create_microservice(Mod, MicroserviceOptions(Transport.REDIS_STREAMS, extra=extra))
+
+    client = ClientProxy(ClientOptions(name="L", transport=Transport.REDIS_STREAMS, extra=extra, timeout=3))
+    await client.connect()
+    a, b = replica("a"), replica("b")
+    await a.listen()  # creates the consumer group
+    await b.listen()
+    try:
+        results = await asyncio.gather(*(client.send("count", n) for n in range(20)))
+        assert results == list(range(20))
+        # Each message is handled exactly once, by one of the two replicas (the split itself is up to Redis).
+        assert handled["a"] + handled["b"] == 20
+    finally:
+        await a.close()
+        await b.close()
+        await client.close()

@@ -5,6 +5,7 @@ from austial.websockets import (
 )
 """
 
+from austial.websockets.adapter import WsAdapter
 from austial.websockets.decorators import (
     ConnectedSocket,
     MessageBody,
@@ -31,6 +32,7 @@ __all__ = [
     "SocketIoClient",
     "SocketIoServer",
     "WebSocketGateway",
+    "WsAdapter",
     "WebSocketsModule",
     "WsArgumentsHost",
     "WsClient",

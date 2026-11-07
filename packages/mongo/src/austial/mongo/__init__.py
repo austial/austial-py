@@ -15,8 +15,17 @@ from austial.mongo.mongo_module import (
     MongoOptions,
     collection_token,
 )
+from austial.mongo.odm import Document, Index, InjectModel, Model, ModelRegistry, Schema, model_token, schema_of
 
 __all__ = [
+    "Document",
+    "Index",
+    "InjectModel",
+    "Model",
+    "ModelRegistry",
+    "Schema",
+    "model_token",
+    "schema_of",
     "MONGO_CLIENT",
     "MONGO_DATABASE",
     "MONGO_OPTIONS",

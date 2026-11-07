@@ -16,6 +16,7 @@ from austial.auth.auth_service import AuthService
 from austial.auth.config import AuthConfig
 from austial.auth.jwt_strategy import JwtStrategy
 from austial.auth.refresh_token_store import InMemoryRefreshTokenStore, RefreshTokenStore
+from austial.auth.strategies import JwtBearerStrategy, StrategyRegistry
 from austial.auth.totp_strategy import TotpStrategy
 from austial.common.decorators.modules import Module
 from austial.core.dynamic_module import DynamicModule
@@ -71,6 +72,8 @@ class AuthModule:
             {"provide": AuthConfig, "useValue": config},
             AuthService,
             AuthGuard,
+            JwtBearerStrategy,
+            StrategyRegistry,
         ]
 
         return DynamicModule(
@@ -85,5 +88,6 @@ class AuthModule:
                 AuthConfig,
                 AuthService,
                 AuthGuard,
+                StrategyRegistry,
             ],
         )

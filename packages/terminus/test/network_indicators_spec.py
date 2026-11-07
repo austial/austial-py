@@ -108,7 +108,8 @@ async def test_new_indicators_compose_with_the_health_check_service() -> None:
         [
             lambda: http.ping_check("upstream", "http://x", transport=mock(lambda r: httpx.Response(500))),
             lambda: disk.check_storage("disk", ".", threshold_percent=1.0),
-        ]
+        ],
+        raise_on_error=False,
     )
     assert report["status"] == "error"
     assert report["error"]["upstream"]["status"] == "down" and report["info"]["disk"]["status"] == "up"

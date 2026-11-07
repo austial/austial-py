@@ -154,8 +154,8 @@ Before calling a feature production-ready, confirm:
 1. All checks in "Definition of done" pass.
 2. Secrets come from the environment and `jwt_secret` /
    `signed_url_secret` are 32+ characters.
-3. `DataSource.initialize()` runs in a `startup` event handler, because
-   `uvicorn src.main:app` never calls `bootstrap()`.
+3. `OrmModule.for_root(...)` is imported once; it connects the `DataSource` on
+   startup (no manual `initialize()` call) and a bad config fails the startup.
 4. `GET /health` is wired to `DatabaseHealthIndicator`.
 5. Global `ValidationPipe` and `AllExceptionsFilter` are registered, and
    `AuthGuard` is global or on every non-public controller.

@@ -40,9 +40,24 @@ async def test_reports_error_status_when_an_indicator_fails():
 
     indicator = _AlwaysDownIndicator()
 
-    result = await service.check([lambda: indicator.ping("dependency")])
+    result = await service.check([lambda: indicator.ping("dependency")], raise_on_error=False)
 
     assert result["status"] == "error"
     assert result["info"] == {}
     assert result["error"]["dependency"]["status"] == "down"
     assert result["details"] == result["error"]
+
+
+async def test_an_unhealthy_check_raises_503_with_the_report_by_default() -> None:
+    from austial.common.exceptions import ServiceUnavailableException
+
+    class _Down(HealthIndicator):
+        async def ping(self, key: str) -> HealthIndicatorResult:
+            raise HealthCheckError("down", self.get_status(key, False))
+
+    down = _Down()
+    with pytest.raises(ServiceUnavailableException) as caught:
+        await HealthCheckService().check([lambda: down.ping("db")])
+    assert caught.value.get_status() == 503
+    body = caught.value.get_response()
+    assert body["status"] == "error" and body["error"]["db"]["status"] == "down"

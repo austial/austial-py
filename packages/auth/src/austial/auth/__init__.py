@@ -41,9 +41,14 @@ from austial.auth.refresh_token_store import (
     RefreshTokenRecord,
     RefreshTokenStore,
 )
+from austial.auth.strategies import AuthStrategy, JwtBearerStrategy, StrategyGuard, StrategyRegistry
 from austial.auth.totp_strategy import TotpStrategy
 
 __all__ = [
+    "AuthStrategy",
+    "JwtBearerStrategy",
+    "StrategyGuard",
+    "StrategyRegistry",
     "AuthorizationRequest",
     "GitHubOAuth",
     "GoogleOAuth",

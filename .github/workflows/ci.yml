@@ -85,3 +85,30 @@ jobs:
       - uses: astral-sh/setup-uv@v3
       - run: uv sync --all-packages --group dev
       - run: uv run python scripts/check_docs_sync.py docs-site/content
+
+  brokers:
+    name: Live brokers (Redis, NATS, RabbitMQ, MQTT, Kafka, MongoDB)
+    runs-on: ubuntu-latest
+    env:
+      AUSTIAL_TEST_REDIS_URL: redis://localhost:6379
+      AUSTIAL_TEST_NATS_URL: nats://localhost:4222
+      AUSTIAL_TEST_RABBITMQ_URL: amqp://guest:guest@localhost:5672/
+      AUSTIAL_TEST_MONGO_URL: mongodb://localhost:27017
+      AUSTIAL_TEST_MQTT_URL: localhost:1883
+      AUSTIAL_TEST_KAFKA_URL: localhost:9092
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages --group dev
+      - name: Start the brokers
+        run: docker compose -f docker-compose.brokers.yml up -d --wait
+      - name: Run the broker integration tests
+        run: uv run pytest integration/brokers_spec.py -q -p no:cacheprovider --no-cov
+      - name: Broker logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.brokers.yml logs --tail 80
+      - name: Stop the brokers
+        if: always()
+        run: docker compose -f docker-compose.brokers.yml down -v

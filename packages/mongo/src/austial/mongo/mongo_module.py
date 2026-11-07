@@ -22,6 +22,7 @@ so a bad URI fails at startup, not on the first request) and closes when it shut
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -30,6 +31,7 @@ from austial.common.decorators.injectable import Inject
 from austial.common.decorators.modules import Module
 from austial.common.logger import Logger
 from austial.core.dynamic_module import DynamicModule
+from austial.mongo.odm import MODEL_REGISTRY, Document, Model, ModelRegistry, model_token, schema_of
 
 MONGO_OPTIONS = "AUSTIAL_MONGO_OPTIONS"
 MONGO_CLIENT = "AUSTIAL_MONGO_CLIENT"
@@ -84,7 +86,9 @@ class MongoConnection:
             _logger.log(f"Connected to MongoDB database '{self.options.database}'")
 
     async def on_module_destroy(self) -> None:
-        await self.client.close()
+        closed = self.client.close()
+        if inspect.isawaitable(closed):  # PyMongo's async client awaits; Motor-style clients close synchronously
+            await closed
 
 
 @Module()
@@ -128,18 +132,37 @@ class MongoModule:
                     "useFactory": lambda client, options: client[options.database],
                     "inject": [MONGO_CLIENT, MONGO_OPTIONS],
                 },
+                {"provide": MODEL_REGISTRY, "useClass": ModelRegistry},
                 MongoConnection,
             ],
             exports=[MONGO_CLIENT, MONGO_DATABASE, MONGO_OPTIONS],
         )
 
     @staticmethod
-    def for_feature(collections: Sequence[str]) -> DynamicModule:
-        """Declares collections, injectable with ``InjectCollection(name)``."""
-        providers = [
-            {"provide": collection_token(name), "useFactory": lambda db, n=name: db[n], "inject": [MONGO_DATABASE]}
-            for name in collections
-        ]
-        return DynamicModule(
-            module=MongoModule, providers=providers, exports=[collection_token(n) for n in collections]
-        )
+    def for_feature(features: Sequence[str | type[Document]]) -> DynamicModule:
+        """Declares collections (``"cats"``, injectable with ``InjectCollection``) and/or ``@Schema`` classes
+        (injectable as a :class:`Model` with ``InjectModel``)."""
+        providers: list[Any] = []
+        exports: list[Any] = []
+        for feature in features:
+            if isinstance(feature, str):
+                providers.append(
+                    {
+                        "provide": collection_token(feature),
+                        "useFactory": lambda db, n=feature: db[n],
+                        "inject": [MONGO_DATABASE],
+                    }
+                )
+                exports.append(collection_token(feature))
+                continue
+
+            def make_model(db: Any, registry: ModelRegistry, cls: type[Document] = feature) -> Model[Any]:
+                model: Model[Any] = Model(db[schema_of(cls).collection], cls)
+                registry.models.append(model)
+                return model
+
+            providers.append(
+                {"provide": model_token(feature), "useFactory": make_model, "inject": [MONGO_DATABASE, MODEL_REGISTRY]}
+            )
+            exports.append(model_token(feature))
+        return DynamicModule(module=MongoModule, providers=providers, exports=exports)
