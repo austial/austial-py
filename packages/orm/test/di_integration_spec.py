@@ -51,3 +51,40 @@ async def test_inject_repository_resolves_end_to_end_through_di():
     cats = await service.all()
     assert [c.name for c in cats] == ["Tom"]
     await data_source.destroy()
+
+
+async def test_orm_module_connects_on_init_closes_on_shutdown_and_survives_a_manual_initialize() -> None:
+    from austial import AustialFactory, Injectable, Module
+    from austial.orm import Column, DataSource, Entity, InjectRepository, OrmModule, PrimaryGeneratedColumn
+
+    @Entity()
+    class Note:
+        id: int = PrimaryGeneratedColumn()
+        text: str = Column()
+
+    @Injectable()
+    class Notes:
+        def __init__(self, repository: Repository[Note] = InjectRepository(Note)):
+            self.repository = repository
+
+        async def on_module_init(self) -> None:  # a hook that already needs the repository
+            await self.repository.save(Note(text="seeded"))
+
+    @Module(
+        imports=[
+            OrmModule.for_root(type_="sqlite", url="sqlite+aiosqlite:///:memory:", entities=[Note], synchronize=True),
+            OrmModule.for_feature([Note]),
+        ],
+        providers=[Notes],
+    )
+    class Root:
+        pass
+
+    app = AustialFactory.create(Root)
+    await app.init()
+    data_source = app.get(DataSource)
+    assert data_source.initialized
+    assert [n.text for n in await app.get(Notes).repository.find()] == ["seeded"]
+    await data_source.initialize()  # idempotent: no error, no second connection
+    await app.close()
+    assert not data_source.initialized

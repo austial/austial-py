@@ -1,0 +1,17 @@
+syntax = "proto3";
+package hero;
+
+enum Rank { RANK_UNKNOWN = 0; HERO = 1; VILLAIN = 2; }
+
+message HeroById { int32 id = 1; }
+message Hero { int32 id = 1; string name = 2; Rank rank = 3; repeated string tags = 4; }
+message Query { int32 count = 1; }
+message Number { int32 value = 1; }
+message Line { string text = 1; }
+
+service HeroService {
+  rpc FindOne (HeroById) returns (Hero);
+  rpc FindMany (Query) returns (stream Hero);
+  rpc Sum (stream Number) returns (Number);
+  rpc Chat (stream Line) returns (stream Line);
+}

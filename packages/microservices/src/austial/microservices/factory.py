@@ -25,10 +25,19 @@ def _split_host_port(url: str | None, default_host: str, default_port: int) -> t
 
 
 def _backend(transport: Transport, url: str | None, group: str, extra: dict[str, Any]) -> Any:
-    from austial.microservices.transports import KafkaBackend, MqttBackend, NatsBackend, RabbitMqBackend, RedisBackend
+    from austial.microservices.transports import (
+        KafkaBackend,
+        MqttBackend,
+        NatsBackend,
+        RabbitMqBackend,
+        RedisBackend,
+        RedisStreamsBackend,
+    )
 
     if transport == Transport.REDIS:
         return RedisBackend(url or "redis://localhost:6379", **extra)
+    if transport == Transport.REDIS_STREAMS:
+        return RedisStreamsBackend(url or "redis://localhost:6379", **extra)
     if transport == Transport.NATS:
         return NatsBackend(url or "nats://localhost:4222", **extra)
     if transport == Transport.KAFKA:
@@ -41,7 +50,7 @@ def _backend(transport: Transport, url: str | None, group: str, extra: dict[str,
     raise ValueError(f"Not a broker transport: {transport}")
 
 
-_BROKERS = {Transport.REDIS, Transport.NATS, Transport.KAFKA, Transport.MQTT, Transport.RMQ}
+_BROKERS = {Transport.REDIS, Transport.REDIS_STREAMS, Transport.NATS, Transport.KAFKA, Transport.MQTT, Transport.RMQ}
 
 
 def build_server_transport(options: MicroserviceOptions) -> ServerTransport:
@@ -52,8 +61,8 @@ def build_server_transport(options: MicroserviceOptions) -> ServerTransport:
     if options.transport in _BROKERS:
         from austial.microservices.transports import PubSubServer
 
-        # NATS and MQTT share load via the group; Kafka's group is consumed inside the backend; RabbitMQ shares by queue
-        grouped = options.transport in (Transport.NATS, Transport.MQTT)
+        # NATS, MQTT, Kafka and Redis Streams share load through the group; RabbitMQ shares by queue
+        grouped = options.transport in (Transport.NATS, Transport.MQTT, Transport.REDIS_STREAMS, Transport.KAFKA)
         return PubSubServer(
             _backend(options.transport, options.url, options.group, options.extra),
             prefix=options.prefix,
@@ -61,6 +70,10 @@ def build_server_transport(options: MicroserviceOptions) -> ServerTransport:
             codec=options.codec,
         )
     if options.transport == Transport.GRPC:
+        if "proto_path" in options.extra:  # a .proto file: real protobuf services
+            from austial.microservices.transports.grpc_proto import GrpcProtoServer
+
+            return GrpcProtoServer(options.host, options.port, **options.extra)
         from austial.microservices.transports import GrpcServer
 
         return GrpcServer(options.host, options.port, **options.extra)
@@ -84,6 +97,10 @@ def build_client_transport(options: ClientOptions) -> ClientTransport:
             codec=options.codec,
         )
     if options.transport == Transport.GRPC:
+        if "proto_path" in options.extra:
+            from austial.microservices.transports.grpc_proto import GrpcProtoClient
+
+            return GrpcProtoClient(options.host, options.port, timeout=options.timeout, **options.extra)
         from austial.microservices.transports import GrpcClient
 
         return GrpcClient(options.host, options.port, timeout=options.timeout, **options.extra)

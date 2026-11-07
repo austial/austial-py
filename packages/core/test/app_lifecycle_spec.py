@@ -139,3 +139,24 @@ async def test_eager_init_still_fails_before_startup_ran():
 
     with pytest.raises(RuntimeError, match="DataSource.initialize"):
         await app.init()
+
+
+async def test_objects_with_a_dynamic_getattr_are_not_treated_as_hook_owners() -> None:
+    """A PyMongo database (or any proxy) answers every attribute name; only classes that define a hook get called."""
+    from austial import AustialFactory, Module
+
+    class Proxy:
+        def __getattr__(self, name: str):
+            return object()  # not callable: but a callable-returning proxy must not be called either
+
+    class CallableProxy:
+        def __getattr__(self, name: str):
+            raise AssertionError(f"hook {name} must not be looked up on the instance")
+
+    @Module(providers=[{"provide": "A", "useValue": Proxy()}, {"provide": "B", "useValue": CallableProxy()}])
+    class Root:
+        pass
+
+    app = AustialFactory.create(Root)
+    await app.init()
+    await app.close()

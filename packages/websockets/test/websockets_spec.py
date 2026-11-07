@@ -231,3 +231,33 @@ def test_two_gateways_on_one_path_are_rejected() -> None:
 
     with pytest.raises(RuntimeError, match="both listen on /dup"), TestClient(AustialFactory.create(Dup)):
         pass
+
+
+async def test_custom_adapters_receive_the_gateway_handlers_and_run_messages_through_the_pipeline() -> None:
+    from austial.websockets import WsAdapter
+
+    mounted: dict[str, tuple] = {}
+
+    class Recording(WsAdapter):
+        def mount(self, runner, app, path, gateway, handlers):
+            mounted[path] = (runner, gateway, handlers)
+            return WsServer()
+
+    @Module(imports=[WebSocketsModule.for_root(adapter=Recording())], providers=[ChatGateway, PrivateGateway, Greeter])
+    class Custom:
+        pass
+
+    app = AustialFactory.create(Custom)
+    await app.init()
+    assert set(mounted) == {"/chat", "/private"}
+    runner, gateway, handlers = mounted["/chat"]
+    assert {"greet", "whole", "boom"} <= set(handlers)
+    client = WsClient(None, WsServer())  # type: ignore[arg-type]
+    assert await runner.process(gateway, handlers["whole"], client, "whole", {"a": 1}) == ("whole", {"echo": {"a": 1}})
+    assert await runner.process(gateway, handlers["quiet"], client, "quiet", None) is None
+    assert await runner.process(gateway, handlers["denied"], client, "denied", None) == (
+        "exception",
+        {"status": "error", "message": "not allowed"},
+    )
+    event, payload = await runner.process(gateway, handlers["boom"], client, "boom", None)
+    assert event == "exception" and payload["message"] == "Internal server error"

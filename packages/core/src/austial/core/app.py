@@ -204,6 +204,7 @@ class AustialApplication(AustialApplicationContext):
         async def lifespan(app: FastAPI) -> AsyncIterator[Any]:
             async with wrapped(app) as state:
                 await AustialApplicationContext.init(self)
+                self._build_routes()
                 try:
                     yield state
                 finally:

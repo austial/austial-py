@@ -2,20 +2,15 @@
 object that owns one ``Driver`` and one entity ``SchemaCatalog``, and hands out
 ``EntityManager``/``Repository`` instances bound to them.
 
-``austial-core``'s ``module_scanner`` walks ``@Module(imports=[...])`` synchronously and eagerly
-(no async lifecycle hooks exist yet -- see ``orm_module.py``), so constructing a ``DataSource``
-must stay cheap and side-effect-free; the actual DB connection only opens inside
-``initialize()``, which the app entrypoint must call explicitly::
-
-    app = await Austial.create(AppModule)
-    await app.get(DataSource).initialize()
-    await app.listen(8000)
+Constructing a ``DataSource`` is cheap and side-effect-free; the DB connection opens in ``initialize()``, which
+``OrmModule``'s lifecycle hook calls when the application initialises (calling it yourself is harmless: it is
+idempotent).
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Sequence
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import sqlalchemy as sa
 
@@ -27,6 +22,16 @@ from austial.orm.repository import Repository
 
 R = TypeVar("R")
 T = TypeVar("T")
+
+
+class _LazyManager:
+    """Forwards to ``data_source.manager`` at call time: a repository can exist before the connection does."""
+
+    def __init__(self, data_source: DataSource):
+        self._data_source = data_source
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._data_source.manager, name)
 
 
 class DataSource:
@@ -45,7 +50,15 @@ class DataSource:
         self._catalog: SchemaCatalog | None = None
         self._manager: EntityManager | None = None
 
+    @property
+    def initialized(self) -> bool:
+        return self._manager is not None
+
     async def initialize(self) -> DataSource:
+        """Connects and builds the entity catalog. Idempotent: calling it again (a manual call plus ``OrmModule``'s own
+        lifecycle hook, say) does nothing."""
+        if self._manager is not None:
+            return self
         await self.driver.connect()
 
         # Phase-1 pragmatic compromise (see `driver/base.py`'s module docstring): only the
@@ -70,6 +83,7 @@ class DataSource:
 
     async def destroy(self) -> None:
         await self.driver.close()
+        self._manager = None
 
     @property
     def manager(self) -> EntityManager:
@@ -78,7 +92,8 @@ class DataSource:
         return self._manager
 
     def get_repository(self, entity: type[T]) -> Repository[T]:
-        return Repository(entity, self.manager)
+        # The repository may be built (injected) before initialize() runs, so it reaches the manager lazily.
+        return Repository(entity, _LazyManager(self))  # type: ignore[arg-type]
 
     def get_metadata(self) -> sa.MetaData:
         """Returns the ``sqlalchemy.MetaData`` describing every entity this ``DataSource`` was

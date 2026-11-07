@@ -26,8 +26,17 @@ from austial.core.container import _UNSET  # noqa: E402 - container imports this
 _SIGNAL_HOOKS = {BEFORE_APPLICATION_SHUTDOWN, ON_APPLICATION_SHUTDOWN}
 
 
+def _hook(obj: Any, name: str) -> Any:
+    """``obj.name`` if the *class* defines it. Looking only at the class keeps objects with a dynamic ``__getattr__``
+    (a PyMongo database, a mock) from answering to every hook name."""
+    cls = obj if isinstance(obj, type) else type(obj)
+    if not callable(getattr(cls, name, None)):
+        return None
+    return getattr(obj, name, None)
+
+
 def _defines_hook(obj: Any) -> bool:
-    return any(callable(getattr(obj, name, None)) for name in LIFECYCLE_HOOKS)
+    return any(callable(_hook(obj, name)) for name in LIFECYCLE_HOOKS)
 
 
 class LifecycleManager:
@@ -77,7 +86,7 @@ class LifecycleManager:
             if id(instance) in self._called[hook]:
                 continue
             self._called[hook].add(id(instance))
-            method = getattr(instance, hook, None)
+            method = _hook(instance, hook)
             if not callable(method):
                 continue
             result = method(signal) if hook in _SIGNAL_HOOKS and _accepts_argument(method) else method()

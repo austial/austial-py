@@ -29,6 +29,7 @@ from austial.microservices.transport import (
     Transport,
     pattern_key,
 )
+from austial.microservices.transports.grpc_proto import GrpcMethod
 from austial.microservices.transports.pubsub import JsonCodec
 
 __all__ = [
@@ -38,6 +39,7 @@ __all__ = [
     "ClientsModule",
     "Ctx",
     "EventPattern",
+    "GrpcMethod",
     "HandlerRegistry",
     "JsonCodec",
     "LocalClient",

@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 
 from austial.common.decorators.injectable import Injectable
+from austial.common.exceptions import ServiceUnavailableException
 from austial.terminus.health_indicator import HealthCheckError, HealthIndicatorResult
 
 HealthIndicatorFunction = Callable[[], Awaitable[HealthIndicatorResult]]
@@ -20,7 +21,10 @@ HealthIndicatorFunction = Callable[[], Awaitable[HealthIndicatorResult]]
 
 @Injectable()
 class HealthCheckService:
-    async def check(self, indicators: list[HealthIndicatorFunction]) -> dict:
+    async def check(self, indicators: list[HealthIndicatorFunction], *, raise_on_error: bool = True) -> dict:
+        """Runs the indicators. When any is down this raises ``ServiceUnavailableException`` (HTTP 503) with the
+        full report as its body, like ``@nestjs/terminus``, so load balancers and Kubernetes probes see the failure.
+        Pass ``raise_on_error=False`` to get the report back instead."""
         info: HealthIndicatorResult = {}
         error: HealthIndicatorResult = {}
         details: HealthIndicatorResult = {}
@@ -39,4 +43,7 @@ class HealthCheckService:
                 details.update(failure)
 
         status = "error" if error else "ok"
-        return {"status": status, "info": info, "error": error, "details": details}
+        report = {"status": status, "info": info, "error": error, "details": details}
+        if error and raise_on_error:
+            raise ServiceUnavailableException(report)
+        return report

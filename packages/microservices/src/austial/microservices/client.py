@@ -44,6 +44,13 @@ class ClientProxy:
         """Fire-and-forget event."""
         await self.transport.emit(pattern_key(pattern), data)
 
+    def get_service(self, name: str) -> Any:
+        """Protobuf gRPC only: a ``.proto`` service client, e.g. ``get_service("HeroService").find_one({})``."""
+        getter = getattr(self.transport, "get_service", None)
+        if getter is None:
+            raise TypeError("get_service() needs Transport.GRPC with extra={'proto_path': ...}")
+        return getter(name)
+
     async def close(self) -> None:
         await self.transport.close()
 

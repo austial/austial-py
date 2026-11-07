@@ -23,7 +23,8 @@ from typing import Any
 class Transport(enum.Enum):
     TCP = "tcp"
     LOCAL = "local"
-    REDIS = "redis"
+    REDIS = "redis"  # Pub/Sub: every replica receives every message
+    REDIS_STREAMS = "redis_streams"  # consumer groups: load-balanced, acknowledged
     NATS = "nats"
     KAFKA = "kafka"
     MQTT = "mqtt"

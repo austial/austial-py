@@ -24,6 +24,7 @@ from typing import Any
 from fastapi.encoders import jsonable_encoder
 from starlette.requests import HTTPConnection
 
+from austial.websockets.adapter import WsAdapter
 from austial.websockets.types import WsClient, WsServer, _Room
 
 
@@ -87,7 +88,7 @@ class SocketIoServer(WsServer):
         await self.sio.emit(event, jsonable_encoder(data), namespace=self.namespace)
 
 
-class SocketIoAdapter:
+class SocketIoAdapter(WsAdapter):
     def __init__(self, *, cors_allowed_origins: str | list[str] | None = None, **server_options: Any):
         """``server_options`` go to ``socketio.AsyncServer`` (``ping_interval``, ``logger``, ...)."""
         self.cors_allowed_origins = cors_allowed_origins
