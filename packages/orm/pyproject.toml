@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "austial-common",
     "austial-core",
-    "sqlalchemy>=2.0.30",
+    "sqlalchemy>=2.1.8",
     # SQLAlchemy's async engine requires greenlet, but SQLAlchemy only pulls it in on some
     # platforms/Python versions (it does not on 3.14), so declare it explicitly.
     "greenlet>=3.1.0",
