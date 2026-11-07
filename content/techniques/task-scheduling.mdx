@@ -1,0 +1,78 @@
+---
+title: Task Scheduling
+---
+
+import { Callout } from "@/components/mdx";
+
+# Task Scheduling
+
+```bash
+pip install austial-schedule      # included in the `austial` umbrella package
+```
+
+`austial.schedule` runs methods on a schedule **inside your application process**, like `@nestjs/schedule`:
+
+```python
+from austial import Injectable, Module
+from austial.schedule import Cron, Interval, ScheduleModule, Timeout
+
+
+@Injectable()
+class Reports:
+    @Cron("0 9 * * 1-5")                 # weekdays at 09:00 UTC
+    async def morning_digest(self): ...
+
+    @Cron("@every 30s")
+    def heartbeat(self): ...
+
+    @Interval(60)                         # every 60 seconds, first run after 60s
+    async def poll(self): ...
+
+    @Timeout(5)                           # once, 5 seconds after startup
+    def warm_up(self): ...
+
+
+@Module(imports=[ScheduleModule.for_root()], providers=[Reports])
+class AppModule:
+    pass
+```
+
+Schedules start when the application bootstraps and stop when it closes. Cron expressions are 5-field cron (`*`, `N`, `A-B`,
+`*/N`, lists), `@hourly`/`@daily`/`@weekly`/`@monthly`/`@yearly`, or `@every 30s|5m|2h`; times are UTC. Each decorator takes
+`name="..."` (default `Class.method`) to find the job later.
+
+<Callout type="warning">
+In-process schedules run in **every** replica of your app. For work that must happen once across replicas, or must survive restarts
+and retry, use [Background Jobs](/techniques/background-jobs) (`austial.jobs`): durable, database-backed and lock-protected.
+</Callout>
+
+A job's callback runs inline in its loop, so a slow run delays the next one rather than overlapping it, and an exception is
+logged while the schedule carries on.
+
+## Changing schedules at runtime: `SchedulerRegistry`
+
+```python
+from austial.schedule import SchedulerRegistry
+
+
+@Injectable()
+class Admin:
+    def __init__(self, registry: SchedulerRegistry):
+        self.registry = registry
+
+    def enable_nightly(self):
+        self.registry.add_cron_job("nightly", "0 3 * * *", self.rebuild)        # starts immediately
+        self.registry.add_interval("sync", 120, self.sync)
+        self.registry.add_timeout("once", 10, self.cleanup)
+
+    def pause(self):
+        self.registry.get_cron_job("nightly").stop()           # .start() resumes
+        self.registry.delete_interval("sync")                  # stops and removes
+```
+
+| Method | Does |
+|---|---|
+| `add_cron_job(name, schedule, callback)` / `add_interval(name, seconds, cb)` / `add_timeout(name, seconds, cb)` | Register (and start, if the app is running). Duplicate names and bad schedules raise; nothing half-registers. |
+| `get_cron_job(name)` / `get_interval(name)` / `get_timeout(name)` | The `ScheduledJob` (`.start()`, `.stop()`, `.running`, `.runs`, `.done`, `.next_run()` for cron). |
+| `get_cron_jobs()` / `get_intervals()` / `get_timeouts()` | Everything registered. |
+| `delete_cron_job(name)` / `delete_interval(name)` / `delete_timeout(name)` | Stop and remove. |

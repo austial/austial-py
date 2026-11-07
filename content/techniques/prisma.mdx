@@ -1,0 +1,36 @@
+---
+title: Prisma
+---
+
+# Prisma
+
+[Prisma Client Python](https://prisma-client-py.readthedocs.io) generates a client inside your project (`prisma generate`). Austial doesn't
+wrap it; `PrismaModule` only ties its connection to the application's lifecycle and makes it injectable by its class:
+
+```python
+from prisma import Prisma
+
+from austial import Injectable, Module
+from austial.prisma import PrismaModule
+
+
+@Module(imports=[PrismaModule.for_root(Prisma)], providers=[CatsService])
+class AppModule:
+    pass
+
+
+@Injectable()
+class CatsService:
+    def __init__(self, db: Prisma):
+        self.db = db
+
+    async def find_all(self):
+        return await self.db.cat.find_many()
+```
+
+- `PrismaModule.for_root(Prisma, **client_kwargs)` builds the client; pass an instance instead to reuse one.
+- It `connect()`s when the application initialises and `disconnect()`s on shutdown (skipped if `is_connected()` says it isn't).
+- `connect=False` leaves connecting to you (the Prisma client also connects lazily on the first query).
+- Anything with async `connect()`/`disconnect()` works, so the module suits other generated or hand-written clients too.
+
+For the built-in SQLAlchemy-based ORM see [Database](/techniques/database).

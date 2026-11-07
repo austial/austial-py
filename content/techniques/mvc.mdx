@@ -1,0 +1,39 @@
+---
+title: MVC (Templates)
+---
+
+# MVC (Templates)
+
+Austial is mostly used for APIs, but a handler can render an HTML page with Jinja2. Point the app at a views folder and mark the
+handler with `@Render`; the dict it returns becomes the template context:
+
+```python
+from austial import Controller, Get, Query, Render
+
+
+@Controller()
+class PagesController:
+    @Get()
+    @Render("index.html")
+    async def home(self, name: str = Query("name", default="world")):
+        return {"name": name, "items": ["a", "b"]}
+```
+
+```html
+<!-- views/index.html -->
+<h1>Hello {{ name }}</h1>
+<ul>{% for item in items %}<li>{{ item }}</li>{% endfor %}</ul>
+```
+
+```python
+app = AustialFactory.create(AppModule)
+app.set_base_views_dir("views")
+```
+
+- `set_base_views_dir` must be called before the application is initialised. Using `@Render` without it fails the request with a
+  500 and logs why.
+- The response is `text/html` with the route's usual status code (`@HttpCode` works).
+- The handler's return value must be a dict (anything else renders with an empty context). Guards, pipes and interceptors run
+  as for any route.
+- Serve CSS, JS and images with [`use_static_assets`](/techniques/http-server#static-files).
+- Autoescaping is Jinja2's default for `.html` templates; still never put untrusted input in a `|safe` filter.

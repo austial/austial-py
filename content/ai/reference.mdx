@@ -143,15 +143,19 @@ Do not build on features that do not exist yet:
 
 - `Scope.REQUEST` exists, but scope bubbles up: a controller, guard or provider that depends on a
   request-scoped provider (or the `REQUEST` token) is built per request. Prefer singletons.
-- Module `imports` / `exports` are not enforced as a visibility boundary.
+- Module `imports` / `exports` are a visibility boundary only with
+  `AustialFactory.create(AppModule, strict_modules=True)`; otherwise the container is flat.
   Write them correctly anyway.
 - `CallHandler.handle()` is a plain async continuation, not an RxJS
   Observable.
 - `DataSource.initialize()` is a manual step (a `startup` event handler). `OrmModule` does not
   initialise it for you; lifecycle hooks (`on_module_init`) run *after* startup handlers.
-- No microservices, WebSockets, GraphQL, CQRS or alternative HTTP platform.
-- `ExecutionContext.get_type()` is always `"http"`; `switch_to_ws()` / `switch_to_rpc()` raise.
-- No `Interval`/`Timeout` scheduler registry (`@Cron` and `@Job` exist), no OAuth/social login, no MongoDB/Prisma.
+- No alternative HTTP platform. Microservice broker transports (Redis, NATS, Kafka, MQTT, RabbitMQ, gRPC) need their extra installed and only gRPC/Redis
+  are tested against real clients; Redis Pub/Sub delivers to every replica. GraphQL is Strawberry code-first; WebSockets are plain
+  frames unless `WebSocketsModule.for_root(adapter=SocketIoAdapter())` (client `join`/`leave` are `async`).
+- `ExecutionContext.get_type()` is `"http"` in routes, `"ws"` in gateways and `"rpc"` in microservice handlers; the other `switch_to_*` raise.
+- `austial.schedule` jobs run in every replica (use `austial.jobs` for once-only, durable work). MongoDB and Prisma are
+  connection-level integrations, not ORMs. Verify OIDC ID tokens with `OAuth2Provider.verify_id_token` (never trust them unverified).
 - `async` factory providers are awaited at init (`await app.init()` / ASGI startup / `compile()`); a plain sync
   `use_factory` runs when first resolved. Async factories must be singletons.
 - Only PostgreSQL (`asyncpg`) and SQLite (`aiosqlite`) drivers exist.

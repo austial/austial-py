@@ -74,6 +74,32 @@ declaration order — one real Starlette `BaseHTTPMiddleware` under the hood,
 so this composes cleanly with anything else mounted on the underlying
 FastAPI app via `app.get_http_adapter()`.
 
+## Targeting routes, excluding routes, plain functions
+
+`for_routes` accepts more than path strings:
+
+```python
+from austial import RequestMethod, RouteInfo
+
+def configure(self, consumer: MiddlewareConsumer) -> None:
+    consumer.apply(AuthMiddleware).exclude(
+        "health",                                         # a path, any method
+        RouteInfo("login", RequestMethod.POST),           # a path and a method
+    ).for_routes(CatsController, "/admin*")               # every route of a controller; a prefix pattern
+    consumer.apply(request_timer).for_routes("*")         # a plain async function is middleware too
+```
+
+| Target | Matches |
+|---|---|
+| `"/cats"` | that path and anything under it (`/cats/1`), but not `/catsup` |
+| `"/cats*"` | any path starting with `/cats` |
+| `"*"` | everything |
+| `RouteInfo(path, method)` | that path for that HTTP method (`RequestMethod.ALL` = any) |
+| a controller class | every route under its prefix (the global prefix is not part of the match) |
+
+`exclude(...)` takes the same targets and wins over `for_routes`. A function middleware is
+`async def fn(request, call_next)` returning the response.
+
 ## Where middleware sits in the pipeline
 
 ```

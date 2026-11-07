@@ -87,6 +87,33 @@ app.use_static_assets("web/dist", prefix="/", html=True)    # serve index.html f
 
 Extra keyword arguments go to Starlette's `StaticFiles`.
 
+## HTTPS, the listening URL and the HTTP adapter
+
+`listen` forwards extra keyword arguments to uvicorn, so TLS is a matter of passing the files; afterwards `get_url()` tells
+you where the app is:
+
+```python
+await app.listen(8443, ssl_certfile="cert.pem", ssl_keyfile="key.pem")
+app.get_url()            # "https://127.0.0.1:8443"  (RuntimeError before listen() started)
+app.get_http_server()    # the uvicorn.Server, e.g. to set should_exit
+```
+
+Behind a TLS-terminating proxy you usually want plain HTTP here and `set_trust_proxy()` above instead.
+
+A provider that needs the underlying FastAPI app (to mount a sub-application, add a route) injects `HttpAdapterHost`:
+
+```python
+from austial import HttpAdapterHost
+
+@Injectable()
+class Docs:
+    def __init__(self, host: HttpAdapterHost):
+        self.host = host
+
+    def on_application_bootstrap(self):
+        self.host.http_adapter.mount("/legacy", legacy_wsgi_app)     # http_adapter is the FastAPI instance
+```
+
 ## Sessions and other ASGI middleware
 
 `app.use(MiddlewareClass, **options)` adds any ASGI middleware. For example, cookie sessions

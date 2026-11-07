@@ -33,6 +33,7 @@ class ArgumentMetadata:
 |---|---|---|
 | `ParseIntPipe` | `"12"` → `12` (`"12.9"` → `12`, like `parseInt`) | `Validation failed (numeric string is expected)` |
 | `ParseFloatPipe` | `"1.5"` → `1.5` | `Validation failed (numeric string is expected)` |
+| `ParseDatePipe(date_only=False)` | ISO 8601 date/datetime (`2026-11-07`, `…T10:30:00Z`) or integer epoch seconds → `datetime` (UTC if no offset); `date_only=True` → `date` | `Validation failed (invalid date format)` |
 | `ParseBoolPipe` | `"true"`/`"false"` → `bool` | `Validation failed (boolean string is expected)` |
 | `ParseUUIDPipe(version=None)` | checks the UUID format (and version); returns the string | `Validation failed (uuid v4 is expected)` |
 | `ParseEnumPipe(MyEnum)` | `"red"` → `MyEnum.RED` | `Validation failed (enum string is expected)` |

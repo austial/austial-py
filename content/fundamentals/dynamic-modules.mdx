@@ -109,10 +109,11 @@ MailModule.for_root_async(
     use_factory=lambda config: {"host": config.get("SMTP_HOST")},
     inject=[ConfigService],
 )
-MailModule.for_root_async(use_class=MailOptionsFactory)       # a class with a create() method
+MailModule.for_root_async(use_class=MailOptionsFactory)       # a class with a create() method (sync or async)
 MailModule.for_root_async(use_existing=MailOptionsFactory)    # reuse one another module exports
 ```
 
+`create()` may be `async def`: Austial awaits it during bootstrap, before providers that depend on the options are built.
 Pass `imports=[...]` to the async form for modules the factory's dependencies come from. Options can be
 any object: a dict, a dataclass, a pydantic model.
 

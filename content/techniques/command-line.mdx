@@ -1,0 +1,69 @@
+---
+title: Command-line apps
+---
+
+import { Callout } from "@/components/mdx";
+
+# Command-line apps
+
+```bash
+pip install austial-commander      # included in the `austial` umbrella package
+```
+
+`austial.commander` turns providers into CLI commands that share your application's dependency injection, configuration and
+lifecycle hooks (Nest Commander's counterpart). Use it for one-off scripts, maintenance tasks and seeding.
+
+```python
+from austial import Injectable, Module
+from austial.commander import Command, CommandFactory, CommandRunner, Option
+
+
+@Command(name="greet", description="Say hello", arguments="<name> [title]", aliases=["hi"])
+@Injectable()
+class GreetCommand(CommandRunner):
+    def __init__(self, greeter: GreeterService):
+        self.greeter = greeter
+
+    async def run(self, passed_params: list[str], options: dict) -> None:
+        print(self.greeter.greet(*passed_params))
+
+    @Option(flags="-n, --number <count>", description="Repeat", default=1)
+    def parse_number(self, value: str) -> int:
+        return int(value)
+
+
+@Module(providers=[GreeterService, GreetCommand])
+class AppModule: ...
+
+
+if __name__ == "__main__":
+    CommandFactory.main(AppModule, name="mytool")     # exits with the command's exit code
+```
+
+```bash
+python cli.py greet Ada Dr --number 2
+python cli.py --help
+```
+
+## Commands, arguments and options
+
+| Piece | Meaning |
+|---|---|
+| `@Command(name, description=, arguments=, aliases=, subcommands=, default=)` | Marks a provider class as a command. `default=True` runs when no command is named. |
+| `arguments="<file> [mode]"` | Positionals: `<x>` required, `[x]` optional, a trailing `...` (`<files...>`) takes the rest. They arrive as `passed_params`. |
+| `@Option(flags=, description=, required=, default=, choices=, multiple=)` | On a method; the method parses the value and its return value lands in `options[name]`. Flags use commander.js syntax: `-s, --shout` (boolean), `--name <value>` (required value), `--name [value]` (optional value). `multiple=True` makes the flag repeatable and the option a list. |
+| `@SubCommand(name, ...)` | A command listed in a parent's `subcommands=[...]`, giving `tool db migrate`. |
+
+Commands are ordinary providers, so list them in a module's `providers`. Module `on_module_init` / `on_module_destroy` hooks run around
+the command.
+
+## Exit codes
+
+`CommandFactory.run(AppModule, argv, name=...)` returns the code and `main()` passes it to `sys.exit`: `0` success, `2` usage error
+(unknown command or option, missing argument), the `exit_code` of a `CommanderError("message", exit_code=3)` you raise, and `1` for any
+other exception. Only `warn` and `error` log levels are on by default; pass `logger=False` to silence the framework entirely.
+
+<Callout type="info">
+Test a command in-process with `await CommandFactory.run(AppModule, ["greet", "Ada"])` and assert on the returned code and on what the
+command did; no subprocess needed.
+</Callout>

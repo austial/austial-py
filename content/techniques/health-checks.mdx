@@ -97,6 +97,39 @@ result = await self.health_check_service.check([
 ])
 ```
 
+### `HttpHealthIndicator`
+
+```python
+await self.http.ping_check("payments-api", "https://payments.internal/health", timeout=1.5)
+```
+
+Healthy when the URL answers `< 400` within the timeout (or exactly `expected_status=`); unreachable or slow counts as
+down.
+
+### `TcpHealthIndicator`
+
+```python
+await self.tcp.ping_check("rabbitmq", "rabbit.internal", 5672)
+```
+
+Healthy when a TCP connection opens in time. Use it for brokers, databases and
+[TCP microservices](/techniques/microservices).
+
+### `DiskHealthIndicator`
+
+```python
+await self.disk.check_storage("disk", "/", threshold_percent=0.9)          # unhealthy above 90% used
+await self.disk.check_storage("uploads", "/data", threshold_free_bytes=5 * 1024**3)   # or under 5 GiB free
+```
+
+### `MongoHealthIndicator`
+
+```python
+await self.mongo.ping_check("mongo", mongo_client)       # client.admin.command("ping"), with a timeout
+```
+
+See [MongoDB](/techniques/mongodb).
+
 ## Writing a custom indicator
 
 ```python

@@ -1,0 +1,118 @@
+---
+title: Microservices
+---
+
+import { Callout } from "@/components/mdx";
+
+# Microservices
+
+```bash
+pip install austial-microservices      # included in the `austial` umbrella package
+```
+
+A microservice is an application driven by **messages** instead of HTTP requests. Handlers are decorated with a *pattern*:
+
+```python
+from austial import Controller
+from austial.microservices import EventPattern, MessagePattern, Payload
+
+
+@Controller()
+class MathController:
+    @MessagePattern({"cmd": "sum"})                 # request-response: the return value is the reply
+    def accumulate(self, numbers: list[int] = Payload()) -> int:
+        return sum(numbers)
+
+    @EventPattern("user.created")                   # fire-and-forget: nothing goes back
+    async def on_user_created(self, user: dict = Payload()) -> None: ...
+```
+
+A pattern is a string or a dict (`{"cmd": "sum"}`; key order doesn't matter). Handlers may live on controllers or any provider. A
+message pattern has exactly one handler (two fail at startup); an event pattern may have several. Handler arguments: `Payload()` /
+`Payload("key")` for the data, `Ctx()` for an `RpcContext(pattern, kind)`; an unmarked first parameter is the payload.
+
+## Running one
+
+```python
+from austial import AustialFactory
+from austial.microservices import MicroserviceOptions, Transport
+
+ms = AustialFactory.create_microservice(AppModule, MicroserviceOptions(Transport.TCP, host="0.0.0.0", port=3001))
+await ms.listen()        # init hooks, then start the transport
+...
+await ms.close()
+```
+
+`ms` is a [standalone application context](/fundamentals/standalone-applications), so `ms.get(Token)`, lifecycle hooks and async
+providers all work.
+
+## Calling one
+
+```python
+from austial.microservices import ClientOptions, ClientProxy, ClientsModule, Transport
+
+@Module(imports=[ClientsModule.register([ClientOptions(name="MATH", transport=Transport.TCP, host="math", port=3001)])])
+class AppModule: ...
+
+
+@Injectable()
+class Calculator:
+    def __init__(self, math: ClientProxy = Inject("MATH")):
+        self.math = math
+
+    async def total(self, numbers):
+        return await self.math.send({"cmd": "sum"}, numbers)          # waits for the reply
+    async def announce(self, user):
+        await self.math.emit("user.created", user)                    # does not wait
+```
+
+Clients connect when the application initialises and close when it shuts down. `send(pattern, data, timeout=...)` raises
+`asyncio.TimeoutError` if no reply arrives (default `ClientOptions.timeout`, 5 s) and `RpcError` (with `.payload`) if the handler
+failed. Raise `RpcException("message")` or `RpcException({...})` in a handler for a structured error; any other exception reaches the
+caller as `{"status": "error", "message": "TypeName: text"}`.
+
+## Transports
+
+| Transport | Use |
+|---|---|
+| `Transport.TCP` | JSON lines over a TCP connection; many calls in flight on one connection. Plain TCP: no TLS or authentication, so keep it on a private network. |
+| `Transport.LOCAL` | In-process, addressed by `name`/`broker`. Tests, or splitting a monolith before you split the deployment. |
+| `Transport.REDIS` | Redis Pub/Sub (`url="redis://..."`). Needs `austial-microservices[redis]`. Pub/Sub has no consumer groups: **every** replica receives every message, so run one replica per service or use another broker for load balancing. |
+| `Transport.NATS` | NATS subjects; replicas sharing `group` form a queue group, so each request reaches one replica. `[nats]`. |
+| `Transport.KAFKA` | Kafka topics (`url="host:port"`); replicas share a consumer group (`group`). Topics must already exist. `[kafka]`. |
+| `Transport.MQTT` | MQTT 5 (`url="host:port"`); replicas sharing `group` use shared subscriptions. `[mqtt]`. |
+| `Transport.RMQ` | RabbitMQ queues (`url="amqp://..."`); replicas consuming a queue share the load. `[rabbitmq]`. |
+| `Transport.GRPC` | gRPC with JSON payloads and no `.proto` (service `austial.Microservice`, methods `Request` and `Emit`); between Austial services. `[grpc]`. |
+| `Transport.CUSTOM` | Anything else: implement `ServerTransport` (`listen(handler)`, `close()`) and `ClientTransport` (`connect`, `request`, `emit`, `close`) and pass `custom_server=` / `custom_client=`. |
+
+Broker transports share one request/reply protocol (JSON `{"id", "data", "reply_to"}`; one reply topic per client). Options:
+`url` (broker address), `group` (consumer group / queue group), `prefix` (separates environments on one broker) and `extra`
+(keyword arguments for the broker client: credentials, TLS). Install the matching extra, for example
+`pip install 'austial-microservices[nats]'`.
+
+```python
+app.connect_microservice(MicroserviceOptions(Transport.NATS, url="nats://broker:4222", group="billing"))
+ClientsModule.register([ClientOptions("BILLING", Transport.NATS, url="nats://broker:4222")])
+```
+
+<Callout type="warning">
+Tested against the real libraries only for gRPC and Redis (via `fakeredis`). The NATS, Kafka, MQTT and RabbitMQ backends are
+exercised through in-memory fakes plus a signature contract test, because CI has no brokers: run your own integration test against a
+real broker before depending on them. For anything else, a custom transport is typically 40–60 lines over the client library
+(the server calls `handler(kind, pattern_key, data)` and sends back what it returns).
+</Callout>
+
+## Guards, pipes and interceptors
+
+They work on message handlers like on routes; guards see `get_type() == "rpc"` and read the message with
+`context.switch_to_rpc().get_data()`. A guard that returns `False` answers `Forbidden resource`.
+
+## Hybrid applications: HTTP and messages together
+
+```python
+app = AustialFactory.create(AppModule)
+app.connect_microservice(MicroserviceOptions(Transport.TCP, port=3001))     # starts and stops with the app
+```
+
+The same handlers and providers serve both. Pass `auto_start=False` and call `await app.start_all_microservices()` to start the
+transport yourself. Under `austial serve`/uvicorn it starts during ASGI startup, after the lifecycle hooks.

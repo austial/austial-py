@@ -2,6 +2,8 @@
 title: Authentication
 ---
 
+import { Callout } from "@/components/mdx";
+
 # Authentication
 
 `austial.auth` provides authentication primitives — password hashing, JWT
@@ -219,6 +221,66 @@ def CurrentTenant() -> Any:
 
 To layer additional checks (session freshness, per-tenant claims) subclass
 `AuthGuard` and override `after_verify`.
+
+## Social login (OAuth 2.0 / OpenID Connect)
+
+`OAuth2Provider` implements the authorization-code flow with PKCE; you own the routes and the session. Presets exist
+for `GoogleOAuth`, `GitHubOAuth` and `MicrosoftOAuth`, and `OAuth2Provider.from_oidc_discovery(issuer, ...)` configures any
+OIDC provider (Auth0, Okta, Keycloak...) from its `/.well-known/openid-configuration`.
+
+```python
+from austial.auth import GoogleOAuth, verify_state
+
+google = GoogleOAuth(client_id=..., client_secret=..., redirect_uri="https://app.example.com/auth/google/callback")
+
+
+@Controller("auth/google")
+class GoogleAuthController:
+    @Get()
+    async def start(self, response: Res):
+        request = google.authorization_url()            # fresh state + PKCE verifier
+        # `sign`/`unsign` stand for whatever signed-cookie or session mechanism you use
+        response.set_cookie("oauth", sign({"s": request.state, "v": request.code_verifier}), httponly=True, secure=True)
+        return RedirectResponse(request.url)
+
+    @Get("callback")
+    async def callback(self, code: str, state: str, oauth: str = Cookies("oauth")):
+        saved = unsign(oauth)
+        verify_state(saved["s"], state)                  # constant-time CSRF check; raises OAuthError
+        tokens = await google.exchange_code(code, code_verifier=saved["v"])
+        profile = await google.fetch_user(tokens.access_token)         # {"email": ..., "name": ...}
+        user = await self.users.find_or_create(profile["email"])
+        return await self.auth.issue_tokens(user.id)     # your own JWT pair (see Refresh tokens)
+```
+
+| Call | Does |
+|---|---|
+| `authorization_url(state=None, scopes=None)` | An `AuthorizationRequest(url, state, code_verifier)`. Keep `state` and `code_verifier`. |
+| `await exchange_code(code, code_verifier=)` | `OAuthTokens(access_token, refresh_token, expires_in, id_token, ...)`. |
+| `await refresh(refresh_token)` | New tokens. |
+| `await fetch_user(access_token)` | The userinfo endpoint's JSON. |
+| `generate_state()` / `verify_state(expected, received)` | Random state / constant-time comparison. |
+
+### Verifying ID tokens (OpenID Connect)
+
+```python
+request = provider.authorization_url()                 # adds a `nonce` when the scopes include "openid"
+# keep request.state, request.code_verifier and request.nonce (signed cookie / session)
+tokens = await provider.exchange_code(code, code_verifier=verifier)
+claims = await provider.verify_id_token(tokens.id_token, nonce=saved_nonce)   # raises OAuthError
+```
+
+`verify_id_token` checks the signature against the provider's JWKS (cached for `jwks_ttl`, re-fetched once when the token's `kid` is
+unknown, which covers key rotation), restricts the algorithm to `id_token_algorithms` (default `("RS256",)`, so `alg: none` and HMAC
+confusion fail), `aud` equals your client id, `iss` matches `issuer`, `exp`/`iat` with 60 s of clock skew, and the `nonce` if given.
+The Google preset, and discovery (`from_oidc_discovery`), fill in `jwks_uri` and `issuer`; set them yourself on a custom provider. The
+Microsoft preset does not pin `iss` for the multi-tenant endpoints (`common`, `organizations`, `consumers`), where the issuer varies per
+tenant: check the `tid` claim yourself. Requires `pyjwt[crypto]`, which `austial-auth` installs.
+
+<Callout type="warning">
+Storing `state`, the PKCE verifier and the `nonce` (a signed, `httponly` cookie or your session) is your responsibility; never skip
+`verify_state`, and never trust an ID token you did not pass through `verify_id_token`.
+</Callout>
 
 ## Errors
 
