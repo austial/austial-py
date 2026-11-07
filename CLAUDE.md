@@ -18,6 +18,7 @@ uv run python scripts/check_docs_sync.py ../austial-py-doc/content   # public AP
 ```
 
 Run `/verify` (the project skill) before saying work is done: it runs lint, format, mypy and the tests.
+Run `/code-reviewer` on your own diff before committing or opening a PR.
 
 ## Layout and where things go
 
@@ -62,7 +63,7 @@ Run `/verify` (the project skill) before saying work is done: it runs lint, form
 
 ## Definition of done
 
-1. Tests added/updated and green; `/verify` passes; coverage did not drop.
+1. Tests added/updated and green; `/verify` passes; coverage did not drop; `/code-reviewer` has no Blockers.
 2. Public API change -> docs updated in `../austial-py-doc` (same change, linked PR) and
    `scripts/check_docs_sync.py` is clean.
 3. Conventional, imperative commit messages. Never commit or push without being asked; never push to

@@ -15,6 +15,7 @@ repository on 2026-11-07; things I could not verify are marked **(unverified)**.
 | `.claude/skills/add-feature` | `/add-feature <desc>`: scope, failing tests first, minimal change, exports, docs, verify. Manual only. |
 | `.claude/skills/sync-docs` | `/sync-docs`: public API vs docs, stale "not supported" claims, docs build. |
 | `.claude/skills/release` | `/release <version>`: preconditions, notes, annotated tag. Manual only; confirms before pushing the tag. |
+| `.claude/skills/code-reviewer` | `/code-reviewer [base]`: fast project-specific review of a diff (correctness, DI/scope/lifecycle invariants, API, tests, security, docs drift); verifies each finding before reporting. |
 | `.claude/agents/framework-reviewer` | Read-only reviewer that knows the framework invariants. |
 | `.claude/agents/test-author` | Writes edge-case tests from the coverage report; reports bugs instead of bending tests. |
 | `scripts/check_docs_sync.py` | Fails if an exported symbol is not mentioned in `austial-py-doc`. |
