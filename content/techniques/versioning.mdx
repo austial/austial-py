@@ -1,0 +1,99 @@
+---
+title: Versioning
+---
+
+# Versioning
+
+API versioning lets several versions of the same route live side by side. Turn it on, then say which
+version each controller or route serves.
+
+```python
+from austial import AustialFactory, VersioningType
+
+app = AustialFactory.create(AppModule)
+app.enable_versioning(VersioningType.URI)
+```
+
+## Where the version lives
+
+| `VersioningType` | The client sends | Example |
+|---|---|---|
+| `URI` (default) | the version in the path, after any [global prefix](/techniques/http-server#global-prefix) | `GET /v1/cats` |
+| `HEADER` | a header named by `header=` | `X-API-Version: 2` |
+| `MEDIA_TYPE` | a parameter on `Accept`, named by `key=` (default `"v="`) | `Accept: application/json;v=2` |
+| `CUSTOM` | whatever your `extractor(request)` reads | `?ver=2` |
+
+```python
+app.enable_versioning(VersioningType.URI, prefix="v")                        # /v1/cats  (prefix=False -> /1/cats)
+app.enable_versioning(VersioningType.HEADER, header="X-API-Version")
+app.enable_versioning(VersioningType.MEDIA_TYPE, key="v=")
+app.enable_versioning(VersioningType.CUSTOM, extractor=lambda req: req.query_params.get("ver"))
+```
+
+Call it **before** the application is initialized (before `init()` / the first request).
+
+## Choosing a version
+
+Pin a whole controller, or individual routes. A route's `@Version` overrides its controller's:
+
+```python
+from austial import Controller, Get, Version
+
+
+@Controller("cats", version="1")
+class CatsController:
+    @Get()
+    async def find_all(self): ...               # GET /v1/cats
+
+    @Get("search")
+    @Version("2")
+    async def search(self): ...                 # GET /v2/cats/search
+
+    @Get("stats")
+    @Version(["1", "2"])
+    async def stats(self): ...                  # served under both versions
+```
+
+With header, media-type or custom versioning, two controllers may share a path and be told apart by the
+version alone:
+
+```python
+@Controller("things", version="1")
+class ThingsV1:
+    @Get()
+    async def get(self): return {"served_by": "v1"}
+
+
+@Controller("things", version="2")
+class ThingsV2:
+    @Get()
+    async def get(self): return {"served_by": "v2"}
+```
+
+```bash
+curl -H "X-API-Version: 2" localhost:8000/things      # {"served_by": "v2"}
+```
+
+A request naming a version nothing serves gets a `404`.
+
+## Default and neutral versions
+
+```python
+app.enable_versioning(VersioningType.URI, default_version="1")
+```
+
+`default_version` applies to every route that names none, and (for header, media-type and custom
+versioning) to requests that don't send a version. `VERSION_NEUTRAL` opts a route out entirely: it is
+served whatever version the request names, or none, and under URI versioning it has **no** version
+segment:
+
+```python
+from austial import VERSION_NEUTRAL
+
+
+@Get("health")
+@Version(VERSION_NEUTRAL)
+async def health(self): ...                      # GET /health
+```
+
+A route with no version and no `default_version` behaves the same way.

@@ -12,12 +12,9 @@ A pipe transforms or validates input data before it reaches a route handler.
 from austial.common.pipes import ArgumentMetadata, PipeTransform
 
 
-class ParseIntPipe(PipeTransform):
+class TrimPipe(PipeTransform):
     def transform(self, value, metadata: ArgumentMetadata):
-        try:
-            return int(value)
-        except (TypeError, ValueError) as exc:
-            raise BadRequestException(f"{metadata.data} must be an integer") from exc
+        return value.strip() if isinstance(value, str) else value
 ```
 
 `ArgumentMetadata` describes the argument being processed:
@@ -29,6 +26,74 @@ class ArgumentMetadata:
     data: str | None       # the parameter name
     metatype: type | None  # the parameter's runtime type
 ```
+
+## Built-in pipes
+
+| Pipe | Does | On failure |
+|---|---|---|
+| `ParseIntPipe` | `"12"` → `12` (`"12.9"` → `12`, like `parseInt`) | `Validation failed (numeric string is expected)` |
+| `ParseFloatPipe` | `"1.5"` → `1.5` | `Validation failed (numeric string is expected)` |
+| `ParseBoolPipe` | `"true"`/`"false"` → `bool` | `Validation failed (boolean string is expected)` |
+| `ParseUUIDPipe(version=None)` | checks the UUID format (and version); returns the string | `Validation failed (uuid v4 is expected)` |
+| `ParseEnumPipe(MyEnum)` | `"red"` → `MyEnum.RED` | `Validation failed (enum string is expected)` |
+| `ParseArrayPipe(items=None, separator=",")` | `"1,2,3"` → `[...]`; `items=int` (or `float`, `bool`, any pipe) parses each element | the item pipe's message |
+| `DefaultValuePipe(default)` | substitutes `default` when the value is missing | — |
+| `ParseFilePipe(validators=[...])` | validates an upload; see [File Upload](/techniques/file-upload) | `File is required`, … |
+
+Attach them to **one parameter** by passing them after the name. Pipes on a `Param`, `Query` or
+`Headers` parameter receive the *raw string*, so they do the parsing (FastAPI doesn't coerce it first):
+
+```python
+from austial import DefaultValuePipe, Param, ParseArrayPipe, ParseIntPipe, ParseUUIDPipe, Query
+
+
+@Get(":id")
+async def find_one(self, id: int = Param("id", ParseIntPipe)) -> Cat: ...
+
+
+@Get()
+async def find_all(
+    self,
+    page: int = Query("page", DefaultValuePipe(1), ParseIntPipe),     # pipes run left to right
+    ids: list[int] = Query("ids", ParseArrayPipe(items=int)),         # ?ids=1,2,3
+) -> list[Cat]: ...
+
+
+@Get("owners/:id")
+async def owner(self, id: str = Param("id", ParseUUIDPipe(version=4))): ...
+```
+
+Every parse pipe takes the same options:
+
+```python
+ParseIntPipe(
+    error_http_status_code=406,                         # default 400
+    exception_factory=lambda msg: MyValidationError(msg),   # wins over the status code
+    optional=True,                                       # let None through instead of failing
+)
+```
+
+You can also register them at any pipe scope (`@UsePipes`, `app.use_global_pipes`); they then run on every
+argument, as in NestJS.
+
+### Pipes can be classes, async, and injected
+
+Pass a pipe **class** (`Param("id", MyPipe)`) and the container builds it, so it can take
+constructor dependencies. `transform()` may be `async`:
+
+```python
+@Injectable()
+class UserExistsPipe(PipeTransform):
+    def __init__(self, users: UsersService):
+        self.users = users
+
+    async def transform(self, value, metadata: ArgumentMetadata):
+        return await self.users.get_or_404(value)
+```
+
+`ArgumentMetadata.type` is `"param"`, `"query"` or `"body"` for helper-bound parameters (`"custom"`
+otherwise), and `metatype` is the parameter's annotation when it is a class. Order: global → controller →
+route pipes, then the parameter's own.
 
 ## The built-in `ValidationPipe`
 

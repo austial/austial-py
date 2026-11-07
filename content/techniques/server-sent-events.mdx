@@ -1,0 +1,54 @@
+---
+title: Server-Sent Events
+---
+
+# Server-Sent Events
+
+Server-Sent Events (SSE) are a one-way channel from server to browser over a long-lived HTTP response,
+read with `EventSource`. Mark a handler with `@Sse` and return an iterable of events:
+
+```python
+import asyncio
+
+from austial import Controller, MessageEvent, Sse
+
+
+@Controller("clock")
+class ClockController:
+    @Sse("ticks")
+    async def ticks(self):
+        for n in range(10):
+            yield MessageEvent(data={"tick": n}, id=str(n), type="tick")
+            await asyncio.sleep(1)
+```
+
+```javascript
+const source = new EventSource("/clock/ticks");
+source.addEventListener("tick", (e) => console.log(JSON.parse(e.data)));
+```
+
+`@Sse(path)` registers a `GET` route and answers with `Content-Type: text/event-stream`, plus
+`Cache-Control: no-cache` and `X-Accel-Buffering: no` so proxies don't buffer the stream.
+
+## What an event can be
+
+Yield (or return an iterable of) any of:
+
+| Value | Sent as |
+|---|---|
+| `MessageEvent(data, id=None, type=None, retry=None)` | all four SSE fields |
+| `{"data": ..., "id": ..., "event": ..., "retry": ...}` | the same, from a dict (`type` also works for `event`) |
+| any other value | `data: <value>` |
+
+Non-string `data` is JSON-encoded; multi-line strings become several `data:` lines. `retry` is the
+reconnection delay in milliseconds.
+
+The handler can be an async generator, a normal generator, or a function returning a list.
+
+## Notes
+
+- Guards, pipes and `@UseInterceptors` run before the stream starts, as for any route. An exception
+  raised *while streaming* can't change the status line (it's already sent); it ends the stream.
+- An async generator is cancelled when the client disconnects. Put cleanup in `try`/`finally`.
+- Behind a proxy, make sure response buffering is off for the route and the read timeout is longer than
+  your heartbeat interval; emit a periodic heartbeat event (for example `{"data": ""}`) if the stream can sit idle.

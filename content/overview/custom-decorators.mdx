@@ -78,6 +78,45 @@ async def find_all(self):
 reading the same metadata key stamped at both the controller and handler
 level and combining them.
 
+## Custom parameter decorators
+
+Python has no parameter decorators, so `create_param_decorator` builds a *marker* you use as a
+parameter default, like `Body()`. Its factory receives whatever you pass at the call site plus the
+`ExecutionContext`, and runs **after the guards**, so it can read what they stored on the request:
+
+```python
+from austial import create_param_decorator
+
+CurrentUser = create_param_decorator(lambda key, ctx: ctx.get_request().state.user[key])
+
+
+@Get("me")
+@UseGuards(AuthGuard)
+async def me(self, user_id: int = CurrentUser("id"), name: str = CurrentUser("name")):
+    return {"user_id": user_id, "name": name}
+```
+
+The factory may be `async`. (`austial.auth.CurrentUser()` is built on the same mechanism.)
+
+## Composing decorators
+
+`apply_decorators` bundles several decorators into one:
+
+```python
+from austial import Header, UseGuards, apply_decorators
+
+
+def Auth(*roles: str):
+    return apply_decorators(UseGuards(AuthGuard, RolesGuard), Roles(*roles), Header("Cache-Control", "no-store"))
+
+
+@Get("admin")
+@Auth("admin")
+async def admin_only(self): ...
+```
+
+Decorators are applied left to right.
+
 ## Where this is used internally
 
 Every `@Use*` decorator (`@UseGuards`, `@UsePipes`, `@UseInterceptors`,

@@ -1,0 +1,74 @@
+---
+title: Serialization
+---
+
+# Serialization
+
+Return a model from a handler and *all* of its fields go out, including the ones that should never
+leave the server. `ClassSerializerInterceptor` applies `@Exclude` / `@Expose` rules to whatever the
+handler returns, recursively, before it is sent.
+
+```python
+from pydantic import BaseModel
+
+from austial import ClassSerializerInterceptor, Controller, Exclude, Get, UseInterceptors
+
+
+@Exclude("password_hash")
+class UserOut(BaseModel):
+    id: int
+    email: str
+    password_hash: str
+
+
+@Controller("users")
+@UseInterceptors(ClassSerializerInterceptor())
+class UsersController:
+    @Get(":id")
+    async def find_one(self, id: int) -> UserOut:
+        return await self.users.get(id)            # -> {"id": 1, "email": "a@b.c"}
+```
+
+Because Python has no property decorators, `@Exclude` and `@Expose` are **class** decorators that name
+fields. They work on pydantic models, dataclasses and plain objects, and apply to nested objects inside
+lists and dicts too. Inherited rules apply to subclasses. A pydantic `Field(exclude=True)` is also honoured.
+
+## Strategies and groups
+
+The default strategy, `"expose_all"`, sends everything except what is excluded. `"exclude_all"` flips it:
+only `@Expose`d fields go out. `@Expose` can also be limited to **groups**:
+
+```python
+from austial import Expose, SerializeOptions
+
+
+@Expose("id", "email")
+@Expose("phone", groups=["admin"])
+class Profile(BaseModel):
+    id: int
+    email: str
+    phone: str
+    internal_notes: str
+
+
+@Controller("profiles")
+@UseInterceptors(ClassSerializerInterceptor())
+class ProfilesController:
+    @Get("me")
+    @SerializeOptions(strategy="exclude_all")
+    async def me(self): ...                               # {"id", "email"}
+
+    @Get("admin")
+    @SerializeOptions(strategy="exclude_all", groups=["admin"])
+    async def admin(self): ...                            # {"id", "email", "phone"}
+```
+
+`@SerializeOptions` goes on a controller or a handler (the handler's wins). The interceptor also accepts
+the same options as defaults: `ClassSerializerInterceptor(strategy="exclude_all", groups=["admin"])`.
+
+## Notes
+
+- A field with `Field(alias=...)` is emitted under its alias, as FastAPI does by default.
+- `Response` objects and `StreamableFile`s pass through untouched.
+- Register it globally with `app.use_global_interceptors(ClassSerializerInterceptor())` to cover every
+  route.

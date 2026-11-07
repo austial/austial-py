@@ -1,0 +1,55 @@
+---
+title: Mapped Types
+---
+
+# Mapped Types
+
+When you build CRUD features you often want variations of one base DTO: the same fields, all optional,
+for an update; just two of them for a summary. Mapped types derive them so the rules stay in one place.
+
+```python
+from pydantic import BaseModel, Field
+
+from austial import IntersectionType, OmitType, PartialType, PickType
+
+
+class CreateCatDto(BaseModel):
+    name: str = Field(min_length=2)
+    age: int
+    breed: str
+
+
+class UpdateCatDto(PartialType(CreateCatDto)):               # every field optional
+    pass
+
+
+class CatNameDto(PickType(CreateCatDto, ["name"])):           # only `name`
+    pass
+
+
+class CatSummaryDto(OmitType(CreateCatDto, ["breed"])):       # everything but `breed`
+    pass
+
+
+class CatWithTimestampsDto(IntersectionType(CreateCatDto, TimestampsDto)):   # fields of both
+    pass
+```
+
+| Function | Result |
+|---|---|
+| `PartialType(Base)` | every field becomes optional, default `None` |
+| `PickType(Base, keys)` | only `keys` |
+| `OmitType(Base, keys)` | all but `keys` |
+| `IntersectionType(A, B, ...)` | the union of every field; later models win a name clash |
+
+Field types, defaults and `Field(...)` constraints are carried over, so FastAPI validation and the
+OpenAPI schema stay accurate:
+
+```python
+UpdateCatDto(age=3)            # ok
+UpdateCatDto(name="x")         # ValidationError: min_length=2 still applies
+```
+
+They return a new pydantic model class that you subclass (as above) to give it a name. Naming an unknown
+field raises `KeyError`. Validators (`@field_validator`, `@model_validator`) are **not** carried over:
+re-declare them on the subclass.

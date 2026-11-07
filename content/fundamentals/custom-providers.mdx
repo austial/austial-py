@@ -5,7 +5,7 @@ title: Custom Providers
 # Custom Providers
 
 A module's `providers=[...]` list accepts more than a plain `@Injectable()`
-class — `useValue`/`useClass`/`useFactory` shapes, expressed as plain dicts
+class — `useValue`/`useClass`/`useFactory`/`useExisting` shapes, expressed as plain dicts
 (Austial has no decorators-only metaprogramming trick for this, so a dict
 with a `"provide"` key is the literal provider definition).
 
@@ -66,6 +66,35 @@ passed positionally, in order — this is exactly how
 `ConfigModule.for_root()` build their own providers under the hood (see
 [Dynamic Modules](/fundamentals/dynamic-modules) and
 [Database](/techniques/database)).
+
+### Optional factory dependencies
+
+An `inject` entry can be a dict to mark a dependency optional; it arrives as `None` when nothing is
+registered under that token:
+
+```python
+{"provide": "MAILER", "useFactory": build_mailer, "inject": [ConfigService, {"token": "TRACER", "optional": True}]}
+```
+
+A factory may also set `"scope": Scope.TRANSIENT` to be called on every resolution instead of once.
+
+## Alias providers — `useExisting`
+
+Create a second name for a provider that already exists. Both tokens resolve to the **same instance**:
+
+```python
+providers=[
+    LoggerService,
+    {"provide": "AliasedLoggerService", "useExisting": LoggerService},
+]
+```
+
+```python
+assert app.get("AliasedLoggerService") is app.get(LoggerService)
+```
+
+It's the way to expose one implementation under both its concrete class and an abstract token without
+building it twice. (`useClass` would create a second instance.)
 
 ## Non-class tokens
 

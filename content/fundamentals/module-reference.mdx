@@ -1,0 +1,112 @@
+---
+title: Module Reference
+---
+
+# Module Reference
+
+Most dependencies arrive through the constructor. When you need to look a provider up *at runtime*
+(pick an implementation by name, build a class on demand, or enumerate providers) inject the
+container's helpers.
+
+## `ModuleRef`
+
+`ModuleRef` is injectable like any provider:
+
+```python
+from austial import Injectable, ModuleRef
+
+
+@Injectable()
+class NotifierService:
+    def __init__(self, module_ref: ModuleRef):
+        self.module_ref = module_ref
+
+    def channel(self, kind: str):
+        return self.module_ref.get(CHANNELS[kind])   # EmailChannel, SmsChannel, ...
+```
+
+| Method | Does |
+|---|---|
+| `get(token)` | Returns the provider registered under `token` (the singleton, for default scope). |
+| `resolve(token, context_id=None)` | Resolves a provider of **any** scope. See below. |
+| `create(cls)` | Builds `cls` with its constructor dependencies injected, without registering or caching it. |
+| `has(token)` | Whether `token` is registered. |
+
+Austial has one application-wide container (see [Modules](/overview/modules)), so there's no
+`strict` option: `get()` finds a provider whichever module declared it.
+
+### Resolving request-scoped providers
+
+`get()` raises for a [request-scoped](/fundamentals/injection-scopes#request-scope) provider outside a
+request. `resolve()` builds one inside a **context id**:
+
+```python
+from austial import ContextIdFactory
+
+ctx = ContextIdFactory.create()
+a = module_ref.resolve(RequestId, ctx)
+b = module_ref.resolve(RequestId, ctx)
+assert a is b                          # same context, same instance
+assert module_ref.resolve(RequestId, ContextIdFactory.create()) is not a
+```
+
+Omit the context id and each call gets a fresh dependency tree. `app.resolve(Token)` is the same
+thing on the application object.
+
+## `DiscoveryService`
+
+`DiscoveryService` lists what the application registered. It is how a feature module wires itself
+to decorated classes and methods it finds, the way `@Cron()` handlers are collected:
+
+```python
+from austial import DiscoveryService, Injectable
+from austial.core.metadata import set_metadata
+
+ON_EVENT = "myapp:on_event"
+
+
+def OnEvent(name: str):
+    return set_metadata(ON_EVENT, name)          # a decorator factory
+
+
+@Injectable()
+class EventExplorer:
+    def __init__(self, discovery: DiscoveryService, bus: EventBus):
+        self.discovery, self.bus = discovery, bus
+
+    def on_module_init(self) -> None:
+        for wrapper, method_name, event in self.discovery.get_methods_with_metadata(ON_EVENT):
+            self.bus.subscribe(event, getattr(wrapper.instance, method_name))
+```
+
+| Method | Returns |
+|---|---|
+| `get_providers(metadata_key=None)` | `InstanceWrapper`s for every provider (controllers, modules and framework internals excluded), optionally only classes carrying `metadata_key`. |
+| `get_controllers(metadata_key=None)` | The same, for controllers. |
+| `get_methods_with_metadata(key, controllers=False)` | `(wrapper, method_name, value)` for each method stamped with `key`. Singleton instances are built on demand. |
+
+An `InstanceWrapper` has `.token`, `.metatype` (the class), `.instance` (`None` until built, and for
+transient/request-scoped providers), `.scope`, `.name`, and `has_metadata()` / `get_metadata()`.
+
+## Lazy-loading modules
+
+`LazyModuleLoader` registers a module after startup, on first use, so a rarely needed feature and its
+imports don't slow cold starts:
+
+```python
+from austial import Injectable, LazyModuleLoader
+
+
+@Injectable()
+class ReportsFacade:
+    def __init__(self, lazy: LazyModuleLoader):
+        self.lazy = lazy
+
+    async def nightly(self):
+        module_ref = await self.lazy.load(lambda: ReportsModule)   # import deferred too
+        return module_ref.get(ReportsService).build()
+```
+
+`load()` takes the module, a `DynamicModule`, or a (sync or async) callable returning one. Loading the
+same module twice is a no-op. Lazy modules join the application's single container, so their providers
+become resolvable application-wide once loaded; their **controllers are not routed**.

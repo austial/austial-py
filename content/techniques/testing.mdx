@@ -69,8 +69,10 @@ async def test_full_request_lifecycle():
 (no middleware bindings) around the same `FastAPI` app your production code
 would run through — routing, guards, pipes, interceptors, and exception
 filters all execute exactly as they would in production.
-`await app.init()` builds the routes (idempotent — safe even if you never
-call `listen()`), and `httpx.ASGITransport` lets `AsyncClient` talk to it
+`await app.init()` builds the routes and runs the
+[lifecycle hooks](/fundamentals/lifecycle-events) (idempotent — safe even if you never
+call `listen()`; pair it with `await app.close()` if your providers have
+teardown hooks), and `httpx.ASGITransport` lets `AsyncClient` talk to it
 in-process, with **no real network socket** involved.
 
 ## Defining throwaway fixtures inline

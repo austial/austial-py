@@ -57,6 +57,25 @@ async def find_one(self, id: int):
 }
 ```
 
+## Other built-in interceptors
+
+| Interceptor | Does |
+|---|---|
+| `TimeoutInterceptor(seconds)` | Cancels the handler and answers `408 Request Timeout` if it runs too long. |
+| `ClassSerializerInterceptor()` | Applies `@Exclude` / `@Expose` to what the handler returns — see [Serialization](/techniques/serialization). |
+| `FileInterceptor`, `FilesInterceptor`, `FileFieldsInterceptor`, `AnyFilesInterceptor` | Enforce upload limits (size, count, allowed fields) — see [File Upload](/techniques/file-upload). |
+
+```python
+from austial import TimeoutInterceptor
+
+
+@Get("report")
+@UseInterceptors(TimeoutInterceptor(seconds=5))
+async def report(self): ...
+```
+
+The timeout can only interrupt `async` handlers at an `await`; a blocking synchronous call runs to completion.
+
 ## Applying interceptors
 
 Same controller/handler scoping as guards and pipes:

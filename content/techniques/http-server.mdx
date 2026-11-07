@@ -1,0 +1,114 @@
+---
+title: HTTP Server
+---
+
+# HTTP Server
+
+Options on the application object that shape how HTTP is served. Configure them right after
+`AustialFactory.create(...)`, before the application is initialized.
+
+```python
+app = AustialFactory.create(AppModule)
+app.set_global_prefix("api", exclude=["health"])
+app.use_compression()
+app.set_trust_proxy()
+```
+
+## Global prefix
+
+`app.set_global_prefix("api")` prefixes every route: `GET /cats` becomes `GET /api/cats`. List routes
+that must stay put in `exclude`. An entry is a path (any method) or a `RouteInfo`:
+
+```python
+from austial import RequestMethod, RouteInfo
+
+app.set_global_prefix(
+    "api",
+    exclude=["health", RouteInfo("webhooks/stripe", RequestMethod.POST)],
+)
+```
+
+With [URI versioning](/techniques/versioning) the order is prefix, version, controller: `/api/v1/cats`.
+
+## Host-based routing
+
+A controller can serve only requests whose `Host` header matches. A `:name` segment captures a value,
+which `HostParam` reads:
+
+```python
+from austial import Controller, Get, HostParam
+
+
+@Controller("dashboard", host=":tenant.example.com")
+class TenantDashboard:
+    @Get()
+    async def home(self, tenant: str = HostParam("tenant")):
+        return {"tenant": tenant}                      # acme.example.com -> {"tenant": "acme"}
+
+
+@Controller("dashboard", host="admin.example.com")      # same path, a different host
+class AdminDashboard:
+    @Get()
+    async def home(self): ...
+```
+
+`host=` also takes a list of patterns, and `HostParam()` with no name returns all captures as a dict.
+The port is ignored. A request whose host matches no controller gets a `404`.
+
+## Client IP and reverse proxies
+
+`Ip()` returns the client's address. Behind a load balancer that is the *balancer's* address unless you
+trust its `X-Forwarded-For` header:
+
+```python
+app.set_trust_proxy("10.0.0.0/8")        # or "*" to trust every upstream (only if nothing else can reach the app)
+```
+
+```python
+@Get("whoami")
+async def whoami(self, ip: str = Ip()):
+    return {"ip": ip}
+```
+
+## Compression
+
+`app.use_compression(minimum_size=500)` gzip-compresses responses at least that large, for clients that
+send `Accept-Encoding: gzip`. If a reverse proxy already compresses, leave it off.
+
+## Static files
+
+`app.use_static_assets(directory, prefix="/")` serves a directory. It's mounted **after** your API routes,
+so a controller route always wins over a file of the same path:
+
+```python
+app.use_static_assets("public", prefix="/static")
+app.use_static_assets("web/dist", prefix="/", html=True)    # serve index.html for directories (a SPA)
+```
+
+Extra keyword arguments go to Starlette's `StaticFiles`.
+
+## Sessions and other ASGI middleware
+
+`app.use(MiddlewareClass, **options)` adds any ASGI middleware. For example, cookie sessions
+(`pip install itsdangerous`), read with the `Session()` parameter helper:
+
+```python
+from starlette.middleware.sessions import SessionMiddleware
+
+from austial import Session
+
+app.use(SessionMiddleware, secret_key=config.get_or_throw("SESSION_SECRET"))
+
+
+@Get("visit")
+async def visit(self, session: dict = Session()):
+    session["visits"] = session.get("visits", 0) + 1
+    return session
+```
+
+`Session("key")` returns just that key.
+
+## `@All`
+
+`@All("path")` registers a handler for every HTTP verb on the path, useful for catch-all proxies and
+webhook endpoints that don't care about the method.
