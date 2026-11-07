@@ -1,0 +1,104 @@
+---
+title: Logging
+---
+
+# Logging
+
+`Logger` is what application code uses. It forwards every call to the **active logger**, which you can
+replace for the whole process: change the format, pick levels, ship JSON to an aggregator, or hand records
+to Python's `logging`, structlog or anything else.
+
+```python
+from austial import Logger
+
+
+class CatsService:
+    logger = Logger("CatsService")
+
+    def create(self, dto):
+        self.logger.log("Creating a cat")
+        self.logger.warn("Name is unusually long")
+        self.logger.error("Could not save", context="CatsRepository")   # override the context for one call
+```
+
+Levels, least to most severe: `verbose`, `debug`, `log`, `warn`, `error`, `fatal`. The default is the familiar
+coloured line:
+
+```
+[Austial] 12345  - 07/11/2026, 10:00:00 AM   LOG     [CatsService] Creating a cat
+```
+
+## Choosing levels and silencing
+
+```python
+Logger.override_logger(["error", "warn", "fatal"])   # default format, only these levels
+Logger.override_logger(False)                         # silence everything
+Logger.override_logger(True)                          # back to the default
+```
+
+The same, at startup:
+
+```python
+app = AustialFactory.create(AppModule, logger=["error", "warn"])
+ctx = await AustialFactory.create_application_context(AppModule, logger=False)
+```
+
+## JSON output
+
+```python
+from austial import ConsoleLogger, Logger
+
+Logger.override_logger(ConsoleLogger(json_output=True))
+```
+
+Each record becomes one JSON object per line (`level`, `pid`, `timestamp`, `context`, `message`), `error` and
+`fatal` on stderr and the rest on stdout, ready for a log shipper.
+
+## A custom logger
+
+Implement `LoggerService`: `log`, `error` and `warn` are required; `debug`, `verbose` and `fatal` fall back
+to `log`/`error` if you don't define them. For example, route everything through the standard library:
+
+```python
+import logging
+
+from austial import LoggerService
+
+
+class StdlibLogger(LoggerService):
+    def __init__(self) -> None:
+        self._logger = logging.getLogger("app")
+
+    def log(self, message, context=None):
+        self._logger.info("[%s] %s", context, message)
+
+    def warn(self, message, context=None):
+        self._logger.warning("[%s] %s", context, message)
+
+    def error(self, message, context=None):
+        self._logger.error("[%s] %s", context, message)
+
+    def debug(self, message, context=None):
+        self._logger.debug("[%s] %s", context, message)
+
+
+app = AustialFactory.create(AppModule, logger=StdlibLogger())
+```
+
+A logger that needs dependency injection (a config service, say) can't exist yet when the app is created.
+Buffer the startup output until it does:
+
+```python
+app = AustialFactory.create(AppModule, buffer_logs=True)
+app.use_logger(app.get(MyInjectedLogger))     # attaches it and replays what was held back
+```
+
+`buffer_logs=True` holds every record until `use_logger()` runs or `app.init()` starts, so the first lines
+aren't printed in the wrong format.
+
+## Notes
+
+- `Logger.override_logger()` is process-wide state: set it once at startup, not per request.
+- `Logger.attach_buffer()` / `Logger.flush()` are the two halves of buffering if you want them separately.
+- Library code (including Austial's own startup lines) logs through the same `Logger`, so one setting
+  controls everything.

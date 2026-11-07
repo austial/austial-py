@@ -1,0 +1,52 @@
+---
+title: Streaming Files
+---
+
+# Streaming Files
+
+To send a file (or any large or generated body) without loading it into memory, return a
+`StreamableFile`. It sets `Content-Type`, `Content-Disposition` and `Content-Length` for you.
+
+```python
+from austial import Controller, Get, StreamableFile
+
+
+@Controller("reports")
+class ReportsController:
+    @Get("annual")
+    async def annual(self) -> StreamableFile:
+        return StreamableFile(
+            "reports/2026.pdf",                                    # a path
+            type="application/pdf",
+            disposition='attachment; filename="annual-2026.pdf"',
+        )
+```
+
+The source can be:
+
+| Source | Streams |
+|---|---|
+| `str` / `os.PathLike` | the file at that path, in 64 KiB chunks |
+| `bytes` | the buffer |
+| an open binary file | read in chunks, then closed |
+| an iterable or async iterable of `bytes` | each chunk as it's produced |
+
+```python
+@Get("export")
+async def export(self) -> StreamableFile:
+    async def rows():
+        async for row in self.repo.stream_all():
+            yield (row.to_csv() + "\n").encode()
+
+    return StreamableFile(rows(), type="text/csv", disposition='attachment; filename="export.csv"')
+```
+
+`length=` sets `Content-Length` explicitly; for paths, files and `bytes` it is worked out for you, and
+omitted for generators (the response is then sent chunked).
+
+The response status is the route's usual one (`200`, or `201` for `POST`); change it with `@HttpCode`.
+Headers set with `@Header` are added too.
+
+For a plain download straight from disk you can also return Starlette's `FileResponse`, which adds
+range-request support. `StreamableFile` is the better fit when the bytes come from a generator, a
+database or object storage.

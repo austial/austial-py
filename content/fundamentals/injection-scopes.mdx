@@ -2,6 +2,8 @@
 title: Injection Scopes
 ---
 
+import { Callout } from "@/components/mdx";
+
 # Injection Scopes
 
 ```python
@@ -12,6 +14,7 @@ from austial import Injectable, Scope
 |---|---|
 | `Scope.DEFAULT` | **Singleton** (default). One instance shared across the whole application lifetime. |
 | `Scope.TRANSIENT` | A brand-new instance is constructed every time the provider is resolved. |
+| `Scope.REQUEST` | One instance **per request**, built on first use and discarded with the request. |
 
 ```python
 @Injectable(scope=Scope.DEFAULT)     # same as plain @Injectable()
@@ -38,11 +41,86 @@ y = container.resolve(CatsService)
 assert x is y       # default: singleton
 ```
 
-## No request scope (yet)
+## Request scope
 
-A request scope — a fresh instance per inbound HTTP request, letting a
-provider safely hold per-request state (like the current user) as instance
-attributes — is not implemented yet. If you need per-request state today,
-read it off the `Request` object directly (via a guard, interceptor, or
-`Req` param) rather than expecting a request-scoped provider to carry it
-for you.
+A request-scoped provider can safely hold per-request state as instance attributes. It is built the
+first time something needs it during a request, shared by everything else in that request, and
+dropped afterwards:
+
+```python
+@Injectable(scope=Scope.REQUEST)
+class RequestContext:
+    def __init__(self):
+        self.request_id = str(uuid4())
+        self.user = None
+
+
+@Injectable()
+class AuditService:
+    def __init__(self, ctx: RequestContext):
+        self.ctx = ctx          # the SAME RequestContext the controller and guards see
+
+
+@Controller("cats")
+class CatsController:
+    def __init__(self, ctx: RequestContext, audit: AuditService):
+        self.ctx, self.audit = ctx, audit
+
+    @Get()
+    async def find_all(self):
+        assert self.audit.ctx is self.ctx
+        return {"request_id": self.ctx.request_id}
+```
+
+### Scope bubbles up
+
+Anything that depends on a request-scoped provider (directly or through other providers) is itself
+resolved per request: `AuditService` above is `DEFAULT` scope on paper, but gets a fresh instance
+every request. That includes **controllers, guards, pipes, interceptors and filters**, which are
+then built per request instead of once at startup.
+
+<Callout type="warning">
+Per-request construction costs a little on every request. Prefer singletons, and reach for request
+scope only when a provider genuinely needs per-request state.
+</Callout>
+
+### The `REQUEST` token
+
+Inject the current Starlette `Request` itself with the `REQUEST` token. Any provider that depends on it
+becomes request-scoped automatically:
+
+```python
+from austial import REQUEST, Inject, Injectable
+
+
+@Injectable()
+class ClientInfo:
+    def __init__(self, request=Inject(REQUEST)):
+        self.request = request
+
+    @property
+    def user_agent(self) -> str:
+        return self.request.headers.get("user-agent", "")
+```
+
+### Outside a request
+
+Resolving a request-scoped provider with `app.get()` / `ModuleRef.get()` outside a request raises
+`RequestScopeError`. Use `resolve()` with a context id instead, e.g. in a queue worker:
+
+```python
+from austial import ContextIdFactory
+
+ctx = ContextIdFactory.create()
+handler = app.resolve(ReportHandler, ctx)       # shares RequestContext within this context
+```
+
+See [Module Reference](/fundamentals/module-reference#resolving-request-scoped-providers).
+
+## Singletons stay singletons
+
+```python
+first = container.resolve(CatsService)
+second = container.resolve(CatsService)
+assert first is second
+```

@@ -30,7 +30,11 @@ own validation errors, flow through the exception filters.
 | Interceptor | subclass `NestInterceptor`, `intercept(context, call_next)` | `@UseInterceptors(...)` | [Interceptors](/overview/interceptors) |
 | Exception filter | subclass `ExceptionFilter` + `@Catch(...)` | `@UseFilters(...)` or `app.use_global_filters(...)` | [Exception filters](/overview/exception-filters) |
 | Middleware | subclass `NestMiddleware` | `configure(consumer)` on a module | [Middleware](/overview/middleware) |
-| Custom provider | `{"provide": TOKEN, "useClass"/"useValue"/"useFactory": ..., "inject": [...]}` | a module's `providers` | [Custom providers](/fundamentals/custom-providers) |
+| Global guard/pipe/interceptor/filter with DI | `{"provide": APP_GUARD\|APP_PIPE\|APP_INTERCEPTOR\|APP_FILTER, "useClass": X}` | a module's `providers` | [Guards](/overview/guards#binding-guards-globally) |
+| Custom provider | `{"provide": TOKEN, "useClass"/"useValue"/"useFactory"/"useExisting": ..., "inject": [...]}` | a module's `providers` | [Custom providers](/fundamentals/custom-providers) |
+| Lifecycle hook | define `on_module_init` / `on_application_bootstrap` / `on_module_destroy` / `before_application_shutdown` / `on_application_shutdown` | any provider, controller or module class | [Lifecycle events](/fundamentals/lifecycle-events) |
+| Runtime lookup | inject `ModuleRef`, `DiscoveryService`, `LazyModuleLoader` | constructor | [Module reference](/fundamentals/module-reference) |
+| No-HTTP app | `await AustialFactory.create_application_context(AppModule)` | scripts, workers | [Standalone applications](/fundamentals/standalone-applications) |
 | Dynamic module | static method returning `DynamicModule` | `imports=[X.for_root(...)]` | [Dynamic modules](/fundamentals/dynamic-modules) |
 
 ## Handler parameters
@@ -45,6 +49,10 @@ defaults and type hints:
 | Catch-all path (matches `/`) | route `files/:key*`, then `key: str = Param("key")` |
 | Query string value | `limit: int = Query(default=10)` |
 | Header | `x_request_id: str \| None = Headers("x-request-id")` |
+| Parse a param/query value | `id: int = Param("id", ParseIntPipe)`, `page: int = Query("page", DefaultValuePipe(1), ParseIntPipe)` |
+| Uploaded file | `file: UploadFile = UploadedFile("file", ParseFilePipe(...))` ([File upload](/techniques/file-upload)) |
+| Client IP / host capture / session | `Ip()`, `HostParam("tenant")`, `Session()` |
+| Your own marker | `create_param_decorator(lambda data, ctx: ...)` |
 | Authenticated principal | `user=CurrentUser()` (`austial.auth`) |
 | Tenant context | inject `TenantContext` in the constructor |
 | Status code / header | `@HttpCode(204)`, `@Header("Cache-Control", "no-store")` |
@@ -61,6 +69,10 @@ Raise these from anywhere; never build the response yourself. Every one takes
 | `ForbiddenException` | 403 | `TooManyRequestsException` | 429 |
 | `NotFoundException` | 404 | `InternalServerErrorException` | 500 |
 | `MethodNotAllowedException` | 405 | `ServiceUnavailableException` | 503 |
+| `NotAcceptableException` | 406 | `BadGatewayException` | 502 |
+| `RequestTimeoutException` | 408 | `GatewayTimeoutException` | 504 |
+| `GoneException` | 410 | `NotImplementedException` | 501 |
+| `PayloadTooLargeException` | 413 | `UnsupportedMediaTypeException` | 415 |
 
 Response shape: `{"statusCode", "message", "error", "timestamp", "path"}`.
 
@@ -129,13 +141,19 @@ austial-worker run src.app_module:AppModule
 
 Do not build on features that do not exist yet:
 
-- No `Scope.REQUEST`. Only singleton (`DEFAULT`) and `TRANSIENT`.
+- `Scope.REQUEST` exists, but scope bubbles up: a controller, guard or provider that depends on a
+  request-scoped provider (or the `REQUEST` token) is built per request. Prefer singletons.
 - Module `imports` / `exports` are not enforced as a visibility boundary.
   Write them correctly anyway.
 - `CallHandler.handle()` is a plain async continuation, not an RxJS
   Observable.
-- `DataSource.initialize()` is a manual step. There is no async module-init
-  hook.
+- `DataSource.initialize()` is a manual step (a `startup` event handler). `OrmModule` does not
+  initialise it for you; lifecycle hooks (`on_module_init`) run *after* startup handlers.
+- No microservices, WebSockets, GraphQL, CQRS or alternative HTTP platform.
+- `ExecutionContext.get_type()` is always `"http"`; `switch_to_ws()` / `switch_to_rpc()` raise.
+- No `Interval`/`Timeout` scheduler registry (`@Cron` and `@Job` exist), no OAuth/social login, no MongoDB/Prisma.
+- `async` factory providers are awaited at init (`await app.init()` / ASGI startup / `compile()`); a plain sync
+  `use_factory` runs when first resolved. Async factories must be singletons.
 - Only PostgreSQL (`asyncpg`) and SQLite (`aiosqlite`) drivers exist.
 - The `Tenanted` mixin's `tenant_id` is invisible to mypy's synthesised
   `__init__`. Declare the column on the entity directly if strict typing

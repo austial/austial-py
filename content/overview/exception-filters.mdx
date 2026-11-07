@@ -40,12 +40,23 @@ raise NotFoundException(f"Cat #{id} not found")
 | `ForbiddenException` | 403 |
 | `NotFoundException` | 404 |
 | `MethodNotAllowedException` | 405 |
+| `NotAcceptableException` | 406 |
+| `RequestTimeoutException` | 408 |
 | `ConflictException` | 409 |
+| `GoneException` | 410 |
+| `PreconditionFailedException` | 412 |
+| `PayloadTooLargeException` | 413 |
+| `UnsupportedMediaTypeException` | 415 |
+| `ImATeapotException` | 418 |
+| `MisdirectedException` | 421 |
 | `UnprocessableEntityException` | 422 |
 | `TooManyRequestsException` | 429 |
 | `InternalServerErrorException` | 500 |
 | `NotImplementedException` | 501 |
+| `BadGatewayException` | 502 |
 | `ServiceUnavailableException` | 503 |
+| `GatewayTimeoutException` | 504 |
+| `HttpVersionNotSupportedException` | 505 |
 
 Every subclass takes the same constructor: `(message: str | dict | None = None)`.
 Pass a string for a plain `message`, or a dict to control the body more
@@ -106,13 +117,22 @@ class CatsController:
     ...
 ```
 
+### Binding filters globally with injection
+
+To bind a filter application-wide **with constructor injection**, register it under `APP_FILTER` in any
+module: `{"provide": APP_FILTER, "useClass": DatabaseErrorFilter}`. See
+[Guards: binding globally](/overview/guards#binding-guards-globally).
+
 ## Dispatch order
 
-When multiple filters are registered, Austial walks them in order and uses
-the first one whose `@Catch(...)` types match the raised exception
-(an empty `@Catch()` always matches). If none match, the exception
-re-raises — this is why `AllExceptionsFilter` (registered with an empty
-`@Catch()`) is the sane default to always have installed as a catch-all.
+When multiple filters apply, Austial walks them in order — `use_global_filters`, then `APP_FILTER`
+providers, then the controller's, then the route's — and uses the first one whose `@Catch(...)` types match
+the raised exception (an empty `@Catch()` always matches). Note the order: unlike NestJS, where the most
+specific filter wins, a matching **global** filter is reached before a route-level one, so keep global
+filters specific (or a catch-all registered last).
+
+The built-in `AllExceptionsFilter` always closes the chain, so an exception no filter claimed is still
+rendered in the standard body instead of escaping as a bare traceback.
 
 Validation errors raised by FastAPI itself (`RequestValidationError`) and
 any other uncaught exception are automatically funneled through the same

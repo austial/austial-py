@@ -36,6 +36,48 @@ resolves anything registered in that graph — the same singleton-by-default
 behavior as a real running app (resolve the same token twice, get the same
 instance back).
 
+## Overriding providers
+
+Swap real collaborators for fakes **before** compiling:
+
+```python
+module = await (
+    Test.create_testing_module(imports=[CatsModule])
+    .override_provider(CatsRepository).use_value(FakeCatsRepository())
+    .override_guard(AuthGuard).use_class(AllowAllGuard)
+    .compile()
+)
+```
+
+| Method | Replaces |
+|---|---|
+| `override_provider(token)` | any provider, by class or token |
+| `override_guard(Guard)`, `override_pipe(Pipe)`, `override_interceptor(Interceptor)`, `override_filter(Filter)` | the same thing; the names just read better. They work for components referenced **by class** (`@UseGuards(AuthGuard)`), because those are resolved from the container. |
+
+Each takes `.use_value(instance)`, `.use_class(Class)` or `.use_factory(fn, inject=[...])`.
+
+A component registered with `APP_GUARD` & friends has no class token of its own, so override the things it
+depends on instead.
+
+### Mocking whatever you didn't register
+
+```python
+module = await (
+    Test.create_testing_module(providers=[CatsService])
+    .use_mocker(lambda token: MagicMock() if token is CatsRepository else None)
+    .compile()
+)
+```
+
+`use_mocker(fn)` is asked for every dependency nothing registered; return a stand-in, or `None` to let the
+container handle it normally. Handy for unit-testing one service without wiring its whole graph.
+
+### More on `TestingModule`
+
+`compile()` awaits [async providers](/fundamentals/custom-providers#async-factory-providers). The result also
+has `resolve(token, context_id=None)` for [request-scoped](/fundamentals/injection-scopes#request-scope)
+providers and `await close()`, which runs the [termination hooks](/fundamentals/lifecycle-events).
+
 ## E2E tests — hitting real HTTP routes
 
 ```python
@@ -69,8 +111,10 @@ async def test_full_request_lifecycle():
 (no middleware bindings) around the same `FastAPI` app your production code
 would run through — routing, guards, pipes, interceptors, and exception
 filters all execute exactly as they would in production.
-`await app.init()` builds the routes (idempotent — safe even if you never
-call `listen()`), and `httpx.ASGITransport` lets `AsyncClient` talk to it
+`await app.init()` builds the routes and runs the
+[lifecycle hooks](/fundamentals/lifecycle-events) (idempotent — safe even if you never
+call `listen()`; pair it with `await app.close()` if your providers have
+teardown hooks), and `httpx.ASGITransport` lets `AsyncClient` talk to it
 in-process, with **no real network socket** involved.
 
 ## Defining throwaway fixtures inline

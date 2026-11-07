@@ -1,0 +1,105 @@
+---
+title: File Upload
+---
+
+import { Callout } from "@/components/mdx";
+
+# File Upload
+
+FastAPI and Starlette parse `multipart/form-data` for you; Austial adds the same upload helpers NestJS
+gives you: parameter markers, validation pipes, and interceptors that enforce limits.
+
+```python
+from fastapi import UploadFile
+
+from austial import Controller, Post, UploadedFile
+
+
+@Controller("avatars")
+class AvatarsController:
+    @Post()
+    async def upload(self, file: UploadFile = UploadedFile("file")):
+        return {"name": file.filename, "size": file.size}
+```
+
+```bash
+curl -F "file=@me.png" localhost:8000/avatars
+```
+
+`UploadedFile(name)` binds one field; `UploadedFiles(name)` binds a repeated one (annotate it
+`list[UploadFile]`). For an optional file, annotate `UploadFile | None` and pass `default=None`.
+Uploads need the `python-multipart` package, which `austial` already depends on.
+
+## Validating with `ParseFilePipe`
+
+Pass a `ParseFilePipe` as the parameter's pipe:
+
+```python
+from austial import FileTypeValidator, MaxFileSizeValidator, ParseFilePipe, UploadedFile
+
+
+@Post()
+async def upload(
+    self,
+    file: UploadFile = UploadedFile(
+        "file",
+        ParseFilePipe(validators=[MaxFileSizeValidator(1024 * 1024), FileTypeValidator("png")]),
+    ),
+):
+    ...
+```
+
+| Validator | Checks |
+|---|---|
+| `MaxFileSizeValidator(max_size, message=None)` | size in bytes |
+| `FileTypeValidator("png")` | the declared `Content-Type` ends with the string (`image/png`); pass a compiled regex to `search` instead |
+| a subclass of `FileValidator` | your own `is_valid(file)` / `build_error_message(file)` |
+
+`ParseFilePipe(file_is_required=False)` lets a missing file through; otherwise it answers
+`400 File is required`. Like other pipes it takes `error_http_status_code=` and `exception_factory=`.
+
+<Callout type="warning">
+`FileTypeValidator` trusts the `Content-Type` the client **declares**; it doesn't inspect the file's
+bytes. Treat it as a convenience filter, not a security control, and scan or re-encode untrusted
+uploads (see [File Storage](/techniques/file-storage)'s virus-scan hook).
+</Callout>
+
+## Limits with file interceptors
+
+Interceptors check the whole multipart request **before** the handler runs and answer with the matching
+error:
+
+```python
+from austial import FileFieldsInterceptor, FileInterceptor, FilesInterceptor, UseInterceptors
+
+
+@Post("avatar")
+@UseInterceptors(FileInterceptor("avatar", max_size=2 * 1024 * 1024))
+async def avatar(self, avatar: UploadFile = UploadedFile("avatar")): ...
+
+
+@Post("gallery")
+@UseInterceptors(FilesInterceptor("photos", max_count=10))
+async def gallery(self, photos: list[UploadFile] = UploadedFiles("photos")): ...
+
+
+@Post("profile")
+@UseInterceptors(FileFieldsInterceptor([{"name": "avatar", "max_count": 1}, {"name": "docs"}]))
+async def profile(self, avatar: UploadFile = UploadedFile("avatar"), docs: list[UploadFile] = UploadedFiles("docs")): ...
+```
+
+| Interceptor | Allows |
+|---|---|
+| `FileInterceptor(field)` | one file in `field` |
+| `FilesInterceptor(field, max_count=None)` | up to `max_count` files in `field` |
+| `FileFieldsInterceptor([{"name", "max_count"}, ...])` | several named fields |
+| `AnyFilesInterceptor()` | any files in any field |
+
+All accept `max_size=` (bytes per file) and `file_filter=` (`(request, upload) -> bool`). Violations
+answer `413` for size, and `400` for an unexpected field, too many files, or a rejected file.
+
+<Callout type="info">
+Starlette buffers uploads in memory up to a threshold, then spools them to disk. The interceptors reject
+oversized files *after* parsing, so also cap the request body at your reverse proxy
+(`client_max_body_size` in nginx) to protect the server.
+</Callout>

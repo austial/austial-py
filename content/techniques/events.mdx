@@ -1,0 +1,112 @@
+---
+title: Events
+---
+
+# Events
+
+```bash
+pip install austial-events     # included in the `austial` umbrella package
+```
+
+An event emitter decouples *something happened* from *what reacts to it*: the orders code emits
+`order.created`; email, analytics and inventory each subscribe on their own.
+
+```python
+from austial import Module
+from austial.events import EventEmitterModule
+
+
+@Module(imports=[EventEmitterModule.for_root()])
+class AppModule:
+    pass
+```
+
+## Emitting
+
+```python
+from austial import Injectable
+from austial.events import EventEmitter
+
+
+@Injectable()
+class OrdersService:
+    def __init__(self, events: EventEmitter):
+        self.events = events
+
+    async def create(self, dto):
+        order = await self.repository.save(dto)
+        self.events.emit("order.created", order)                  # fire and forget
+        results = await self.events.emit_async("order.audited", order)   # wait for every handler
+        return order
+```
+
+| Call | Behaviour |
+|---|---|
+| `emit(event, *args) -> bool` | Calls every matching listener. Sync handlers run immediately; async handlers are scheduled on the running loop and not awaited. Returns `True` if anyone was listening. |
+| `await emit_async(event, *args) -> list` | Runs every matching listener (async ones concurrently), awaits them all and returns their results in listener order. |
+| `await wait_idle()` | Waits for background handlers started by `emit` (tests, shutdown). |
+
+## Listening: `@OnEvent`
+
+```python
+from austial import Injectable
+from austial.events import OnEvent
+
+
+@Injectable()
+class Notifications:
+    @OnEvent("order.created")
+    async def send_receipt(self, order) -> None: ...
+
+    @OnEvent(["order.created", "order.updated"], prepend=True)
+    def audit(self, order) -> None: ...
+
+    @OnEvent("invoice.paid", once=True)
+    def first_payment_only(self, invoice) -> None: ...
+```
+
+Handlers on providers **and controllers** are subscribed when the application bootstraps (during `init()` /
+ASGI startup), found through [`DiscoveryService`](/fundamentals/module-reference#discoveryservice). Stack
+several `@OnEvent`s or pass a list to subscribe one method to many events. Request-scoped providers can't
+subscribe; a warning is logged.
+
+| Option | Meaning |
+|---|---|
+| `prepend=True` | Run before the listeners already registered. |
+| `once=True` | Unsubscribe after the first call. |
+| `suppress_errors` | `True`: log a failing handler and carry on. `False`: let it propagate. Default: the module's setting. |
+
+## Wildcards
+
+Event names are dot-separated. A **listener** pattern may use `*` for exactly one segment and `**` for any
+number:
+
+```python
+@OnEvent("order.*")          # order.created, order.shipped -- not order.created.eu
+@OnEvent("order.**")         # order, order.created, order.created.eu
+@OnEvent("**.failed")        # payment.failed, a.b.failed
+```
+
+## Module options
+
+```python
+EventEmitterModule.for_root(
+    wildcard=True,         # False: patterns are matched literally
+    delimiter=".",
+    max_listeners=None,    # raise if more than N listeners share one pattern (a leak guard)
+    suppress_errors=True,  # default for handlers that don't say otherwise
+)
+```
+
+## Errors
+
+A handler that raises must not break the code that emitted the event, so by default failures are logged and
+the other handlers still run. With `suppress_errors=False`, `emit` raises synchronously for a sync handler
+and `emit_async` raises for any handler. A failure inside a *background* async handler (from `emit`) is
+always logged, since there is no caller to raise to; use `emit_async` when you need the error.
+
+## Using the emitter without a module
+
+`EventEmitter` is a plain class: `EventEmitter(EventEmitterOptions(...))`, then `on()`, `once()`, `off()`,
+`listeners()`, `listener_count()` and `remove_all_listeners()`. `on()` returns a function that unsubscribes
+that handler.

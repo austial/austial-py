@@ -1,0 +1,55 @@
+---
+title: Execution Context
+---
+
+# Execution Context
+
+Guards, interceptors and (through `ArgumentsHost`) exception filters all receive an object describing
+**what is being executed right now**. In a guard or interceptor that is an `ExecutionContext`:
+
+```python
+from austial import CanActivate, ExecutionContext
+
+
+class RolesGuard(CanActivate):
+    async def can_activate(self, context: ExecutionContext) -> bool:
+        request = context.get_request()
+        handler = context.get_handler()          # the controller method that will run
+        controller = context.get_class()         # the controller class
+        ...
+```
+
+| Method | Returns |
+|---|---|
+| `get_type()` | The kind of request: always `"http"`. Austial has no WebSocket or RPC transport, so the other values NestJS reports (`"ws"`, `"rpc"`) never occur. |
+| `get_request()` | The Starlette `Request`. |
+| `get_response()` | The `Response` being built for this request. Headers you set on it are sent, which is how a guard or interceptor adds a header without owning the handler. `None` when a filter builds its own response. |
+| `get_args()` | `[request, response]`, like Nest's `[req, res, next]` (there is no `next`). |
+| `get_arg_by_index(i)` | One of those. |
+| `get_class()` / `get_handler()` | The controller class and the handler method, for reading metadata with the [`Reflector`](/overview/custom-decorators#reading-metadata-with-reflector). |
+| `switch_to_http()` | The same context (it already is the HTTP one), so code written for NestJS ports over unchanged. |
+| `switch_to_ws()` / `switch_to_rpc()` | Raise `NotImplementedError`: there is no such context to switch to. |
+
+## Setting a header from a guard or interceptor
+
+```python
+class RequestIdInterceptor(NestInterceptor):
+    async def intercept(self, context: ExecutionContext, next: CallHandler):
+        context.get_response().headers["X-Request-Id"] = str(uuid4())
+        return await next.handle()
+```
+
+## Reading handler metadata
+
+`get_handler()` and `get_class()` are what a guard passes to the `Reflector` to find a custom decorator's
+value on the method, falling back to the controller:
+
+```python
+required = self.reflector.get_all_and_override(ROLES_KEY, [context.get_handler(), context.get_class()])
+```
+
+## In exception filters: `ArgumentsHost`
+
+A filter's `catch(exception, host)` gets an `ArgumentsHost`, the smaller sibling of `ExecutionContext`:
+`get_type()`, `get_request()`, `get_args()` and `switch_to_http()`. There is no `get_response()` there: a
+filter *returns* the response it wants to send. See [Exception Filters](/overview/exception-filters).

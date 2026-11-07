@@ -12,7 +12,7 @@ purpose is to receive requests and delegate business logic to a
 ## Routing
 
 `@Controller()` attaches a route prefix; the HTTP-verb decorators
-(`@Get`, `@Post`, `@Put`, `@Patch`, `@Delete`, `@Options`, `@Head`) attach a
+(`@Get`, `@Post`, `@Put`, `@Patch`, `@Delete`, `@Options`, `@Head`, and `@All` for every verb) attach a
 sub-path and register the method as a route handler:
 
 ```python
@@ -92,6 +92,16 @@ async def create(self, dto: CreateCatDto = Body()) -> Cat:
 | `Body(default=..., embed=False, ...)` | request body (usually a pydantic `BaseModel`) |
 | `Headers(name=None, default=None, ...)` | request header |
 | `Req` / `Res` | raw `fastapi.Request` / `fastapi.Response` |
+| `UploadedFile(name="file")` / `UploadedFiles(name="files")` | multipart file(s) — see [File Upload](/techniques/file-upload) |
+| `Ip()` | the client's IP address |
+| `HostParam(name=None)` | a value captured by the controller's host pattern |
+| `Session(name=None)` | the session dict (or one key); needs `SessionMiddleware` |
+
+`Param`, `Query`, `Headers`, `Body` and `UploadedFile(s)` also accept **pipes** after the name, which
+run on that one parameter — `Param("id", ParseIntPipe)`. See [Pipes](/overview/pipes#built-in-pipes).
+`Ip`, `HostParam`, `Session`, and the helpers you build with
+[`create_param_decorator`](/overview/custom-decorators#custom-parameter-decorators) are filled in
+*after* the guards ran, so they can read what a guard stored on the request.
 
 In practice, plain type-hinted path params (`id: int`) already resolve
 correctly via FastAPI's own inference from `{id}` in the path — `Param()` is
@@ -114,6 +124,41 @@ async def create(self, dto: CreateCatDto = Body()) -> Cat:
 
 Without `@HttpCode`, `POST` handlers return `201 Created`, every other verb
 returns `200 OK`.
+
+## Redirects
+
+`@Redirect(url, status_code=302)` answers with a redirect instead of a body. The handler can return a
+dict to choose the target at runtime:
+
+```python
+from austial import Redirect
+
+
+@Get("docs")
+@Redirect("https://docs.austial.com", 301)
+async def docs(self):
+    ...
+
+
+@Get("go")
+@Redirect("https://example.com")            # the default, used if the handler returns nothing
+async def go(self, version: str | None = Query("version")):
+    if version == "5":
+        return {"url": "https://example.com/v5", "status_code": 307}
+```
+
+## Streaming and server-sent events
+
+Return a `StreamableFile` to stream bytes with the right headers
+([Streaming Files](/techniques/streaming-files)), or use `@Sse` to push events to the browser
+([Server-Sent Events](/techniques/server-sent-events)).
+
+## API versioning, host routing and a global prefix
+
+`@Controller("cats", version="1")` / `@Version("2")` pin routes to an API version
+([Versioning](/techniques/versioning)); `@Controller("admin", host=":tenant.example.com")` restricts a
+controller to matching hosts, and `app.set_global_prefix("api")` prefixes every route
+([HTTP Server](/techniques/http-server)).
 
 ## Guards, pipes, interceptors on a controller
 

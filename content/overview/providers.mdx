@@ -89,10 +89,11 @@ class RequestIdGenerator:
 |---|---|
 | `Scope.DEFAULT` | Singleton — one instance for the lifetime of the application (default). |
 | `Scope.TRANSIENT` | A new instance is built every time it's resolved. |
+| `Scope.REQUEST` | One instance per inbound request, shared within it. |
 
-Austial does not currently implement a request scope (a fresh instance per
-inbound request) — see
-[Injection Scopes](/fundamentals/injection-scopes) for details.
+A request-scoped provider (or anything depending on one) is built per request — see
+[Injection Scopes](/fundamentals/injection-scopes) for how scope bubbles up and how to read the
+current `Request`.
 
 ## Injecting by token instead of type
 

@@ -25,19 +25,45 @@ class ServiceB:
 Resolving either one raises `CircularDependencyError` describing the cycle,
 instead of an unbounded recursion / stack overflow.
 
-## Avoiding it
+## Breaking the cycle with `forward_ref`
 
-Three escape hatches apply:
+When the cycle is genuine, mark one side with `forward_ref`. That side is handed a lazy proxy instead
+of the real instance, so both providers can be built; the proxy resolves the real provider the first
+time you use it, by which point the whole graph exists:
 
-1. **Redesign** — a circular dependency is usually a sign two providers
-   should be merged, or that shared logic belongs in a third provider both
-   depend on. This is the preferred fix.
-2. **Lazy resolution via a token** — inject a factory/callable instead of
-   the concrete type directly, deferring resolution until it's actually
-   called rather than at construction time.
-3. **`Optional_()`** — if one side of the relationship is genuinely
-   optional, mark it as such so the container returns `None` instead of
-   raising:
+```python
+from austial import Inject, Injectable, forward_ref
+
+
+@Injectable()
+class CatsService:
+    def __init__(self, owners=Inject(forward_ref(lambda: OwnersService))):
+        self.owners = owners            # a lazy proxy until first use
+
+
+@Injectable()
+class OwnersService:
+    def __init__(self, cats: CatsService):
+        self.cats = cats
+```
+
+Do not call methods on a forward-referenced dependency *inside the constructor*: the other side
+doesn't exist yet. Use it from regular methods (or `on_module_init`).
+
+The same trick works between **modules**, when two modules' files would otherwise import each other:
+
+```python
+@Module(imports=[forward_ref(lambda: OwnersModule)], providers=[CatsService])
+class CatsModule:
+    pass
+```
+
+## Other ways out
+
+1. **Redesign.** A cycle is usually a sign two providers should be merged, or that shared logic belongs
+   in a third provider both depend on. This is the preferred fix.
+2. **`Optional_()`.** If one side is genuinely optional, mark it so the container returns `None`
+   instead of raising:
 
    ```python
    from austial import Optional_
@@ -49,6 +75,8 @@ Three escape hatches apply:
            self.b = b
    ```
 
-Prefer option 1 whenever possible — circular dependencies between services
-are usually a design smell worth addressing directly rather than working
-around.
+3. **Resolve on demand.** Inject [`ModuleRef`](/fundamentals/module-reference) and call
+   `module_ref.get(Other)` when you actually need it.
+
+Prefer option 1 whenever possible. Circular dependencies between services are usually a design smell
+worth addressing directly rather than working around.

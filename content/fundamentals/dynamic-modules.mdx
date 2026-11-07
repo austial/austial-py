@@ -69,9 +69,58 @@ There's no separate `forRootAsync` mechanism to learn beyond what
 `OrmModule.for_root_async(use_factory=, inject=, entities=)` builds its
 `DataSource` lazily via a `useFactory` provider under the hood, resolved
 the first time something actually depends on the `DataSource` token. Note
-that `use_factory` itself always runs synchronously (there's no
-async-lifecycle hook in the module scanner yet — see
-[Database](/techniques/database)'s note on calling `DataSource.initialize()`
-explicitly). There's no meaningful difference between a "sync" and "async"
+that `use_factory` itself always runs synchronously. Do async setup
+(opening connections, warming caches) in a
+[lifecycle hook](/fundamentals/lifecycle-events) such as `on_module_init`,
+or — for `DataSource` — in the startup handler described in
+[Database](/techniques/database). There's no meaningful difference between a "sync" and "async"
 dynamic module in Austial beyond whether the values you're providing need
 other injected dependencies to compute.
+
+## `ConfigurableModuleBuilder`
+
+Writing `for_root` *and* `for_root_async` (with `use_factory`, `use_class`, `use_existing`, `inject`,
+`imports`) by hand for every configurable module is mostly boilerplate. `ConfigurableModuleBuilder`
+generates it:
+
+```python
+from austial import ConfigurableModuleBuilder, Inject, Injectable, Module
+
+mail = ConfigurableModuleBuilder().set_class_method_name("for_root").build()
+
+
+@Injectable()
+class MailService:
+    def __init__(self, options=Inject(mail.options_token)):
+        self.options = options              # whatever was passed to for_root()
+
+
+@Module(providers=[MailService], exports=[MailService])
+class MailModule(mail.module_class):
+    pass
+```
+
+The module now has both a sync and an async registration method:
+
+```python
+MailModule.for_root({"host": "smtp.example.com"})
+
+MailModule.for_root_async(
+    use_factory=lambda config: {"host": config.get("SMTP_HOST")},
+    inject=[ConfigService],
+)
+MailModule.for_root_async(use_class=MailOptionsFactory)       # a class with a create() method
+MailModule.for_root_async(use_existing=MailOptionsFactory)    # reuse one another module exports
+```
+
+Pass `imports=[...]` to the async form for modules the factory's dependencies come from. Options can be
+any object: a dict, a dataclass, a pydantic model.
+
+| Builder method | Effect |
+|---|---|
+| `set_class_method_name("register")` | Names the methods `register` / `register_async` (default `register`). |
+| `set_factory_method_name("create")` | The method `use_class` / `use_existing` factories expose. |
+| `set_extras(defaults, transform)` | Accepts extra keyword arguments (e.g. `is_global`) and lets `transform(dynamic_module, extras)` fold them into the returned `DynamicModule`. |
+| `ConfigurableModuleBuilder(options_injection_key="MAIL_OPTIONS")` | Use a fixed token instead of a generated one. |
+
+`build()` returns an object with `.module_class` (the base class to extend) and `.options_token`.

@@ -85,8 +85,9 @@ exception filters**. Middleware runs before all of it.
    an `imports=[...]` chain that reaches `AppModule`. A missing registration
    shows up as a missing route or a DI error, not an import error.
 2. **Dependency injection is by `__init__` type hint.** Providers are
-   singletons (`Scope.DEFAULT`) unless marked `Scope.TRANSIENT`. There is no
-   request scope. Never instantiate a service yourself with `Foo()`.
+   singletons (`Scope.DEFAULT`) unless marked `Scope.TRANSIENT` or `Scope.REQUEST`
+   (request scope bubbles up to everything that depends on it, so use it
+   sparingly). Never instantiate a service yourself with `Foo()`.
 3. **Repositories** are injected as
    `repo: Repository[Cat] = InjectRepository(Cat)`, and the owning module
    needs `OrmModule.for_feature([Cat])`. The root needs one
@@ -106,7 +107,7 @@ exception filters**. Middleware runs before all of it.
 
 | You need | Import from |
 |---|---|
-| `Module Controller Injectable Get Post Put Patch Delete Body Param Query Headers UseGuards UseInterceptors UsePipes UseFilters HttpCode Header Scope Global Inject`, all `*Exception` classes, `CanActivate ExecutionContext NestInterceptor NestMiddleware PipeTransform ExceptionFilter Catch ValidationPipe AustialFactory Reflector` | `austial` |
+| `Module Controller Injectable Get Post Put Patch Delete All Body Param Query Headers UseGuards UseInterceptors UsePipes UseFilters HttpCode Header Redirect Sse Version Scope Global Inject forward_ref ModuleRef DiscoveryService LazyModuleLoader REQUEST`, `APP_GUARD APP_PIPE APP_INTERCEPTOR APP_FILTER LoggerService ConsoleLogger LOG_LEVELS AsyncProviderNotInitializedError ParseIntPipe ParseFloatPipe ParseBoolPipe ParseUUIDPipe ParseEnumPipe ParseArrayPipe DefaultValuePipe ParseFilePipe UploadedFile Ip HostParam Session StreamableFile MessageEvent TimeoutInterceptor ClassSerializerInterceptor Exclude Expose PartialType PickType OmitType IntersectionType create_param_decorator apply_decorators VersioningType VERSION_NEUTRAL`, all `*Exception` classes, `CanActivate ExecutionContext NestInterceptor NestMiddleware PipeTransform ExceptionFilter Catch ValidationPipe AustialFactory Reflector` | `austial` |
 | `ConfigModule ConfigService` | `austial.config` |
 | `OrmModule DataSource Entity Column PrimaryGeneratedColumn Repository InjectRepository FindOptions In NotIn IsNull NotNull ManyToOne OneToMany` | `austial.orm` |
 | `AuthModule AuthConfig AuthGuard AuthService CurrentUser Public JwtStrategy Argon2Hasher TotpStrategy` | `austial.auth` |
@@ -118,6 +119,8 @@ exception filters**. Middleware runs before all of it.
 | `StorageModule StorageConfig StorageService SignedUrlService` | `austial.storage` |
 | `MigrationsModule MigrationsConfig MigrationRunner` | `austial.migrations` |
 | `I18nModule I18nConfig I18nService LocaleMiddleware` | `austial.i18n` |
+| `CacheModule CacheService CacheInterceptor CacheKey CacheTTL CacheStore MemoryCacheStore` | `austial.cache` |
+| `EventEmitterModule EventEmitter OnEvent` | `austial.events` |
 | `HealthCheckService MemoryHealthIndicator DatabaseHealthIndicator` | `austial.terminus` |
 | `Test` (testing module) | `austial.testing` |
 

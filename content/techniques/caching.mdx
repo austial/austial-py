@@ -1,0 +1,150 @@
+---
+title: Caching
+---
+
+# Caching
+
+```bash
+pip install austial-cache      # included in the `austial` umbrella package
+```
+
+Import `CacheModule` once. `CacheService` and `CacheInterceptor` are then injectable everywhere:
+
+```python
+from austial import Module
+from austial.cache import CacheModule
+
+
+@Module(imports=[CacheModule.register(ttl=30, max_items=5000)])
+class AppModule:
+    pass
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `ttl` | `5.0` | Default time-to-live in **seconds**; `None` or `0` for no expiry. |
+| `max_items` | `1000` | Size of the in-memory store; the least recently used entry is evicted first. |
+| `store` | in-memory | Your own `CacheStore` (see below). |
+
+For options that depend on other providers, use `register_async`:
+
+```python
+CacheModule.register_async(
+    use_factory=lambda config: CacheOptions(ttl=float(config.get("CACHE_TTL", 30))),
+    inject=[ConfigService],
+)
+```
+
+## Using the cache directly
+
+```python
+from austial import Injectable
+from austial.cache import CacheService
+
+
+@Injectable()
+class CatsService:
+    def __init__(self, cache: CacheService):
+        self.cache = cache
+
+    async def find_all(self):
+        return await self.cache.wrap("cats:all", self.repository.find, ttl=60)
+```
+
+| Method | Does |
+|---|---|
+| `await get(key)` | The cached value, or `None` on a miss. (A stored `None` is indistinguishable from a miss.) |
+| `await set(key, value, ttl=None)` | Stores a value; `ttl` overrides the default, `0` means no expiry. |
+| `await delete(key)` / `await clear()` | Invalidate one key / everything. |
+| `await wrap(key, factory, ttl=None)` | Return the cached value, or call `factory()` (sync or async), store and return the result. Concurrent misses for the same key share **one** call, so a popular key can't stampede your database. A failing factory isn't cached. |
+
+## Caching responses
+
+`CacheInterceptor` caches the result of `GET` handlers, keyed by path plus sorted query string. It is a
+class resolved from DI, so name the class:
+
+```python
+from austial import Controller, Get, UseInterceptors
+from austial.cache import CacheInterceptor, CacheKey, CacheTTL
+
+
+@Controller("cats")
+@UseInterceptors(CacheInterceptor)
+class CatsController:
+    @Get()
+    async def find_all(self): ...                       # cached per URL, default ttl
+
+    @Get("top")
+    @CacheTTL(300)                                       # this route: 5 minutes
+    async def top(self): ...
+
+    @Get("featured")
+    @CacheKey("featured-cats")                           # fixed key, so you can invalidate it by name
+    async def featured(self): ...
+```
+
+```python
+await cache.delete("featured-cats")
+```
+
+To cache every `GET` in the app, register it globally (see
+[Guards: binding globally](/overview/guards#binding-guards-globally) for the `APP_*` tokens):
+
+```python
+from austial import APP_INTERCEPTOR
+
+providers=[{"provide": APP_INTERCEPTOR, "useClass": CacheInterceptor}]
+```
+
+What it does **not** cache: non-`GET` requests, handlers that return a Starlette `Response` or a
+`StreamableFile`, and `None`. Cached values are handed back as the same object, so treat them as immutable.
+
+Cache **per user** (or per tenant, per locale...) by overriding `track_by`:
+
+```python
+class PerUserCacheInterceptor(CacheInterceptor):
+    def track_by(self, context):
+        key = super().track_by(context)
+        user = context.get_request().headers.get("x-user", "anon")
+        return None if key is None else f"{user}:{key}"     # None skips caching
+```
+
+Never cache responses that depend on the caller (anything behind authentication) with the default key: two
+users would share one entry.
+
+## Other backends
+
+The default store is per-process. For a shared cache implement `CacheStore` (four async methods). A sketch
+for Redis, storing JSON:
+
+```python
+import json
+
+from redis.asyncio import Redis
+
+from austial.cache import CacheStore
+
+
+class RedisCacheStore(CacheStore):
+    def __init__(self, client: Redis):
+        self.client = client
+
+    async def get(self, key):
+        raw = await self.client.get(key)
+        return None if raw is None else json.loads(raw)
+
+    async def set(self, key, value, ttl=None):
+        await self.client.set(key, json.dumps(value), ex=int(ttl) if ttl else None)
+
+    async def delete(self, key):
+        await self.client.delete(key)
+
+    async def clear(self):
+        await self.client.flushdb()
+
+
+CacheModule.register(store=RedisCacheStore(Redis.from_url("redis://localhost")))
+```
+
+This sketch is not shipped with Austial and only handles JSON-serialisable values; adapt it to your data and
+mind that `clear()` here flushes the whole Redis database.

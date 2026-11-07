@@ -56,15 +56,17 @@ guard, interceptor, handler -- reads top to bottom in the order it executes.
 
 - **Modules** — `@Module(imports=, controllers=, providers=, exports=)` compose the application graph.
 - **Controllers** — `@Controller(prefix)` plus `@Get`/`@Post`/`@Put`/`@Patch`/`@Delete`/`@Options`/`@Head` declare routes.
-- **Providers** — `@Injectable(scope=Scope.DEFAULT | Scope.TRANSIENT)`; the container resolves `__init__` type hints recursively, singleton by default. Custom providers use provider dicts: `{"provide": TOKEN, "useClass"/"useValue"/"useFactory": ..., "inject": [...]}`.
-- **Bootstrap** — `AustialFactory.create(AppModule)` returns an `AustialApplication`; `await app.listen(8000)` starts it.
+- **Providers** — `@Injectable(scope=Scope.DEFAULT | Scope.TRANSIENT | Scope.REQUEST)`; the container resolves `__init__` type hints recursively, singleton by default. Custom providers use provider dicts: `{"provide": TOKEN, "useClass"/"useValue"/"useFactory"/"useExisting": ..., "inject": [...]}`. `ModuleRef`, `DiscoveryService`, `LazyModuleLoader` and `forward_ref` cover runtime lookup and circular graphs.
+- **Bootstrap** — `AustialFactory.create(AppModule)` returns an `AustialApplication`; `await app.listen(8000)` starts it. `AustialFactory.create_application_context(AppModule)` builds the graph without HTTP. Providers can hook `on_module_init` … `on_application_shutdown`.
 - **Guards** — `CanActivate` ABC + `ExecutionContext`, applied with `@UseGuards(...)`.
 - **Interceptors** — `NestInterceptor` ABC (`intercept(context, call_next)`), applied with `@UseInterceptors(...)`.
-- **Pipes** — `PipeTransform` ABC, including the built-in `ValidationPipe`.
+- **Pipes** — `PipeTransform` ABC, including `ValidationPipe`, the `Parse*Pipe` family, `DefaultValuePipe` and `ParseFilePipe`.
 - **Exception filters** — `ExceptionFilter` ABC + `@Catch(...)`, with a default `AllExceptionsFilter`.
 - **Middleware** — `NestMiddleware` ABC, wired up via `configure(consumer)` on modules.
 - **Config** — `ConfigModule.for_root(env_file=".env")` / `ConfigService`.
 - **Database** — `austial.orm`, a from-scratch TypeORM-shaped ORM: `@Entity()`, `Repository`, `QueryBuilder`, wired up via `OrmModule.for_root(...)`.
+- **Cross-cutting techniques** — `austial.cache` (`CacheModule`, `CacheInterceptor`, `@CacheKey`/`@CacheTTL`), `austial.events` (`EventEmitter`, `@OnEvent` with wildcards), a pluggable `Logger`/`LoggerService`, global `APP_GUARD`/`APP_PIPE`/`APP_INTERCEPTOR`/`APP_FILTER` providers, async providers, and testing overrides.
+- **HTTP extras** — API versioning, a global prefix, host routing, `@Redirect`, `@Sse`, `StreamableFile`, file-upload helpers, response serialization (`@Exclude`/`@Expose`) and mapped types (`PartialType`, …).
 - **Health checks** — `austial.terminus.HealthCheckService` + `MemoryHealthIndicator`, `DatabaseHealthIndicator`.
 - **Testing** — `austial.testing.Test.create_testing_module(...).compile()`.
 - **CLI** — `austial new <name>` / `austial generate|g module|controller|service|resource <name>`.
@@ -85,11 +87,13 @@ Austial is deliberately opinionated but not a 1:1 port of any single
 framework. A few concepts are intentionally out of scope for now, so you
 don't go looking for them:
 
-- **Request-scoped providers** (`Scope.REQUEST`) — only `Scope.DEFAULT`
-  (singleton) and `Scope.TRANSIENT` exist today.
 - **Module `imports`/`exports` visibility enforcement** — every module's
   providers currently register into one flat, application-wide container
   (visibility is documentation-only, not enforced at resolve time).
+- **Pluggable HTTP platform** — Austial runs on FastAPI/Starlette only; there is no
+  Express-or-Fastify-style adapter layer.
+- **Microservices, WebSockets, GraphQL and CQRS** — no transports, gateways or
+  resolvers ship with the framework.
 - **RxJS-style interceptor streams** — `CallHandler.handle()` is a plain
   async continuation, not an Observable.
 

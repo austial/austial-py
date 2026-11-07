@@ -1,0 +1,108 @@
+---
+title: Lifecycle Events
+---
+
+import { Callout } from "@/components/mdx";
+
+# Lifecycle Events
+
+An Austial application goes through three phases: **initialization**, **running** and
+**termination**. Providers, controllers and module classes can hook into the first and last by
+defining methods with these names. Every hook may be a plain method or an `async` one.
+
+| Hook | When it runs |
+|---|---|
+| `on_module_init()` | Once the host module's dependencies have been resolved. |
+| `on_application_bootstrap()` | Once **every** module has been initialized, before the app starts serving. |
+| `on_module_destroy()` | When the application is closing (a termination signal, `app.close()`). |
+| `before_application_shutdown(signal=None)` | After every `on_module_destroy()` has finished. Receives the signal name if one triggered shutdown. |
+| `on_application_shutdown(signal=None)` | After connections have closed. Receives the signal name if one triggered shutdown. |
+
+```python
+from austial import Injectable, OnModuleDestroy, OnModuleInit
+
+
+@Injectable()
+class BrokerService(OnModuleInit, OnModuleDestroy):
+    async def on_module_init(self) -> None:
+        self.connection = await connect("amqp://localhost")
+
+    async def on_module_destroy(self) -> None:
+        await self.connection.close()
+```
+
+The interfaces (`OnModuleInit`, `OnApplicationBootstrap`, `OnModuleDestroy`,
+`BeforeApplicationShutdown`, `OnApplicationShutdown`) are optional. The framework finds hooks **by
+method name**, so a provider that simply defines `async def on_module_init(self)` is called too.
+Subclassing the interface just states the intent and lets your type-checker verify the signature.
+
+## Order
+
+- **Initialization** runs `on_module_init` on every provider, controller and module class, then
+  `on_application_bootstrap` on all of them. Within that, dependencies come first: an imported
+  module's providers run before the importing module's.
+- **Termination** runs `on_module_destroy`, then `before_application_shutdown`, then
+  `on_application_shutdown`, in the **reverse** order, so what was set up first is torn down last.
+
+A module class can have hooks of its own; they run after the module's providers':
+
+```python
+@Module(imports=[DatabaseModule], providers=[BrokerService])
+class AppModule(OnApplicationBootstrap):
+    def on_application_bootstrap(self) -> None:
+        print("everything is up")
+```
+
+## When hooks fire
+
+Under `austial serve` / `uvicorn src.main:app`, hooks run from the ASGI **lifespan**: initialization
+right after FastAPI's `on_event("startup")` handlers, termination right before the `"shutdown"`
+ones. So a `DataSource` initialized in a startup handler (see [Database](/techniques/database))
+is already ready when your `on_module_init` runs.
+
+You can also drive the lifecycle yourself, which is what tests and scripts do:
+
+```python
+app = AustialFactory.create(AppModule)
+await app.init()     # routes + on_module_init + on_application_bootstrap
+...
+await app.close()    # on_module_destroy + before_application_shutdown + on_application_shutdown
+```
+
+Both calls are idempotent, and hooks never run twice: calling `init()` before the ASGI lifespan
+starts is fine.
+
+<Callout type="warning">
+`httpx.ASGITransport` (the usual way to test) does **not** run the ASGI lifespan, so a test that
+needs hooks must call `await app.init()` itself, and `await app.close()` when it's done.
+</Callout>
+
+## Shutdown signals
+
+`austial serve` and `uvicorn` already translate `SIGINT`/`SIGTERM` into an ASGI lifespan shutdown,
+which runs the termination hooks. You don't need to do anything.
+
+For a process with no ASGI server (a worker or script built on a
+[standalone application](/fundamentals/standalone-applications)), opt in to signal handling:
+
+```python
+ctx = await AustialFactory.create_application_context(AppModule)
+ctx.enable_shutdown_hooks()            # SIGTERM and SIGINT; pass names to choose others
+```
+
+On a signal the context runs the termination hooks (each receiving the signal name, e.g.
+`"SIGTERM"`) and then re-raises the signal so the process still exits.
+
+## What gets hooks
+
+- Providers that define at least one hook are instantiated **eagerly** at initialization, so a hook
+  can't be skipped. Every other provider stays lazy.
+- `Scope.TRANSIENT` and `Scope.REQUEST` providers never get hooks: there is no single instance to
+  call. (This matches NestJS.)
+- A provider built by a `useFactory` gets hooks only if it was already instantiated when
+  initialization ran; the container can't know what a factory will return until it calls it.
+
+<Callout type="info">
+Hooks of a module loaded later with [`LazyModuleLoader`](/fundamentals/module-reference#lazy-loading-modules)
+run when it loads, if the application is already initialized.
+</Callout>
