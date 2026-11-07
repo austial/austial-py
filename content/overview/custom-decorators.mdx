@@ -98,6 +98,11 @@ async def me(self, user_id: int = CurrentUser("id"), name: str = CurrentUser("na
 
 The factory may be `async`. (`austial.auth.CurrentUser()` is built on the same mechanism.)
 
+Under the hood every such marker subclasses `DeferredParam`, whose single method
+`async def resolve(self, context)` produces the value after the guards ran. `FromRequestState("user")`
+returns a `GuardStateMarker`, the built-in one that reads `request.state.<attribute>`. Subclass
+`DeferredParam` yourself when a factory function isn't enough.
+
 ## Composing decorators
 
 `apply_decorators` bundles several decorators into one:

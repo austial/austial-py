@@ -38,7 +38,7 @@ Austial has one application-wide container (see [Modules](/overview/modules)), s
 ### Resolving request-scoped providers
 
 `get()` raises for a [request-scoped](/fundamentals/injection-scopes#request-scope) provider outside a
-request. `resolve()` builds one inside a **context id**:
+request. `resolve()` builds one inside a **context id** (a `ContextId`, which holds that context's provider cache):
 
 ```python
 from austial import ContextIdFactory
