@@ -12,6 +12,7 @@ from austial.common.decorators.controllers import (
     Post,
     Put,
     Redirect,
+    Render,
     Sse,
     Version,
 )
@@ -22,14 +23,17 @@ from austial.common.decorators.interceptors import UseInterceptors
 from austial.common.decorators.modules import Global, Module
 from austial.common.decorators.params import (
     Body,
+    Cookies,
     DeferredParam,
     FromRequestState,
     GuardStateMarker,
     Headers,
     HostParam,
     Ip,
+    Next,
     Param,
     Query,
+    RawBody,
     Req,
     Res,
     Session,
@@ -42,6 +46,7 @@ from austial.common.decorators.pipes import UsePipes
 __all__ = [
     "All",
     "Redirect",
+    "Render",
     "Sse",
     "Version",
     "apply_decorators",
@@ -49,6 +54,9 @@ __all__ = [
     "HostParam",
     "Ip",
     "Session",
+    "Cookies",
+    "Next",
+    "RawBody",
     "UploadedFile",
     "UploadedFiles",
     "create_param_decorator",

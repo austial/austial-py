@@ -12,6 +12,7 @@ from austial.core.metadata import (
     HEADER_METADATA,
     HTTP_CODE_METADATA,
     REDIRECT_METADATA,
+    RENDER_METADATA,
     ROUTE_METADATA,
     SSE_METADATA,
     VERSION_METADATA,
@@ -166,6 +167,23 @@ def Redirect(url: str = "", status_code: int = 302) -> Callable:  # noqa: N802
 
     def decorator(fn):
         set_metadata(REDIRECT_METADATA, {"url": url, "status_code": status_code})(fn)
+        return fn
+
+    return decorator
+
+
+def Render(template: str) -> Callable:  # noqa: N802
+    """Method decorator rendering a Jinja2 template with the dict the handler returns, mirrors Nest's
+    ``@Render()``. Needs ``app.set_base_views_dir("views")``::
+
+        @Get()
+        @Render("index.html")
+        async def home(self):
+            return {"title": "Hello"}
+    """
+
+    def decorator(fn):
+        set_metadata(RENDER_METADATA, template)(fn)
         return fn
 
     return decorator

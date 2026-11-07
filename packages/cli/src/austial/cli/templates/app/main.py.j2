@@ -1,0 +1,7 @@
+"""Entry point of the `{{ snake_name }}` app: `uvicorn apps.{{ snake_name }}.main:app` (from the repository root)."""
+
+from austial import AustialFactory
+
+from apps.{{ snake_name }}.app_module import {{ class_name }}AppModule
+
+app = AustialFactory.create({{ class_name }}AppModule, title="{{ class_name }}")

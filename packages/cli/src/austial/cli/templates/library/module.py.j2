@@ -1,0 +1,8 @@
+from austial import Module
+
+from libs.{{ snake_name }}.{{ snake_name }}_service import {{ class_name }}Service
+
+
+@Module(providers=[{{ class_name }}Service], exports=[{{ class_name }}Service])
+class {{ class_name }}Module:
+    pass

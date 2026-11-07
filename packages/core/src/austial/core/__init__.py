@@ -6,6 +6,7 @@ deep within ``austial.common.decorators`` without triggering a circular import.
 *after* ``austial.common`` has fully loaded.
 """
 
+from austial.common.enums import RouteInfo
 from austial.core.configurable_module import ConfigurableModule, ConfigurableModuleBuilder
 from austial.core.container import (
     AsyncProviderNotInitializedError,
@@ -17,14 +18,20 @@ from austial.core.container import (
 from austial.core.discovery import DiscoveryService, InstanceWrapper
 from austial.core.dynamic_module import DynamicModule
 from austial.core.forward_ref import ForwardReference, forward_ref
+from austial.core.http_adapter_host import HttpAdapterHost
 from austial.core.lazy_module_loader import LazyModuleLoader
+from austial.core.module_graph import ModuleGraph, ModuleVisibilityError
 from austial.core.module_ref import ModuleRef
 from austial.core.reflector import Reflector
-from austial.core.request_context import REQUEST, ContextId, ContextIdFactory
-from austial.core.routing import RouteInfo
-from austial.core.tokens import APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE
+from austial.core.request_context import REQUEST, ContextId, ContextIdFactory, ContextIdStrategy
+from austial.core.tokens import APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE, INQUIRER
 
 __all__ = [
+    "ModuleGraph",
+    "ModuleVisibilityError",
+    "ContextIdStrategy",
+    "HttpAdapterHost",
+    "INQUIRER",
     "AsyncProviderNotInitializedError",
     "APP_FILTER",
     "APP_GUARD",

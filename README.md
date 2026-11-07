@@ -68,6 +68,13 @@ instead of something you hand-roll with dependencies everywhere.
 | `@nestjs/testing` | `austial.testing.Test.create_testing_module(...).override_provider(...).use_value(...).compile()` |
 | `APP_GUARD` / `APP_PIPE` / `APP_INTERCEPTOR` / `APP_FILTER` | the same tokens: `{"provide": APP_GUARD, "useClass": AuthGuard}` binds globally, with DI |
 | `@nestjs/cache-manager` | `austial.cache`: `CacheModule`, `CacheService`, `CacheInterceptor`, `@CacheKey`, `@CacheTTL` |
+| `@nestjs/schedule` | `austial.schedule`: `ScheduleModule`, `@Cron`, `@Interval`, `@Timeout`, `SchedulerRegistry` |
+| `@nestjs/cqrs` | `austial.cqrs`: `CommandBus`, `QueryBus`, `EventBus`, handlers, sagas, `AggregateRoot` |
+| `@nestjs/websockets` | `austial.websockets`: `@WebSocketGateway`, `@SubscribeMessage`, rooms |
+| `@nestjs/microservices` | `austial.microservices`: `@MessagePattern`, `@EventPattern`, TCP/local/custom transports, hybrid apps |
+| `@nestjs/swagger` | `austial.openapi`: `@ApiTags`, `@ApiOperation`, `@ApiResponse`, `DocumentBuilder` |
+| `@nestjs/graphql` | `austial.graphql`: Strawberry schema with DI in resolvers |
+| `@nestjs/axios`, `@nestjs/mongoose`, Prisma recipe | `austial.http`, `austial.mongo`, `austial.prisma` |
 | `@nestjs/event-emitter` | `austial.events`: `EventEmitterModule`, `EventEmitter`, `@OnEvent` |
 | `LoggerService` / `Logger` | `austial.common`: `LoggerService`, `ConsoleLogger`, `Logger.override_logger(...)` |
 | `nest new` / `nest generate` | `austial new <name>` / `austial generate\|g module\|controller\|service\|resource <name>` |

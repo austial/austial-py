@@ -29,6 +29,8 @@ CATCH_METADATA = "austial:catch"
 VERSION_METADATA = "austial:version"
 REDIRECT_METADATA = "austial:redirect"
 SSE_METADATA = "austial:sse"
+RENDER_METADATA = "austial:render"
+OPENAPI_METADATA = "austial:openapi"  # dict stamped by austial.openapi decorators, applied to the route
 SERIALIZE_OPTIONS_METADATA = "austial:serialize_options"
 
 

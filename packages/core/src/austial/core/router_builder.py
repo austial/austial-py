@@ -18,7 +18,13 @@ from fastapi import params as fastapi_params
 from starlette.responses import RedirectResponse, StreamingResponse
 
 from austial.common.decorators.controllers import ControllerMetadata, RouteMetadata
-from austial.common.decorators.params import DeferredParam, get_param_pipes, is_raw_string_param, param_kind
+from austial.common.decorators.params import (
+    DeferredParam,
+    _NextMarker,
+    get_param_pipes,
+    is_raw_string_param,
+    param_kind,
+)
 from austial.common.enums import VersioningType
 from austial.common.exceptions.http_exceptions import ForbiddenException
 from austial.common.file.streamable_file import StreamableFile
@@ -26,6 +32,7 @@ from austial.common.filters.all_exceptions_filter import AllExceptionsFilter
 from austial.common.guards.base import ExecutionContext
 from austial.common.interceptors.base import CallHandler
 from austial.common.logger import Logger
+from austial.common.next import PassToNext
 from austial.common.pipes.validation_pipe import ArgumentMetadata
 from austial.common.sse import format_sse
 from austial.core.container import Container
@@ -37,16 +44,19 @@ from austial.core.metadata import (
     HEADER_METADATA,
     HTTP_CODE_METADATA,
     INTERCEPTORS_METADATA,
+    OPENAPI_METADATA,
     PIPES_METADATA,
     REDIRECT_METADATA,
+    RENDER_METADATA,
     ROUTE_METADATA,
     SSE_METADATA,
     VERSION_METADATA,
     get_metadata,
 )
-from austial.core.request_context import ContextIdFactory, use_context
+from austial.core.request_context import ContextIdFactory, get_current_context, use_context
 from austial.core.routing import (
     GlobalPrefix,
+    PassThrough,
     VersioningOptions,
     effective_versions,
     host_matcher,
@@ -61,6 +71,46 @@ _REQUEST_PARAM_NAME = "__austial_request__"
 _RESPONSE_PARAM_NAME = "__austial_response__"
 _DEFAULT_STATUS = {"POST": 201}
 _ALL_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
+
+
+def _merge_openapi(controller: dict, handler: dict) -> dict:
+    """Controller-level OpenAPI metadata, overridden/extended by the handler's."""
+    merged: dict[str, Any] = {}
+    for key in ("tags", "security"):
+        values = [*controller.get(key, []), *handler.get(key, [])]
+        if values:
+            merged[key] = list(dict.fromkeys(values)) if key == "tags" else values
+    responses = {**controller.get("responses", {}), **handler.get("responses", {})}
+    if responses:
+        merged["responses"] = responses
+    for key in ("summary", "description", "deprecated", "operation_id"):
+        if key in handler:
+            merged[key] = handler[key]
+        elif key in controller:
+            merged[key] = controller[key]
+    if controller.get("exclude") or handler.get("exclude"):
+        merged["exclude"] = True
+    return merged
+
+
+def _openapi_route_kwargs(openapi: dict) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {}
+    for key in ("summary", "description", "deprecated", "operation_id"):
+        if key in openapi:
+            kwargs[key] = openapi[key]
+    if openapi.get("responses"):
+        kwargs["responses"] = openapi["responses"]
+    if openapi.get("security"):
+        kwargs["openapi_extra"] = {"security": [{name: list(scopes)} for name, scopes in openapi["security"]]}
+    if openapi.get("exclude"):
+        kwargs["include_in_schema"] = False
+    return kwargs
+
+
+def _current_request() -> Request:
+    context = get_current_context()
+    assert context is not None and context.request is not None
+    return context.request
 
 
 class _ContainerToken:
@@ -101,6 +151,7 @@ class RouterBuilder:
         global_filters: list | None = None,
         global_prefix: GlobalPrefix | None = None,
         versioning: VersioningOptions | None = None,
+        views_dir: str | None = None,
     ):
         self._container = container
         # `app.use_global_*()` instances first, then providers registered under APP_GUARD & co.
@@ -110,6 +161,8 @@ class RouterBuilder:
         self._global_filters = [*(global_filters or []), *self._di_globals("filters")]
         self._global_prefix = global_prefix
         self._versioning = versioning
+        self._views_dir = views_dir
+        self._templates: Any = None
 
     def _di_globals(self, kind: str) -> list[_ContainerToken]:
         return [_ContainerToken(token) for token in self._container.global_components(kind)]
@@ -200,12 +253,14 @@ class RouterBuilder:
 
         redirect = get_metadata(REDIRECT_METADATA, member)
         is_sse = bool(get_metadata(SSE_METADATA, member))
+        render = get_metadata(RENDER_METADATA, member)
         status_code = get_metadata(HTTP_CODE_METADATA, member) or _DEFAULT_STATUS.get(route_meta.method, 200)
         headers_meta = get_metadata(HEADER_METADATA, member, {})
 
+        next_token = object()  # identifies this route if its handler declines with `Next()`
         endpoint, return_annotation = self._build_endpoint(
             controller_cls, name, member, instance, guards, interceptors, pipes, filters, headers_meta,
-            redirect=redirect, is_sse=is_sse, status_code=status_code,
+            redirect=redirect, is_sse=is_sse, status_code=status_code, render=render, next_token=next_token,
         )  # fmt: skip
 
         versions = effective_versions(
@@ -222,17 +277,43 @@ class RouterBuilder:
         methods = _ALL_METHODS if route_meta.method == "ALL" else [route_meta.method]
         raw_return = return_annotation
         skip_response_model = (
-            is_sse or redirect is not None or (isinstance(raw_return, type) and issubclass(raw_return, StreamableFile))
+            is_sse
+            or render is not None
+            or redirect is not None
+            or (isinstance(raw_return, type) and issubclass(raw_return, StreamableFile))
         )
         extra: dict[str, Any] = {"response_model": None} if skip_response_model else {}
-        route_class = route_class_for(matchers)
+        has_next = any(isinstance(p.default, _NextMarker) for p in inspect.signature(member).parameters.values())
+        route_class = route_class_for(matchers, token=next_token if has_next else None)
         if route_class is not None:
             extra["route_class_override"] = route_class
-        tags = controller_meta.tags or [controller_cls.__name__.replace("Controller", "") or controller_cls.__name__]
+        openapi = _merge_openapi(
+            get_metadata(OPENAPI_METADATA, controller_cls, {}), get_metadata(OPENAPI_METADATA, member, {})
+        )
+        tags = (
+            openapi.get("tags")
+            or controller_meta.tags
+            or [controller_cls.__name__.replace("Controller", "") or controller_cls.__name__]
+        )
+        extra.update(_openapi_route_kwargs(openapi))
 
-        for path in self._paths_for(controller_meta, route_meta, versions):
-            router.add_api_route(path, endpoint, methods=methods, status_code=status_code, tags=tags, **extra)
+        for index, path in enumerate(self._paths_for(controller_meta, route_meta, versions)):
+            kwargs = dict(extra)
+            if index:
+                kwargs.pop("operation_id", None)  # an operationId must be unique: keep it on the first path only
+            router.add_api_route(path, endpoint, methods=methods, status_code=status_code, tags=tags, **kwargs)
             _logger.log(f"Mapped {{{route_meta.method}, {path}}} route", context="RoutesResolver")
+
+    def _render_template(self, template: str, context: Any, status_code: int) -> Response:
+        if self._views_dir is None:
+            raise RuntimeError("@Render needs a views directory: call app.set_base_views_dir('views') first.")
+        from starlette.templating import Jinja2Templates
+
+        if self._templates is None:
+            self._templates = Jinja2Templates(directory=self._views_dir)
+        return self._templates.TemplateResponse(
+            _current_request(), template, context if isinstance(context, dict) else {}, status_code=status_code
+        )
 
     @staticmethod
     def _wrap_interceptor(interceptor, context: ExecutionContext, next_call: Callable):
@@ -256,6 +337,8 @@ class RouterBuilder:
         redirect: dict | None,
         is_sse: bool,
         status_code: int,
+        render: str | None = None,
+        next_token: object | None = None,
     ) -> tuple[Callable, Any]:
         container = self._container
         full_sig = inspect.signature(member, eval_str=True)
@@ -312,7 +395,9 @@ class RouterBuilder:
         def finalize(result: Any, response: Response) -> Any:
             """Turns Austial-specific return values (redirect, SSE, StreamableFile) into responses."""
             converted: Response | None = None
-            if redirect is not None:
+            if render is not None:
+                converted = self._render_template(render, result, status_code)
+            elif redirect is not None:
                 target = dict(redirect)
                 if isinstance(result, dict) and "url" in result:
                     target.update({k: result[k] for k in ("url", "status_code") if k in result})
@@ -379,6 +464,9 @@ class RouterBuilder:
                     chain = self._wrap_interceptor(interceptor, context, chain)
 
                 return finalize(await chain(), response)
+            except PassToNext:
+                # `next()`: let the router offer the request to the next matching route
+                return PassThrough(next_token, await request.body())
             except Exception as exc:  # noqa: BLE001 - dispatched to exception filters below
                 return await dispatch_exception(exc, request, active_filters)
 

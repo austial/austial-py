@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import itertools
+from collections.abc import Callable, Sequence
 from typing import Any
 
-from austial.core.metadata import get_metadata
+from austial.core.metadata import get_metadata, set_metadata
+
+_decorator_ids = itertools.count(1)
 
 
 class Reflector:
@@ -15,24 +18,51 @@ class Reflector:
     or via its static helpers.
     """
 
-    def get(self, key: str, target: Any, default: Any = None) -> Any:
-        return get_metadata(key, target, default)
+    @staticmethod
+    def create_decorator(*, key: str | None = None, transform: Callable[[Any], Any] | None = None) -> Any:
+        """Mirrors ``Reflector.createDecorator()``: builds a typed decorator *and* its metadata key in one go.
 
-    def get_all_and_merge(self, key: str, targets: Sequence[Any]) -> list:
+        ::
+
+            Roles = Reflector.create_decorator()
+
+            @Roles(["admin"])
+            async def delete(self): ...
+
+            roles = reflector.get(Roles, context.get_handler())     # ["admin"]
+
+        ``Roles(value=True)`` stamps ``value`` (run through ``transform`` if given); ``Roles.KEY`` is the key.
+        """
+        metadata_key = key or f"austial:reflector:{next(_decorator_ids)}"
+
+        def decorator(value: Any = True) -> Callable[[Any], Any]:
+            return set_metadata(metadata_key, transform(value) if transform else value)
+
+        decorator.KEY = metadata_key  # type: ignore[attr-defined]  # the key travels with the decorator
+        return decorator
+
+    @staticmethod
+    def _key(key: Any) -> str:
+        return key.KEY if hasattr(key, "KEY") else key
+
+    def get(self, key: Any, target: Any, default: Any = None) -> Any:
+        return get_metadata(self._key(key), target, default)
+
+    def get_all_and_merge(self, key: Any, targets: Sequence[Any]) -> list:
         """Merges array-valued metadata (e.g. guards/interceptors) across
         class + method, matching Nest's ``getAllAndMerge``."""
         merged: list = []
         for target in targets:
-            value = get_metadata(key, target, [])
+            value = get_metadata(self._key(key), target, [])
             if value:
                 merged.extend(value)
         return merged
 
-    def get_all_and_override(self, key: str, targets: Sequence[Any]) -> Any:
+    def get_all_and_override(self, key: Any, targets: Sequence[Any]) -> Any:
         """Returns the first non-empty metadata value found, method before
         class, matching Nest's ``getAllAndOverride``."""
         for target in targets:
-            value = get_metadata(key, target, None)
+            value = get_metadata(self._key(key), target, None)
             if value is not None:
                 return value
         return None

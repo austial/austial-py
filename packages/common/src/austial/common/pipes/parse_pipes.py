@@ -22,6 +22,7 @@ import math
 import re
 import uuid
 from collections.abc import Callable
+from datetime import UTC, date, datetime
 from enum import Enum
 from typing import Any, NoReturn
 
@@ -86,6 +87,46 @@ class ParseFloatPipe(_ParsePipe):
         if not _is_numeric(value):
             self._fail("Validation failed (numeric string is expected)")
         return float(value)
+
+
+class ParseDatePipe(_ParsePipe):
+    """Parses an ISO 8601 date/datetime string (``2026-11-07``, ``2026-11-07T10:30:00Z``) or an integer epoch
+    in seconds into a ``datetime``. Offset-less values are taken as UTC. With ``date_only=True`` the result is a
+    plain ``date``."""
+
+    def __init__(self, *, date_only: bool = False, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._date_only = date_only
+
+    def transform(self, value: Any, metadata: ArgumentMetadata) -> Any:
+        if self._skip(value):
+            return value
+        parsed: datetime | None = None
+        if isinstance(value, datetime):
+            parsed = value
+        elif isinstance(value, date):
+            parsed = datetime(value.year, value.month, value.day, tzinfo=UTC)
+        elif isinstance(value, str) and re.fullmatch(r"-?\d+", value.strip()):
+            parsed = self._from_epoch(int(value))
+        elif isinstance(value, int) and not isinstance(value, bool):
+            parsed = self._from_epoch(value)
+        elif isinstance(value, str):
+            try:
+                parsed = datetime.fromisoformat(value.strip())
+            except ValueError:
+                parsed = None
+        if parsed is None:
+            self._fail("Validation failed (invalid date format)")
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed.date() if self._date_only else parsed
+
+    @staticmethod
+    def _from_epoch(seconds: int) -> datetime | None:
+        try:
+            return datetime.fromtimestamp(seconds, UTC)
+        except (OverflowError, OSError, ValueError):
+            return None
 
 
 class ParseBoolPipe(_ParsePipe):
