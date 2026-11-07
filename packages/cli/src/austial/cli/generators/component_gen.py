@@ -20,6 +20,10 @@ COMPONENT_KINDS: dict[str, tuple[str, str]] = {
     "filter": ("filter/filter.py.j2", "filter"),
     "middleware": ("middleware/middleware.py.j2", "middleware"),
     "decorator": ("decorator/decorator.py.j2", "decorator"),
+    "gateway": ("gateway/gateway.py.j2", "gateway"),
+    "resolver": ("resolver/resolver.py.j2", "resolver"),
+    "command": ("command/command.py.j2", "command"),
+    "listener": ("listener/listener.py.j2", "listener"),
     "class": ("class/class.py.j2", ""),
 }
 

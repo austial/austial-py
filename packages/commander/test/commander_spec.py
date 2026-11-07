@@ -222,3 +222,31 @@ def test_main_exits_with_the_command_code(capsys) -> None:
     with pytest.raises(SystemExit) as caught:
         CommandFactory.main(CliModule, argv=["returns"], name="tool")
     assert caught.value.code == 7
+
+
+def test_prompts_ask_confirm_choose_with_scripted_answers() -> None:
+    from austial.commander import Prompts
+
+    answers = iter(["", "bad", "ok", "maybe", "y", "9", "2", "x", "sqlite"])
+    out: list[str] = []
+    prompts = Prompts(input_fn=lambda _p: next(answers), password_fn=lambda _p: "s3cret", output_fn=out.append)
+
+    assert prompts.ask("Name", default="app") == "app"  # empty answer takes the default
+    assert prompts.ask("Code", validate=lambda v: v == "ok") == "ok"  # "bad" rejected, "ok" accepted
+    assert "Invalid answer, try again." in out
+    assert prompts.confirm("Sure?") is True  # "maybe" re-asked, then "y"
+    assert prompts.choose("DB", ["postgres", "sqlite"]) == "sqlite"  # "9" rejected, "2" by number
+    assert prompts.choose("DB", ["postgres", "sqlite"]) == "sqlite"  # "x" rejected, then by name
+    assert prompts.password("Token") == "s3cret"
+
+
+def test_prompts_fall_back_to_defaults_without_a_terminal_and_fail_without_one() -> None:
+    from austial.commander import Prompts
+
+    prompts = Prompts(interactive=False)
+    assert prompts.ask("Name", default="app") == "app"
+    assert prompts.confirm("Sure?", default=True) is True
+    assert prompts.choose("DB", ["a", "b"], default="b") == "b"
+    for call in (lambda: prompts.ask("Name"), lambda: prompts.password("Token")):
+        with pytest.raises(CommanderError):
+            call()

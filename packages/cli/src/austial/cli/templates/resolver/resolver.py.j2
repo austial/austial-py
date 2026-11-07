@@ -1,0 +1,10 @@
+import strawberry
+from strawberry.types import Info
+
+
+@strawberry.type
+class {{ class_name }}Query:
+    @strawberry.field
+    def {{ snake_name }}_hello(self, info: Info) -> str:
+        # from austial.graphql import inject; inject(info, SomeService) resolves any provider
+        return "hello from {{ kebab_name }}"

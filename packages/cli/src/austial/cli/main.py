@@ -66,6 +66,10 @@ _ALIASES = {
     "mi": "middleware",
     "d": "decorator",
     "cl": "class",
+    "ga": "gateway",
+    "res": "resolver",
+    "cmd": "command",
+    "li": "listener",
     "lib": "library",
 }
 

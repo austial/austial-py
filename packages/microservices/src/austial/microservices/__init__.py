@@ -29,6 +29,7 @@ from austial.microservices.transport import (
     Transport,
     pattern_key,
 )
+from austial.microservices.transports.pubsub import JsonCodec
 
 __all__ = [
     "ClientOptions",
@@ -38,6 +39,7 @@ __all__ = [
     "Ctx",
     "EventPattern",
     "HandlerRegistry",
+    "JsonCodec",
     "LocalClient",
     "LocalServer",
     "MessagePattern",

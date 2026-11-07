@@ -95,6 +95,7 @@ class MicroserviceOptions:
     group: str = "austial"  # consumer/queue group: replicas sharing it share the load (Kafka, NATS, MQTT shared subs)
     prefix: str = ""  # prepended to every topic, to keep several environments apart on one broker
     extra: dict[str, Any] = field(default_factory=dict)  # passed to the broker client (credentials, TLS, ...)
+    codec: Any = None  # broker transports: object with encode(dict) -> bytes / decode(bytes) -> dict (default JSON)
     custom_server: ServerTransport | None = None
 
 
@@ -108,6 +109,7 @@ class ClientOptions:
     url: str | None = None
     prefix: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
+    codec: Any = None
     custom_client: ClientTransport | None = None
     timeout: float = 5.0
 

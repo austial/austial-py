@@ -1,0 +1,15 @@
+from austial import Injectable
+from austial.websockets import ConnectedSocket, MessageBody, SubscribeMessage, WebSocketGateway, WsClient, WsServer
+
+
+@WebSocketGateway("/{{ kebab_name }}")
+@Injectable()
+class {{ class_name }}Gateway:
+    server: WsServer
+
+    async def handle_connection(self, client: WsClient) -> None:
+        await client.send("welcome", {"id": client.id})
+
+    @SubscribeMessage("message")
+    async def on_message(self, text: str = MessageBody("text"), client: WsClient = ConnectedSocket()):
+        await self.server.emit("message", {"from": client.id, "text": text})
