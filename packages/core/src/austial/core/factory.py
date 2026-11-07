@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from austial.common.middleware.base import MiddlewareBinding, MiddlewareConsumer
 from austial.core.app import AustialApplication
+from austial.core.application_context import AustialApplicationContext
 from austial.core.container import Container
 from austial.core.module_scanner import scan_module
 
@@ -41,3 +42,14 @@ class AustialFactory:
             middleware_bindings.extend(resolved_bindings)
 
         return AustialApplication(container, fastapi_app, scan_result.controllers, middleware_bindings)
+
+    @staticmethod
+    async def create_application_context(root_module: type) -> AustialApplicationContext:
+        """Builds the module graph and runs the lifecycle hooks *without* an HTTP server -- for
+        CLIs, workers and scripts. Mirrors ``NestFactory.createApplicationContext()``. Call
+        ``await ctx.close()`` when done."""
+        container = Container()
+        scan_module(root_module, container)
+        context = AustialApplicationContext(container)
+        await context.init()
+        return context

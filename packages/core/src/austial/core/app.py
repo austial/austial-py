@@ -5,6 +5,8 @@ ASGI target (``uvicorn src.main:app``) *and* offers Nest's programmatic API
 
 from __future__ import annotations
 
+import contextlib
+from collections.abc import AsyncIterator
 from typing import Any
 
 import uvicorn
@@ -16,19 +18,24 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from austial.common.enums import VersioningType
 from austial.common.exceptions.http_exceptions import BadRequestException
 from austial.common.filters.all_exceptions_filter import AllExceptionsFilter
 from austial.common.logger import Logger
+from austial.core.application_context import AustialApplicationContext
 from austial.core.container import Container
 from austial.core.exception_dispatch import dispatch_exception
 from austial.core.router_builder import RouterBuilder
+from austial.core.routing import GlobalPrefix, RouteInfo, VersioningOptions
 
 _logger = Logger("NestApplication")
 
 
-class AustialApplication:
+class AustialApplication(AustialApplicationContext):
+    _owns_signals = False  # the ASGI server handles signals and drives shutdown via lifespan
+
     def __init__(self, container: Container, fastapi_app: FastAPI, controllers: list, middleware_bindings: list):
-        self._container = container
+        super().__init__(container)
         self._fastapi_app = fastapi_app
         self._controllers = controllers
         self._middleware_bindings = middleware_bindings
@@ -38,9 +45,13 @@ class AustialApplication:
         self._global_interceptors: list = []
         self._global_filters: list = []
         self._routes_built = False
+        self._global_prefix: GlobalPrefix | None = None
+        self._versioning: VersioningOptions | None = None
+        self._static_mounts: list[tuple[str, str, dict[str, Any]]] = []
 
         self._install_fallback_exception_handlers()
         self._install_middleware()
+        self._install_lifespan()
 
     # -- Nest-shaped configuration API ------------------------------------------------
     def use_global_pipes(self, *pipes: Any) -> AustialApplication:
@@ -65,10 +76,69 @@ class AustialApplication:
         self._fastapi_app.add_middleware(CORSMiddleware, **defaults)  # type: ignore[arg-type]
         return self
 
-    def get(self, token: Any) -> Any:
-        """Fetches a resolved provider straight out of the DI container,
-        mirroring Nest's ``app.get(Token)``."""
-        return self._container.resolve(token)
+    def set_global_prefix(self, prefix: str, *, exclude: list[str | RouteInfo] | None = None) -> AustialApplication:
+        """Prefixes every route (``/api/cats``), except those in ``exclude`` -- plain paths or
+        ``RouteInfo(path, method)``. Mirrors Nest's ``app.setGlobalPrefix('api', {exclude})``.
+        Call before routes are built (before ``init()`` / the first request)."""
+        self._ensure_routes_not_built("set_global_prefix")
+        self._global_prefix = GlobalPrefix(prefix=prefix, exclude=exclude or [])
+        return self
+
+    def enable_versioning(
+        self,
+        type: VersioningType = VersioningType.URI,  # noqa: A002 - mirrors Nest's `type` option
+        *,
+        prefix: str | bool = "v",
+        header: str | None = None,
+        key: str = "v=",
+        default_version: str | list[str] | None = None,
+        extractor: Any = None,
+    ) -> AustialApplication:
+        """Turns on API versioning, mirrors ``app.enableVersioning({...})``. ``type`` picks where
+        the version lives: the URL (``/v1/cats``), a ``header`` (``X-API-Version: 1``), the ``Accept``
+        header's ``key`` parameter (``application/json;v=1``) or whatever ``extractor(request)``
+        returns. Pin routes with ``@Controller(version=...)`` / ``@Version(...)``;
+        ``default_version`` covers routes that name none."""
+        self._ensure_routes_not_built("enable_versioning")
+        if type == VersioningType.HEADER and not header:
+            raise ValueError("enable_versioning(HEADER) needs header=")
+        if type == VersioningType.CUSTOM and extractor is None:
+            raise ValueError("enable_versioning(CUSTOM) needs extractor=")
+        self._versioning = VersioningOptions(
+            type=type, prefix=prefix, header=header, key=key, default_version=default_version, extractor=extractor
+        )
+        return self
+
+    def use_static_assets(self, directory: str, *, prefix: str = "/", **options: Any) -> AustialApplication:
+        """Serves the files in ``directory`` under ``prefix`` (``html=True`` serves ``index.html``),
+        mirrors Nest's ``app.useStaticAssets``. Mounted *after* the API routes, so those win."""
+        self._static_mounts.append((directory, prefix, options))
+        return self
+
+    def use_compression(self, *, minimum_size: int = 500, compresslevel: int = 9) -> AustialApplication:
+        """gzip-compresses responses of at least ``minimum_size`` bytes, for clients that accept it."""
+        from starlette.middleware.gzip import GZipMiddleware
+
+        self._fastapi_app.add_middleware(GZipMiddleware, minimum_size=minimum_size, compresslevel=compresslevel)
+        return self
+
+    def set_trust_proxy(self, trusted_hosts: str | list[str] = "*") -> AustialApplication:
+        """Trusts ``X-Forwarded-For`` / ``X-Forwarded-Proto`` from ``trusted_hosts``, so the
+        client IP (``Ip()``, ``request.client``) and scheme are the real ones behind a reverse proxy."""
+        from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
+        self._fastapi_app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=trusted_hosts)
+        return self
+
+    def use(self, middleware: Any, **options: Any) -> AustialApplication:
+        """Adds any ASGI middleware class (``SessionMiddleware``, ``TrustedHostMiddleware``...),
+        mirrors Nest's ``app.use()``."""
+        self._fastapi_app.add_middleware(middleware, **options)
+        return self
+
+    def _ensure_routes_not_built(self, method: str) -> None:
+        if self._routes_built:
+            raise RuntimeError(f"app.{method}() must be called before the application is initialised")
 
     def get_http_adapter(self) -> FastAPI:
         """Returns the underlying FastAPI instance, mirroring Nest's
@@ -77,11 +147,30 @@ class AustialApplication:
 
     # -- lifecycle ---------------------------------------------------------------------
     async def init(self) -> AustialApplication:
-        """Builds routes without starting a server -- mirrors Nest's
-        ``await app.init()``, the entry point ``@nestjs/testing`` e2e tests use
-        alongside ``request(app.getHttpServer())``."""
+        """Builds routes and runs the ``on_module_init`` / ``on_application_bootstrap`` hooks
+        without starting a server -- mirrors Nest's ``await app.init()``, the entry point
+        ``@nestjs/testing`` e2e tests use alongside ``request(app.getHttpServer())``."""
         self._build_routes()
+        await super().init()
         return self
+
+    def _install_lifespan(self) -> None:
+        """Runs the lifecycle hooks from the ASGI lifespan: startup hooks after the FastAPI
+        ``on_event("startup")`` handlers (so e.g. a ``DataSource`` is ready), shutdown hooks before
+        the ``"shutdown"`` ones."""
+        router = self._fastapi_app.router
+        wrapped = router.lifespan_context
+
+        @contextlib.asynccontextmanager
+        async def lifespan(app: FastAPI) -> AsyncIterator[Any]:
+            async with wrapped(app) as state:
+                await AustialApplicationContext.init(self)
+                try:
+                    yield state
+                finally:
+                    await self.close()
+
+        router.lifespan_context = lifespan
 
     def _build_routes(self) -> None:
         if self._routes_built:
@@ -92,9 +181,15 @@ class AustialApplication:
             global_pipes=self._global_pipes,
             global_interceptors=self._global_interceptors,
             global_filters=self._global_filters,
+            global_prefix=self._global_prefix,
+            versioning=self._versioning,
         )
         router = builder.build(self._controllers)
         self._fastapi_app.include_router(router)
+        for directory, prefix, options in self._static_mounts:
+            from starlette.staticfiles import StaticFiles
+
+            self._fastapi_app.mount(prefix.rstrip("/") or "/", StaticFiles(directory=directory, **options))
         self._routes_built = True
 
     def _install_fallback_exception_handlers(self) -> None:

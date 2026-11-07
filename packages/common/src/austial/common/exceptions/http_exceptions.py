@@ -45,12 +45,19 @@ _REASON_PHRASES = {
     408: "Request Timeout",
     409: "Conflict",
     410: "Gone",
+    412: "Precondition Failed",
+    413: "Payload Too Large",
+    415: "Unsupported Media Type",
+    418: "I'm a teapot",
+    421: "Misdirected",
     422: "Unprocessable Entity",
     429: "Too Many Requests",
     500: "Internal Server Error",
     501: "Not Implemented",
     502: "Bad Gateway",
     503: "Service Unavailable",
+    504: "Gateway Timeout",
+    505: "HTTP Version Not Supported",
 }
 
 
@@ -107,3 +114,58 @@ class NotImplementedException(HttpException):
 class ServiceUnavailableException(HttpException):
     def __init__(self, message: str | dict | None = None):
         super().__init__(message, 503)
+
+
+class NotAcceptableException(HttpException):
+    def __init__(self, message: str | dict | None = None):
+        super().__init__(message, 406)
+
+
+class RequestTimeoutException(HttpException):
+    def __init__(self, message: str | dict | None = None):
+        super().__init__(message, 408)
+
+
+class GoneException(HttpException):
+    def __init__(self, message: str | dict | None = None):
+        super().__init__(message, 410)
+
+
+class PreconditionFailedException(HttpException):
+    def __init__(self, message: str | dict | None = None):
+        super().__init__(message, 412)
+
+
+class PayloadTooLargeException(HttpException):
+    def __init__(self, message: str | dict | None = None):
+        super().__init__(message, 413)
+
+
+class UnsupportedMediaTypeException(HttpException):
+    def __init__(self, message: str | dict | None = None):
+        super().__init__(message, 415)
+
+
+class ImATeapotException(HttpException):
+    def __init__(self, message: str | dict | None = None):
+        super().__init__(message, 418)
+
+
+class MisdirectedException(HttpException):
+    def __init__(self, message: str | dict | None = None):
+        super().__init__(message, 421)
+
+
+class BadGatewayException(HttpException):
+    def __init__(self, message: str | dict | None = None):
+        super().__init__(message, 502)
+
+
+class GatewayTimeoutException(HttpException):
+    def __init__(self, message: str | dict | None = None):
+        super().__init__(message, 504)
+
+
+class HttpVersionNotSupportedException(HttpException):
+    def __init__(self, message: str | dict | None = None):
+        super().__init__(message, 505)
