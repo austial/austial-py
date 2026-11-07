@@ -81,6 +81,41 @@ class ApiKeyGuard(CanActivate):
         return request.headers.get("x-api-key") == self._expected
 ```
 
+## Binding guards globally
+
+`app.use_global_guards(AuthGuard())` works, but you built that instance by hand, so it can't take
+constructor dependencies. To bind a guard **globally with dependency injection**, register it as a provider
+under the `APP_GUARD` token, in any module:
+
+```python
+from austial import APP_GUARD, Module
+
+
+@Module(
+    providers=[
+        {"provide": APP_GUARD, "useClass": AuthGuard},      # AuthGuard(config: ConfigService) is injected
+    ],
+)
+class AuthModule:
+    pass
+```
+
+It applies to every route in the application, whichever module declared it. Register the token several times
+to add several guards; `useClass`, `useValue`, `useFactory` and `useExisting` all work. Guards from
+`use_global_guards` run first, then the `APP_GUARD` ones in registration order, then controller and route guards.
+
+The same pattern binds the other three pipeline stages: `APP_PIPE`, `APP_INTERCEPTOR` and `APP_FILTER`.
+
+```python
+providers=[
+    {"provide": APP_PIPE, "useFactory": lambda: ValidationPipe(whitelist=True), "inject": []},
+    {"provide": APP_INTERCEPTOR, "useClass": LoggingInterceptor},
+    {"provide": APP_FILTER, "useClass": DatabaseErrorFilter},
+]
+```
+
+A global component that depends on a request-scoped provider is built per request, like any other.
+
 ## Pipeline position
 
 ```

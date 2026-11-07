@@ -6,4 +6,5 @@ export default {
   "lifecycle-events": "Lifecycle Events",
   "module-reference": "Module Reference",
   "standalone-applications": "Standalone Applications",
+  "execution-context": "Execution Context",
 };

@@ -49,6 +49,35 @@ Running `module` for a name also patches the nearest `app_module.py`,
 inserting both the import line and the class into the `imports=[...]`
 array — see [App module patching](#app-module-patching) below.
 
+## Guards, pipes, interceptors, filters, middleware, decorators
+
+One file each, with a working skeleton:
+
+```bash
+austial generate guard auth            # src/modules/auth/auth_guard.py          -> class AuthGuard(CanActivate)
+austial generate pipe slugify          # src/modules/slugify/slugify_pipe.py     -> class SlugifyPipe(PipeTransform)
+austial generate interceptor timing    # .../timing_interceptor.py               -> class TimingInterceptor(NestInterceptor)
+austial generate filter database       # .../database_filter.py                  -> class DatabaseFilter(ExceptionFilter), @Catch(HttpException)
+austial generate middleware audit      # .../audit_middleware.py                 -> class AuditMiddleware(NestMiddleware)
+austial generate decorator roles       # .../roles_decorator.py                  -> def Roles(*values), plus ROLES_KEY
+austial generate class money           # .../money.py                            -> class Money
+austial generate provider mailer       # same as `service`
+```
+
+A name may carry a path, which becomes the folder structure under `src/modules/`:
+
+```bash
+austial generate guard auth/api-key
+# src/modules/auth/api_key/api_key_guard.py       (every folder gets an __init__.py)
+
+austial generate guard auth/api-key --flat
+# src/modules/auth/api_key_guard.py               (no folder for the file itself)
+```
+
+These schematics create only the file; they don't register anything in a module. Reference the class where you use
+it (`@UseGuards(AuthGuard)`, `providers=[...]`, `{"provide": APP_GUARD, "useClass": AuthGuard}`). Existing files are
+never overwritten.
+
 ## `resource` — full CRUD
 
 ```bash
@@ -199,3 +228,12 @@ that case.
 Every generator refuses to overwrite an existing file by default — it
 skips and reports it — delete or rename the existing file first if you
 intend to regenerate it.
+
+## Previewing with `--dry-run`
+
+Every schematic accepts `--dry-run` (`-d`): it prints the files it *would* create and writes nothing, and for
+`module` and `resource` it also leaves `app_module.py` untouched.
+
+```bash
+austial generate resource cats --dry-run
+```

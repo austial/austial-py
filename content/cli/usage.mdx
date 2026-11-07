@@ -48,12 +48,42 @@ so `uv sync` inside `my-app` resolves `austial` from your checkout instead
 of PyPI — edits to the framework are picked up immediately without
 reinstalling.
 
+## `austial info`
+
+```bash
+austial info
+```
+
+Prints the Python version, every installed `austial-*` package with its version, and the project root if you are
+inside one. Paste it into a bug report.
+
 ## `austial generate` / `austial g`
 
 ```bash
-austial generate <module|controller|service|resource> <name>
-austial g <module|controller|service|resource> <name>       # short alias
+austial generate <schematic> <name> [--flat] [--dry-run/-d]
+austial g <schematic> <name>                                 # short alias
 ```
+
+| Schematic | Alias | Creates |
+|---|---|---|
+| `module` | `mo` | a module, registered in `app_module.py` |
+| `controller` | `co` | a controller |
+| `service`, `provider` | `s`, `pr` | an `@Injectable()` service |
+| `resource` | `r` | module + controller + service + DTOs + entity, registered |
+| `guard` | `gu` | a `CanActivate` guard |
+| `pipe` | `pi` | a `PipeTransform` |
+| `interceptor` | `in` | a `NestInterceptor` |
+| `filter` | `f` | an `ExceptionFilter` |
+| `middleware` | `mi` | a `NestMiddleware` |
+| `decorator` | `d` | a metadata decorator factory plus its key |
+| `class` | `cl` | a plain class |
+
+| Flag | Effect |
+|---|---|
+| `--flat` | For guard, pipe, interceptor, filter, middleware, decorator and class: no folder for the file. Rejected for the others. |
+| `--dry-run`, `-d` | Print what would be created; write nothing. |
+
+`<name>` may include a path for the component schematics: `auth/api-key`.
 
 ```bash
 austial generate module cats        # src/modules/cats/cats_module.py

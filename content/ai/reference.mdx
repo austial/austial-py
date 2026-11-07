@@ -30,6 +30,7 @@ own validation errors, flow through the exception filters.
 | Interceptor | subclass `NestInterceptor`, `intercept(context, call_next)` | `@UseInterceptors(...)` | [Interceptors](/overview/interceptors) |
 | Exception filter | subclass `ExceptionFilter` + `@Catch(...)` | `@UseFilters(...)` or `app.use_global_filters(...)` | [Exception filters](/overview/exception-filters) |
 | Middleware | subclass `NestMiddleware` | `configure(consumer)` on a module | [Middleware](/overview/middleware) |
+| Global guard/pipe/interceptor/filter with DI | `{"provide": APP_GUARD\|APP_PIPE\|APP_INTERCEPTOR\|APP_FILTER, "useClass": X}` | a module's `providers` | [Guards](/overview/guards#binding-guards-globally) |
 | Custom provider | `{"provide": TOKEN, "useClass"/"useValue"/"useFactory"/"useExisting": ..., "inject": [...]}` | a module's `providers` | [Custom providers](/fundamentals/custom-providers) |
 | Lifecycle hook | define `on_module_init` / `on_application_bootstrap` / `on_module_destroy` / `before_application_shutdown` / `on_application_shutdown` | any provider, controller or module class | [Lifecycle events](/fundamentals/lifecycle-events) |
 | Runtime lookup | inject `ModuleRef`, `DiscoveryService`, `LazyModuleLoader` | constructor | [Module reference](/fundamentals/module-reference) |
@@ -149,7 +150,10 @@ Do not build on features that do not exist yet:
 - `DataSource.initialize()` is a manual step (a `startup` event handler). `OrmModule` does not
   initialise it for you; lifecycle hooks (`on_module_init`) run *after* startup handlers.
 - No microservices, WebSockets, GraphQL, CQRS or alternative HTTP platform.
-- `use_factory` providers are synchronous. Do async setup in `on_module_init`.
+- `ExecutionContext.get_type()` is always `"http"`; `switch_to_ws()` / `switch_to_rpc()` raise.
+- No `Interval`/`Timeout` scheduler registry (`@Cron` and `@Job` exist), no OAuth/social login, no MongoDB/Prisma.
+- `async` factory providers are awaited at init (`await app.init()` / ASGI startup / `compile()`); a plain sync
+  `use_factory` runs when first resolved. Async factories must be singletons.
 - Only PostgreSQL (`asyncpg`) and SQLite (`aiosqlite`) drivers exist.
 - The `Tenanted` mixin's `tenant_id` is invisible to mypy's synthesised
   `__init__`. Declare the column on the entity directly if strict typing

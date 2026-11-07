@@ -65,6 +65,7 @@ guard, interceptor, handler -- reads top to bottom in the order it executes.
 - **Middleware** — `NestMiddleware` ABC, wired up via `configure(consumer)` on modules.
 - **Config** — `ConfigModule.for_root(env_file=".env")` / `ConfigService`.
 - **Database** — `austial.orm`, a from-scratch TypeORM-shaped ORM: `@Entity()`, `Repository`, `QueryBuilder`, wired up via `OrmModule.for_root(...)`.
+- **Cross-cutting techniques** — `austial.cache` (`CacheModule`, `CacheInterceptor`, `@CacheKey`/`@CacheTTL`), `austial.events` (`EventEmitter`, `@OnEvent` with wildcards), a pluggable `Logger`/`LoggerService`, global `APP_GUARD`/`APP_PIPE`/`APP_INTERCEPTOR`/`APP_FILTER` providers, async providers, and testing overrides.
 - **HTTP extras** — API versioning, a global prefix, host routing, `@Redirect`, `@Sse`, `StreamableFile`, file-upload helpers, response serialization (`@Exclude`/`@Expose`) and mapped types (`PartialType`, …).
 - **Health checks** — `austial.terminus.HealthCheckService` + `MemoryHealthIndicator`, `DatabaseHealthIndicator`.
 - **Testing** — `austial.testing.Test.create_testing_module(...).compile()`.

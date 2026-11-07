@@ -78,6 +78,33 @@ registered under that token:
 
 A factory may also set `"scope": Scope.TRANSIENT` to be called on every resolution instead of once.
 
+## Async factory providers
+
+A factory may be a coroutine function, for providers that need `await` to build — opening a connection,
+fetching a secret, warming a client:
+
+```python
+async def connect(url: str) -> Database:
+    db = Database(url)
+    await db.connect()
+    return db
+
+
+providers=[
+    {"provide": "DATABASE_URL", "useValue": "postgresql://localhost/app"},
+    {"provide": Database, "useFactory": connect, "inject": ["DATABASE_URL"]},
+]
+```
+
+Async providers are awaited **once, when the application initialises**, dependencies first, and cached as
+singletons; afterwards `Database` injects like any other provider. That happens automatically under
+`austial serve` / uvicorn (ASGI startup), `AustialFactory.create_application_context()` and
+`await Test.create_testing_module(...).compile()`. If you build an app by hand, call `await app.init()`
+before using it. Resolving an async provider earlier raises `AsyncProviderNotInitializedError` saying so.
+
+An async factory must be a singleton (no `scope` other than the default), and its dependencies may
+themselves be async providers or plain classes that depend on them.
+
 ## Alias providers — `useExisting`
 
 Create a second name for a provider that already exists. Both tokens resolve to the **same instance**:
@@ -95,6 +122,21 @@ assert app.get("AliasedLoggerService") is app.get(LoggerService)
 
 It's the way to expose one implementation under both its concrete class and an abstract token without
 building it twice. (`useClass` would create a second instance.)
+
+## Optional dependencies in constructors
+
+`X | None` in a constructor hint is unwrapped: Austial injects `X` when it can provide it, and otherwise passes
+`None` (or the parameter's default):
+
+```python
+@Injectable()
+class Mailer:
+    def __init__(self, tracer: Tracer | None = None, retries: int = 3):
+        ...
+```
+
+Builtin types (`str`, `int`, ...) are never built by the container. A parameter with a default value keeps
+it unless its type is something the container provides, so `retries: int = 3` is `3`, not `0`.
 
 ## Non-class tokens
 

@@ -94,6 +94,12 @@ When multiple interceptors apply, the first-declared interceptor is
 outermost — it's the first to run on the way in, and the last to see the
 result on the way out, just like nested middleware.
 
+## Binding interceptors globally
+
+Register a provider under `APP_INTERCEPTOR` to bind an interceptor to every route **with dependency
+injection**: `{"provide": APP_INTERCEPTOR, "useClass": LoggingInterceptor}`. Several registrations stack, the
+first registered being outermost. See [Guards: binding globally](/overview/guards#binding-guards-globally).
+
 ## Pipeline position
 
 ```
