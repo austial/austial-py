@@ -1,0 +1,51 @@
+---
+title: Claude Code Plugin
+---
+
+import { Callout } from "@/components/mdx";
+
+# Claude Code plugin
+
+The Austial plugin gives [Claude Code](https://claude.com/claude-code) the framework's rules, a workflow for building a whole app, recipes for every
+feature, and a production review, so anyone can go from an idea to a verified Austial app without knowing the framework first.
+
+## Install
+
+```text
+/plugin marketplace add austial/austial-py
+/plugin install austial@austial
+```
+
+## What you get
+
+| Piece | How to use it | What it does |
+|---|---|---|
+| `austial:build-app` | `/austial:build-app a bookstore API with users and orders` | Pins down requirements, scaffolds with `austial new`, generates the features, wires the database and auth, writes tests, runs the checks, and starts the server to try a route |
+| `austial:add-feature` | `/austial:add-feature websocket chat` | Adds one capability: auth and roles, tenancy, jobs, schedules, WebSockets or Socket.IO, GraphQL, microservices and brokers, CQRS, events, cache, MongoDB, HTTP client, OpenAPI, health checks, storage, i18n, CLI commands |
+| `austial:review-app` | `/austial:review-app` | Walks your diff against the [production checklist](/ai/production), citing the line for each finding |
+| `austial-framework` | automatic | Loaded whenever a project imports `austial`: the mental model, the import map and the do/don't list from the [AGENTS.md template](/ai/agents-md) |
+| `austial-builder` agent | delegated automatically, or by name | A sub-agent that knows the framework and runs `ruff`, `mypy` and `pytest` before it says it is done |
+
+<Callout type="info">
+The plugin bundles a copy of [AGENTS.md](/ai/agents-md). For anything newer than the installed version, the skills fetch
+[`llms-full.txt`](https://docs.austial.com/llms-full.txt) instead of guessing an API.
+</Callout>
+
+## A typical session
+
+```text
+> /austial:build-app a booking API: users sign up, owners list rooms, guests book them, no double bookings
+```
+
+Claude proposes defaults for the database, auth and roles (asking only about real forks), runs `austial new` and `austial g resource` for each entity, fills in the
+columns and DTOs, adds JWT auth and role guards, writes a test per route including the 401/403/409 cases, runs the full check, and reports which in-memory defaults
+still need replacing before production.
+
+## Updating
+
+```text
+/plugin marketplace update austial
+```
+
+The plugin lives in the framework repository, under `plugins/austial`. It is versioned with the marketplace manifest, and its bundled `AGENTS.md` is refreshed from this
+site with `scripts/sync_plugin.py`.
