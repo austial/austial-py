@@ -222,6 +222,42 @@ def CurrentTenant() -> Any:
 To layer additional checks (session freshness, per-tenant claims) subclass
 `AuthGuard` and override `after_verify`.
 
+## Custom strategies (Passport-style)
+
+For schemes `AuthGuard` doesn't cover (API keys, basic auth, signed webhooks, sessions), write a strategy and guard routes
+with it, as with `@nestjs/passport`:
+
+```python
+from austial.auth import AuthenticationError, AuthStrategy, CurrentUser, StrategyGuard
+
+@Injectable()
+class ApiKeyStrategy(AuthStrategy):
+    name = "api-key"
+
+    def __init__(self, keys: KeysService):
+        self.keys = keys
+
+    async def validate(self, request):
+        owner = await self.keys.owner_of(request.headers.get("x-api-key", ""))
+        if owner is None:
+            raise AuthenticationError("invalid API key")
+        return owner                                   # lands in request.state.user
+
+@Module(providers=[ApiKeyStrategy, KeysService])
+class KeysModule: ...
+
+@Controller("reports")
+@UseGuards(StrategyGuard("jwt", "api-key"))            # a bearer token OR an API key, tried in order
+class ReportsController:
+    @Get()
+    def list(self, user=CurrentUser()): ...
+```
+
+`StrategyGuard(*names)` accepts a request when any named strategy validates it; if none does, the first strategy's error
+(`401`) is raised. Strategies are discovered from every module's providers. `"jwt"` (`JwtBearerStrategy`) is provided by
+`AuthModule`. `@Public` routes skip the guard. This is not Passport itself: there is no adapter for Passport's Node strategies; implement
+`validate` against the provider's library (for OAuth, see below).
+
 ## Social login (OAuth 2.0 / OpenID Connect)
 
 `OAuth2Provider` implements the authorization-code flow with PKCE; you own the routes and the session. Presets exist

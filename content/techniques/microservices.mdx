@@ -77,12 +77,13 @@ caller as `{"status": "error", "message": "TypeName: text"}`.
 |---|---|
 | `Transport.TCP` | JSON lines over a TCP connection; many calls in flight on one connection. Plain TCP: no TLS or authentication, so keep it on a private network. |
 | `Transport.LOCAL` | In-process, addressed by `name`/`broker`. Tests, or splitting a monolith before you split the deployment. |
-| `Transport.REDIS` | Redis Pub/Sub (`url="redis://..."`). Needs `austial-microservices[redis]`. Pub/Sub has no consumer groups: **every** replica receives every message, so run one replica per service or use another broker for load balancing. |
+| `Transport.REDIS` | Redis Pub/Sub (`url="redis://..."`). Needs `austial-microservices[redis]`. Pub/Sub has no consumer groups: **every** replica receives every message, so run one replica per service or use `REDIS_STREAMS` for load balancing. |
+| `Transport.REDIS_STREAMS` | Redis Streams: replicas sharing `group` form a consumer group (each message goes to one replica, acknowledged after the handler), and a request published while no replica is up is delivered when one starts. Streams are capped at `extra={"maxlen": 10000}` entries. `[redis]`. |
 | `Transport.NATS` | NATS subjects; replicas sharing `group` form a queue group, so each request reaches one replica. `[nats]`. |
 | `Transport.KAFKA` | Kafka topics (`url="host:port"`); replicas share a consumer group (`group`). Topics must already exist. `[kafka]`. |
 | `Transport.MQTT` | MQTT 5 (`url="host:port"`); replicas sharing `group` use shared subscriptions. `[mqtt]`. |
 | `Transport.RMQ` | RabbitMQ queues (`url="amqp://..."`); replicas consuming a queue share the load. `[rabbitmq]`. |
-| `Transport.GRPC` | gRPC with JSON payloads and no `.proto` (service `austial.Microservice`, methods `Request` and `Emit`); between Austial services. `[grpc]`. |
+| `Transport.GRPC` | gRPC. With `extra={"proto_path": ...}` real protobuf services including streaming (see below), `[grpc-proto]`; without it, a JSON channel between Austial services (`austial.Microservice`, methods `Request` and `Emit`), `[grpc]`. |
 | `Transport.CUSTOM` | Anything else: implement `ServerTransport` (`listen(handler)`, `close()`) and `ClientTransport` (`connect`, `request`, `emit`, `close`) and pass `custom_server=` / `custom_client=`. |
 
 Broker transports share one request/reply protocol (JSON `{"id", "data", "reply_to"}`; one reply topic per client). Options:
@@ -110,12 +111,63 @@ MicroserviceOptions(Transport.NATS, url="nats://broker:4222", codec=MsgpackCodec
 ClientOptions("BILLING", Transport.NATS, url="nats://broker:4222", codec=MsgpackCodec())
 ```
 
-<Callout type="warning">
-Tested against the real libraries only for gRPC and Redis (via `fakeredis`). The NATS, Kafka, MQTT and RabbitMQ backends are
-exercised through in-memory fakes plus a signature contract test, because CI has no brokers: run your own integration test against a
-real broker before depending on them. For anything else, a custom transport is typically 40–60 lines over the client library
-(the server calls `handler(kind, pattern_key, data)` and sends back what it returns).
+<Callout type="info">
+Every broker transport (Redis Pub/Sub, Redis Streams, NATS, RabbitMQ, MQTT, Kafka) is tested against the real server in CI
+(`integration/brokers_spec.py`, started from `docker-compose.brokers.yml`): request/reply, events, errors, and replicas
+in one `group` handling each request once. To run it yourself: `docker compose -f docker-compose.brokers.yml up -d --wait`,
+`source integration/env.sh`, `pytest integration/brokers_spec.py`. For anything else, a custom transport is typically
+40–60 lines over the client library (the server calls `handler(kind, pattern_key, data)` and sends back what it returns).
 </Callout>
+
+## gRPC with Protocol Buffers
+
+Without `proto_path`, `Transport.GRPC` is a schema-less JSON channel between Austial services. Give it a `.proto` file and it serves
+and calls real protobuf services, interoperable with any gRPC client or server (`pip install 'austial-microservices[grpc-proto]'`;
+the `.proto` is compiled at startup, no generated code to commit). Messages are plain dicts in your code.
+
+```protobuf
+service HeroService {
+  rpc FindOne (HeroById) returns (Hero);
+  rpc FindMany (Query) returns (stream Hero);
+  rpc Sum (stream Number) returns (Number);
+  rpc Chat (stream Line) returns (stream Line);
+}
+```
+
+```python
+from austial.microservices import GrpcMethod, Payload
+
+@Controller()
+class HeroController:
+    @GrpcMethod("HeroService")                     # method defaults to the PascalCase function name: FindOne
+    def find_one(self, data: dict = Payload()):
+        return {"id": data["id"], "name": "Ada"}
+
+    @GrpcMethod("HeroService", "FindMany")         # server streaming: yield dicts (or return an iterable)
+    async def many(self, data: dict = Payload()):
+        for n in range(data["count"]):
+            yield {"id": n}
+
+    @GrpcMethod("HeroService")                     # client streaming: the payload is an async iterator of dicts
+    async def sum(self, numbers=Payload()):
+        return {"value": sum([n["value"] async for n in numbers])}
+
+app.connect_microservice(MicroserviceOptions(Transport.GRPC, port=50051, extra={"proto_path": "hero.proto"}))
+
+# a client
+heroes = ClientProxy(ClientOptions("HEROES", Transport.GRPC, port=50051, extra={"proto_path": "hero.proto"}))
+await heroes.connect()
+service = heroes.get_service("HeroService")
+hero = await service.find_one({"id": 1})                     # unary
+async for hero in service.find_many({"count": 3}): ...       # server streaming
+total = await service.sum([{"value": 1}, {"value": 2}])      # client streaming: any (async) iterable
+```
+
+`extra` also takes `include` (extra import directories for the `.proto`), `services` (server: which services to serve; default every
+service in the file) and `server_credentials` / `channel_credentials` for TLS. Guards, pipes and interceptors apply as on other transports. Errors map
+to gRPC status: `RpcException({"message": "...", "code": 5})` sets the status code, `Forbidden resource` is `PERMISSION_DENIED`, a missing handler is
+`UNIMPLEMENTED`, anything else is `UNKNOWN`; on the client a failed call raises `RpcError` with `status`, `message` and `code`. The tests
+call the server with a stub generated by `protoc` and call a `protoc`-generated server from the client, so the wire format is the standard one.
 
 ## Guards, pipes and interceptors
 

@@ -91,7 +91,7 @@ Response shape: `{"statusCode", "message", "error", "timestamp", "path"}`.
 | Complex query | `repo.create_query_builder("alias")` with `.where(sql, params)`, `.where_eq`, `.where_in`, joins, `.get_many()` |
 | Transaction | `await data_source.transaction(async_callback)` |
 | Immutable rows | `@Entity(append_only=True)` (audit, ledger) |
-| Initialise | `await app.get(DataSource).initialize()` at startup |
+| Initialise | automatic with `OrmModule.for_root` (`initialize()` is idempotent) |
 
 Relations (`OneToOne`, `OneToMany`, `ManyToOne`, `ManyToMany`) take a class or
 a `lambda: Class` target, and pass `join_column=JoinColumn(...)` as a keyword
@@ -148,14 +148,15 @@ Do not build on features that do not exist yet:
   Write them correctly anyway.
 - `CallHandler.handle()` is a plain async continuation, not an RxJS
   Observable.
-- `DataSource.initialize()` is a manual step (a `startup` event handler). `OrmModule` does not
-  initialise it for you; lifecycle hooks (`on_module_init`) run *after* startup handlers.
-- No alternative HTTP platform. Microservice broker transports (Redis, NATS, Kafka, MQTT, RabbitMQ, gRPC) need their extra installed and only gRPC/Redis
-  are tested against real clients; Redis Pub/Sub delivers to every replica. GraphQL is Strawberry code-first; WebSockets are plain
+- `OrmModule` connects and closes the `DataSource` itself (lifecycle hooks); routes are built at startup,
+  so an unresolvable dependency fails the startup rather than the first request. `HealthCheckService.check()` raises a 503
+  when an indicator is down (`raise_on_error=False` to opt out).
+- No alternative HTTP platform. Microservice broker transports (Redis, NATS, Kafka, MQTT, RabbitMQ, gRPC) need their extra installed (all tested against real servers in CI; protobuf gRPC needs `grpc-proto` and `GrpcMethod`).
+  Redis Pub/Sub delivers to every replica (use `REDIS_STREAMS` to share load). GraphQL is Strawberry code-first; WebSockets are plain
   frames unless `WebSocketsModule.for_root(adapter=SocketIoAdapter())` (client `join`/`leave` are `async`).
 - `ExecutionContext.get_type()` is `"http"` in routes, `"ws"` in gateways and `"rpc"` in microservice handlers; the other `switch_to_*` raise.
-- `austial.schedule` jobs run in every replica (use `austial.jobs` for once-only, durable work). MongoDB and Prisma are
-  connection-level integrations, not ORMs. Verify OIDC ID tokens with `OAuth2Provider.verify_id_token` (never trust them unverified).
+- `austial.schedule` jobs run in every replica (use `austial.jobs` for once-only, durable work). MongoDB has Mongoose-style models
+  (`Schema`/`Document`/`Model`); Prisma is a connection-level integration, not an ORM. Verify OIDC ID tokens with `OAuth2Provider.verify_id_token` (never trust them unverified).
 - `async` factory providers are awaited at init (`await app.init()` / ASGI startup / `compile()`); a plain sync
   `use_factory` runs when first resolved. Async factories must be singletons.
 - Only PostgreSQL (`asyncpg`) and SQLite (`aiosqlite`) drivers exist.

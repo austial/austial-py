@@ -59,6 +59,9 @@ class HealthController:
 - `status` is `"ok"` if every indicator passed, `"error"` if any failed.
 - `info` collects passing indicators' results; `error` collects failing
   ones; `details` always contains the union of both.
+- When any indicator fails, `check()` raises `ServiceUnavailableException`: the response is **HTTP 503** with this same
+  body, so load balancers and Kubernetes probes see the failure (as with `@nestjs/terminus`). Pass `raise_on_error=False` to get the
+  report back as a normal return value and decide the status yourself.
 
 ## Built-in indicators
 

@@ -92,6 +92,13 @@ class WsAuthGuard(CanActivate):
 A denied message is answered with a `Forbidden resource` exception event. Guards run per **message**, not at connection time; to
 refuse a connection, check in `handle_connection` and `await client.close(4401)`.
 
+## Custom adapters
+
+`WebSocketsModule.for_root(adapter=...)` takes a `WsAdapter`. Subclass it to serve gateways over another protocol: implement
+`mount(runner, app, path, gateway, handlers) -> WsServer`, and for each incoming message call
+`await runner.process(gateway, handlers[event], client, event, data)`, which applies guards, pipes and interceptors, maps errors to
+`exception` events, and returns `(reply_event, payload)` or `None`. `SocketIoAdapter` is built this way.
+
 ## Socket.IO
 
 By default the server speaks plain WebSocket text frames (use the browser's `WebSocket`). To serve the same gateways to

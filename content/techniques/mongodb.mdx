@@ -44,6 +44,46 @@ class CatsService:
 | `MongoModule.for_feature(["cats"])` | Declares collections. |
 | `InjectCollection(name)`, `InjectDatabase()`, `InjectClient()` | Constructor defaults for injection. |
 
-`connect_on_init=False` skips the startup ping. Mongo has no ORM layer here: you work with PyMongo's own collections and documents
-(for object mapping use a library such as Beanie on the injected database). `client_factory` replaces the client class — useful for
-fakes in tests. For health checks see [`MongoHealthIndicator`](/techniques/health-checks#mongohealthindicator).
+`connect_on_init=False` skips the startup ping. `client_factory` replaces the client class, which is useful for fakes in tests. ## Models (Mongoose-style)
+
+Declare a schema class and inject a typed `Model`, as with `@nestjs/mongoose`:
+
+```python
+from pydantic import Field
+from austial.mongo import Document, Index, InjectModel, Model, MongoModule, Schema
+
+
+@Schema(collection="cats", indexes=[Index("name", unique=True), Index(("age", -1))])
+class Cat(Document):
+    name: str = Field(min_length=1)
+    age: int = 0
+
+
+@Module(imports=[MongoModule.for_root(database="zoo"), MongoModule.for_feature([Cat])], providers=[CatsService])
+class CatsModule: ...
+
+
+@Injectable()
+class CatsService:
+    def __init__(self, cats: Model[Cat] = InjectModel(Cat)):
+        self.cats = cats
+
+    async def adopt(self, name: str) -> Cat:
+        return await self.cats.create({"name": name})           # validated by pydantic, returns a Cat with its id
+```
+
+Schemas are pydantic models, so validation, defaults and `Field` constraints work as elsewhere. `id` maps to `_id` (an `ObjectId`,
+exposed as `str`; string ids are converted for lookups). `@Schema(collection=, indexes=)` binds the class to a collection (default: lower-cased
+class name plus `s`); indexes are created once, before the model's first operation. `for_feature` accepts schema classes and plain collection
+names together.
+
+| `Model` method | Does |
+|---|---|
+| `create(data)`, `create_many(items)` | Validate and insert; return documents with ids. |
+| `find(filter, sort=, skip=, limit=)`, `find_one(filter)`, `find_by_id(id)` | Queries; results are validated `Document` instances. |
+| `update_one(filter, changes, upsert=False)`, `update_by_id(id, changes)` | `changes` is a field-to-value mapping (`$set`) or an update document using `$` operators; returns the updated document, or `None`. |
+| `delete_one`, `delete_by_id`, `delete_many` | Return whether or how many were deleted. |
+| `count(filter)`, `exists(filter)`, `aggregate(pipeline)` | Counting and raw pipelines (returns dicts). |
+| `model.collection` | The underlying PyMongo collection, for anything else. |
+
+There are no relations, population or change streams; model those with references and `aggregate`. For health checks see [`MongoHealthIndicator`](/techniques/health-checks#mongohealthindicator).
