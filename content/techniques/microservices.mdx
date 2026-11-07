@@ -95,6 +95,21 @@ app.connect_microservice(MicroserviceOptions(Transport.NATS, url="nats://broker:
 ClientsModule.register([ClientOptions("BILLING", Transport.NATS, url="nats://broker:4222")])
 ```
 
+### Custom wire format
+
+Broker transports encode messages as JSON. Pass `codec=` to both sides to change that: any object with `encode(dict) -> bytes` and
+`decode(bytes) -> dict` (msgpack, compression, encryption, a schema registry). `JsonCodec` is the default. The TCP and gRPC
+transports have their own framing and ignore it.
+
+```python
+class MsgpackCodec:
+    def encode(self, message): return msgpack.packb(message)
+    def decode(self, raw): return msgpack.unpackb(raw)
+
+MicroserviceOptions(Transport.NATS, url="nats://broker:4222", codec=MsgpackCodec())
+ClientOptions("BILLING", Transport.NATS, url="nats://broker:4222", codec=MsgpackCodec())
+```
+
 <Callout type="warning">
 Tested against the real libraries only for gRPC and Redis (via `fakeredis`). The NATS, Kafka, MQTT and RabbitMQ backends are
 exercised through in-memory fakes plus a signature contract test, because CI has no brokers: run your own integration test against a

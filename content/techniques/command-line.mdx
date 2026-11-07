@@ -57,6 +57,23 @@ python cli.py --help
 Commands are ordinary providers, so list them in a module's `providers`. Module `on_module_init` / `on_module_destroy` hooks run around
 the command.
 
+## Interactive prompts
+
+```python
+from austial.commander import Prompts
+
+async def run(self, passed_params, options):
+    prompts = Prompts()
+    name = prompts.ask("Project name", default="app", validate=str.isidentifier)
+    tls = prompts.confirm("Enable TLS?", default=False)
+    database = prompts.choose("Database", ["postgres", "sqlite"], default="sqlite")   # by number or name
+    token = prompts.password("API token")                                          # hidden input
+```
+
+When stdin is not a terminal (CI, pipes) prompts return their defaults instead of blocking, and raise `CommanderError` when
+there is no default (always for `password`). For tests, pass scripted answers:
+`Prompts(input_fn=lambda _prompt: next(answers), password_fn=lambda _prompt: "s3cret")`.
+
 ## Exit codes
 
 `CommandFactory.run(AppModule, argv, name=...)` returns the code and `main()` passes it to `sys.exit`: `0` success, `2` usage error

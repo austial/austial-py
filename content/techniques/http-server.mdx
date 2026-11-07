@@ -114,6 +114,24 @@ class Docs:
         self.host.http_adapter.mount("/legacy", legacy_wsgi_app)     # http_adapter is the FastAPI instance
 ```
 
+## AWS Lambda
+
+`create_lambda_handler` wraps the application with [Mangum](https://mangum.fastapiexpert.com/) for API Gateway (REST and HTTP
+APIs), Function URLs and ALB:
+
+```python
+# handler.py        (Lambda handler setting: handler.handler)
+from austial import create_lambda_handler
+from src.app_module import AppModule
+
+handler = create_lambda_handler(AppModule)       # extra keyword arguments go to mangum.Mangum
+```
+
+Install `mangum` into the deployment package. The application is built once per cold start; lifecycle hooks and async providers
+run during the lifespan startup on the first invocation. Keep initialisation light (a long `on_module_init` is a slower cold start),
+and don't rely on in-memory state between invocations. Microservices, WebSocket gateways and `austial.schedule` jobs need a
+long-running process and don't belong in a Lambda.
+
 ## Sessions and other ASGI middleware
 
 `app.use(MiddlewareClass, **options)` adds any ASGI middleware. For example, cookie sessions

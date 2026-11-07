@@ -107,7 +107,7 @@ exception filters**. Middleware runs before all of it.
 
 | You need | Import from |
 |---|---|
-| `Module Controller Injectable Get Post Put Patch Delete All Body Param Query Headers UseGuards UseInterceptors UsePipes UseFilters HttpCode Header Redirect Sse Version Scope Global Inject forward_ref ModuleRef DiscoveryService LazyModuleLoader REQUEST`, `Cookies RawBody Render Next NextFunction PassToNext HttpAdapterHost ContextIdStrategy ModuleVisibilityError APP_GUARD APP_PIPE APP_INTERCEPTOR APP_FILTER LoggerService ConsoleLogger LOG_LEVELS AsyncProviderNotInitializedError ParseDatePipe ParseIntPipe ParseFloatPipe ParseBoolPipe ParseUUIDPipe ParseEnumPipe ParseArrayPipe DefaultValuePipe ParseFilePipe UploadedFile Ip HostParam Session StreamableFile MessageEvent TimeoutInterceptor ClassSerializerInterceptor Exclude Expose PartialType PickType OmitType IntersectionType create_param_decorator apply_decorators VersioningType VERSION_NEUTRAL`, all `*Exception` classes, `CanActivate ExecutionContext NestInterceptor NestMiddleware PipeTransform ExceptionFilter Catch ValidationPipe AustialFactory Reflector` | `austial` |
+| `Module Controller Injectable Get Post Put Patch Delete All Body Param Query Headers UseGuards UseInterceptors UsePipes UseFilters HttpCode Header Redirect Sse Version Scope Global Inject forward_ref ModuleRef DiscoveryService LazyModuleLoader REQUEST`, `create_lambda_handler Cookies RawBody Render Next NextFunction PassToNext HttpAdapterHost ContextIdStrategy ModuleVisibilityError APP_GUARD APP_PIPE APP_INTERCEPTOR APP_FILTER LoggerService ConsoleLogger LOG_LEVELS AsyncProviderNotInitializedError ParseDatePipe ParseIntPipe ParseFloatPipe ParseBoolPipe ParseUUIDPipe ParseEnumPipe ParseArrayPipe DefaultValuePipe ParseFilePipe UploadedFile Ip HostParam Session StreamableFile MessageEvent TimeoutInterceptor ClassSerializerInterceptor Exclude Expose PartialType PickType OmitType IntersectionType create_param_decorator apply_decorators VersioningType VERSION_NEUTRAL`, all `*Exception` classes, `CanActivate ExecutionContext NestInterceptor NestMiddleware PipeTransform ExceptionFilter Catch ValidationPipe AustialFactory Reflector` | `austial` |
 | `ConfigModule ConfigService` | `austial.config` |
 | `OrmModule DataSource Entity Column PrimaryGeneratedColumn Repository InjectRepository FindOptions In NotIn IsNull NotNull ManyToOne OneToMany` | `austial.orm` |
 | `AuthModule AuthConfig AuthGuard AuthService CurrentUser Public JwtStrategy Argon2Hasher TotpStrategy` | `austial.auth` |
@@ -125,13 +125,13 @@ exception filters**. Middleware runs before all of it.
 | `ScheduleModule SchedulerRegistry Cron Interval Timeout` | `austial.schedule` |
 | `CqrsModule CommandBus QueryBus EventBus CommandHandler QueryHandler EventsHandler Saga AggregateRoot` | `austial.cqrs` |
 | `WebSocketsModule WebSocketGateway SubscribeMessage MessageBody ConnectedSocket WsClient WsServer SocketIoAdapter SocketIoClient SocketIoServer` | `austial.websockets` |
-| `MessagePattern EventPattern Payload ClientsModule ClientProxy Transport MicroserviceOptions ClientOptions build_client_transport build_server_transport create_microservice` | `austial.microservices` |
+| `MessagePattern EventPattern Payload ClientsModule ClientProxy Transport MicroserviceOptions ClientOptions JsonCodec build_client_transport build_server_transport create_microservice` | `austial.microservices` |
 | `ApiTags ApiOperation ApiResponse ApiProperty DocumentBuilder SwaggerModule` | `austial.openapi` |
 | `GraphQLModule inject` | `austial.graphql` |
 | `MongoModule InjectCollection` | `austial.mongo` |
 | `PrismaModule` | `austial.prisma` |
 | `HealthCheckService MemoryHealthIndicator DatabaseHealthIndicator HttpHealthIndicator TcpHealthIndicator DiskHealthIndicator MongoHealthIndicator` | `austial.terminus` |
-| `Command CommandRunner SubCommand Option CommandFactory CommanderError` | `austial.commander` |
+| `Command CommandRunner SubCommand Option CommandFactory CommanderError Prompts` | `austial.commander` |
 | `Test` (testing module) | `austial.testing` |
 
 If a symbol is not in this table, check
