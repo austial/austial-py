@@ -1,0 +1,11 @@
+from collections.abc import Awaitable, Callable
+
+from austial import Injectable, NestMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
+
+
+@Injectable()
+class {{ class_name }}Middleware(NestMiddleware):
+    async def use(self, request: Request, call_next: Callable[[], Awaitable[Response]]) -> Response:
+        return await call_next()

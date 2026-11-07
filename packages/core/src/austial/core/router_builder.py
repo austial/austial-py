@@ -63,6 +63,15 @@ _DEFAULT_STATUS = {"POST": 201}
 _ALL_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
 
 
+class _ContainerToken:
+    """A global component registered through DI (``{"provide": APP_GUARD, ...}``), by its unique token."""
+
+    __slots__ = ("token",)
+
+    def __init__(self, token: Any) -> None:
+        self.token = token
+
+
 class _ScopedRef:
     """A pipeline component (guard, pipe, interceptor, filter) that depends on request-scoped
     providers: it can't be built at startup, so it's resolved afresh for every request."""
@@ -94,12 +103,16 @@ class RouterBuilder:
         versioning: VersioningOptions | None = None,
     ):
         self._container = container
-        self._global_guards = global_guards or []
-        self._global_pipes = global_pipes or []
-        self._global_interceptors = global_interceptors or []
-        self._global_filters = global_filters or []
+        # `app.use_global_*()` instances first, then providers registered under APP_GUARD & co.
+        self._global_guards = [*(global_guards or []), *self._di_globals("guards")]
+        self._global_pipes = [*(global_pipes or []), *self._di_globals("pipes")]
+        self._global_interceptors = [*(global_interceptors or []), *self._di_globals("interceptors")]
+        self._global_filters = [*(global_filters or []), *self._di_globals("filters")]
         self._global_prefix = global_prefix
         self._versioning = versioning
+
+    def _di_globals(self, kind: str) -> list[_ContainerToken]:
+        return [_ContainerToken(token) for token in self._container.global_components(kind)]
 
     def build(self, controllers: list[type]) -> APIRouter:
         root_router = APIRouter()
@@ -123,6 +136,13 @@ class RouterBuilder:
             self._register_route(root_router, controller_meta, controller_cls, name, member, instance, route_meta)
 
     def _resolve_item(self, item: Any) -> Any:
+        if isinstance(item, _ContainerToken):
+            token = item.token
+            return (
+                _ScopedRef(self._container, token)
+                if self._container.is_request_bound(token)
+                else (self._container.resolve(token))
+            )
         if isinstance(item, type):
             return (
                 _ScopedRef(self._container, item)
@@ -322,7 +342,7 @@ class RouterBuilder:
             try:
                 target_instance = instance if instance is not None else container.resolve(controller_cls)
                 handler = getattr(target_instance, name)
-                context = ExecutionContext(request, controller_cls, handler)
+                context = ExecutionContext(request, controller_cls, handler, response)
 
                 for guard in _materialize(guards):
                     if not await guard.can_activate(context):
@@ -338,6 +358,7 @@ class RouterBuilder:
                         type=param_kind(marker) if marker is not None else "custom",  # type: ignore[arg-type]
                         data=arg_name,
                         metatype=annotation if isinstance(annotation, type) else type(value),
+                        request=request,
                     )
                     for pipe in [*scoped_pipes, *_materialize(param_pipes.get(arg_name, []))]:
                         value = pipe.transform(value, metadata)

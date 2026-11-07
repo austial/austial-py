@@ -23,6 +23,8 @@ dependencies = [
     "austial-jobs",
     "austial-storage",
     "austial-i18n",
+    "austial-cache",
+    "austial-events",
 ]
 
 [project.scripts]
@@ -52,6 +54,8 @@ austial-audit = { workspace = true }
 austial-jobs = { workspace = true }
 austial-storage = { workspace = true }
 austial-i18n = { workspace = true }
+austial-cache = { workspace = true }
+austial-events = { workspace = true }
 
 [tool.hatch.version]
 source = "vcs"

@@ -12,6 +12,7 @@ shapes as plain dicts: ``{"provide": TOKEN, "useValue": ...}``,
 from __future__ import annotations
 
 import inspect
+import types
 import typing
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -23,6 +24,7 @@ from austial.core.forward_ref import ForwardReference, LazyProvider, unwrap
 from austial.core.metadata import INJECTABLE_METADATA, MODULE_METADATA, get_metadata
 from austial.core.module_ref import ModuleRef
 from austial.core.request_context import REQUEST, get_current_context
+from austial.core.tokens import GLOBAL_COMPONENT_KINDS
 
 _UNSET = object()
 
@@ -56,6 +58,16 @@ class RequestScopeError(Exception):
         )
 
 
+class AsyncProviderNotInitializedError(Exception):
+    def __init__(self, token: Any):
+        name = getattr(token, "__name__", token)
+        super().__init__(
+            f"'{name}' is built by an async factory that hasn't run yet. Async providers are awaited when the "
+            f"application initialises: use `await app.init()` (automatic under `austial serve`/uvicorn, "
+            f"`create_application_context()` and `await Test...compile()`)."
+        )
+
+
 @dataclass
 class ProviderDefinition:
     token: Any
@@ -65,6 +77,7 @@ class ProviderDefinition:
     use_existing: Any = _UNSET
     inject: Sequence[Any] = field(default_factory=list)
     scope: Scope = Scope.DEFAULT
+    is_async: bool = False  # `use_factory` is a coroutine function, awaited by init_async_providers()
 
 
 @dataclass
@@ -86,6 +99,15 @@ class _Dependency:
     defaulted: bool = False  # the parameter has its own default value
 
 
+def _unwrap_optional(hint: Any) -> Any:
+    """``X`` for ``X | None`` / ``Optional[X]`` (exactly one non-None member), else ``None``."""
+    if typing.get_origin(hint) not in (typing.Union, types.UnionType):
+        return None
+    members = typing.get_args(hint)
+    non_none = [arg for arg in members if arg is not type(None)]
+    return non_none[0] if len(non_none) == 1 and len(members) == 2 else None
+
+
 class Container:
     """One container per application. Every module's providers/controllers
     register into the same container (Nest's DI graph is application-wide
@@ -101,7 +123,10 @@ class Container:
         self._singletons: dict[Any, Any] = {}
         self._controllers: list[type] = []
         self._scope_cache: dict[Any, bool] = {}
+        self._global_components: dict[str, list[Any]] = {kind: [] for kind in GLOBAL_COMPONENT_KINDS.values()}
         self.module_records: list[ModuleRecord] = []
+        # Called for a token nothing registered (see TestingModuleBuilder.use_mocker); returns a stand-in or None.
+        self.mocker: Callable[[Any], Any] | None = None
         self.internal_tokens: set[Any] = set()  # framework-provided tokens, hidden from DiscoveryService
         self.lifecycle = LifecycleManager(self)
         module_ref = ModuleRef(self)
@@ -115,6 +140,13 @@ class Container:
 
     # -- registration -----------------------------------------------------------------
     def register(self, provider: Any) -> ProviderDefinition:
+        if isinstance(provider, dict) and isinstance(provider.get("provide"), str):
+            kind = GLOBAL_COMPONENT_KINDS.get(provider["provide"])
+            if kind is not None:
+                # APP_GUARD & co. may be registered many times: file each one under its own unique token.
+                unique = f"{provider['provide']}#{len(self._global_components[kind])}"
+                self._global_components[kind].append(unique)
+                provider = {**provider, "provide": unique}
         definition = self._normalize(provider)
         self._definitions[definition.token] = definition
         self._scope_cache.clear()
@@ -134,6 +166,12 @@ class Container:
         self._singletons[token] = instance
         self._definitions.setdefault(token, ProviderDefinition(token=token, use_value=instance))
         self._scope_cache.clear()
+
+    def global_components(self, kind: str) -> list[Any]:
+        """Tokens of the providers registered under ``APP_GUARD``/``APP_PIPE``/``APP_INTERCEPTOR``/
+        ``APP_FILTER`` (``kind`` is ``"guards"``, ``"pipes"``, ``"interceptors"`` or ``"filters"``),
+        in registration order."""
+        return list(self._global_components[kind])
 
     @property
     def controllers(self) -> list[type]:
@@ -157,11 +195,17 @@ class Container:
                 scope = get_metadata(INJECTABLE_METADATA, use_class, {}).get("scope", Scope.DEFAULT)
                 return ProviderDefinition(token=token, use_class=use_class, scope=scope)
             if "useFactory" in provider:
+                factory = provider["useFactory"]
+                is_async = inspect.iscoroutinefunction(factory)
+                scope = provider.get("scope", Scope.DEFAULT)
+                if is_async and scope != Scope.DEFAULT:
+                    raise ValueError("An async factory provider must be a singleton (scope DEFAULT).")
                 return ProviderDefinition(
                     token=token,
-                    use_factory=provider["useFactory"],
+                    use_factory=factory,
                     inject=provider.get("inject", []),
-                    scope=provider.get("scope", Scope.DEFAULT),
+                    scope=scope,
+                    is_async=is_async,
                 )
             if "useExisting" in provider:
                 return ProviderDefinition(token=token, use_existing=unwrap(provider["useExisting"]))
@@ -173,7 +217,12 @@ class Container:
 
     def _definition_for(self, token: Any) -> ProviderDefinition | None:
         definition = self._definitions.get(token)
-        if definition is None and isinstance(token, type):
+        if definition is None and self.mocker is not None:
+            mock = self.mocker(token)
+            if mock is not None:
+                definition = self.register({"provide": token, "useValue": mock})
+        if definition is None and isinstance(token, type) and token.__module__ != "builtins":
+            # Builtins (`str`, `int`, ...) are never auto-built: `str()` is "", not a dependency.
             # Auto-register unregistered `@Injectable` classes encountered
             # only as a nested constructor dependency -- keeps things
             # working even if a provider was forgotten in `providers=[]`.
@@ -271,19 +320,47 @@ class Container:
         if definition.use_existing is not _UNSET:
             return self.resolve(definition.use_existing, _resolving=resolving)
         if definition.use_factory is not None:
-            deps = []
-            for entry in definition.inject:
-                token, optional = self._factory_token(entry)
-                try:
-                    deps.append(self.resolve(token, _resolving=resolving))
-                except ProviderNotFoundError:
-                    if not optional:
-                        raise
-                    deps.append(None)
-            return definition.use_factory(*deps)
+            if definition.is_async:
+                raise AsyncProviderNotInitializedError(definition.token)
+            return definition.use_factory(*self._factory_args(definition, resolving))
         assert definition.use_class is not None
         kwargs = self._resolve_constructor_args(definition.use_class, resolving)
         return definition.use_class(**kwargs)
+
+    def _factory_args(self, definition: ProviderDefinition, resolving: frozenset) -> list[Any]:
+        args: list[Any] = []
+        for entry in definition.inject:
+            token, optional = self._factory_token(entry)
+            try:
+                args.append(self.resolve(token, _resolving=resolving))
+            except ProviderNotFoundError:
+                if not optional:
+                    raise
+                args.append(None)
+        return args
+
+    async def init_async_providers(self) -> None:
+        """Awaits every ``useFactory`` provider whose factory is ``async``, dependencies first, and
+        caches the results as singletons -- after which they resolve like any other provider. Called
+        when the application initialises; idempotent."""
+        done: set[Any] = set()
+        for definition in list(self._definitions.values()):
+            await self._ensure_ready(definition.token, done)
+
+    async def _ensure_ready(self, token: Any, done: set[Any]) -> None:
+        if token in done or token in self._singletons:
+            return
+        done.add(token)
+        definition = self._definitions.get(token)
+        if definition is None and isinstance(token, type):
+            definition = self._definition_for(token)
+        if definition is None or definition.scope != Scope.DEFAULT or self.is_request_bound(token):
+            return
+        for dep in self._dependency_tokens(definition):
+            await self._ensure_ready(dep, done)
+        if definition.is_async and definition.use_factory is not None:
+            args = self._factory_args(definition, frozenset({token}))
+            self._singletons[token] = await definition.use_factory(*args)
 
     def _constructor_plan(self, cls: type) -> list[_Dependency]:
         init = cls.__init__  # type: ignore[misc]  # deliberately dynamic: `cls` is any registered provider class
@@ -316,7 +393,13 @@ class Container:
 
             hint = hints.get(name)
             if hint is not None:
-                plan.append(_Dependency(name, hint, defaulted=default is not inspect.Parameter.empty))
+                has_default = default is not inspect.Parameter.empty
+                inner = _unwrap_optional(hint)
+                if inner is not None:
+                    # `Dep | None`: inject `Dep` when the container provides it, else None / the default.
+                    plan.append(_Dependency(name, inner, optional=not has_default, defaulted=has_default))
+                else:
+                    plan.append(_Dependency(name, hint, defaulted=has_default))
             elif default is inspect.Parameter.empty:
                 raise ProviderNotFoundError(name)
             # else: no annotation, has its own default -> let the class use it.
@@ -326,7 +409,7 @@ class Container:
         """A parameter with a default value is only injected when its type is something the
         container actually provides (registered, or an ``@Injectable`` class). Otherwise
         ``def __init__(self, retries: int = 3)`` would be handed a built ``int()`` instead of ``3``."""
-        if not dep.defaulted or dep.lazy or dep.optional:
+        if not dep.defaulted or dep.lazy:
             return True
         return self.has(dep.token) or (
             isinstance(dep.token, type) and get_metadata(INJECTABLE_METADATA, dep.token) is not None

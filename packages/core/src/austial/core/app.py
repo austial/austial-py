@@ -109,6 +109,13 @@ class AustialApplication(AustialApplicationContext):
         )
         return self
 
+    def use_logger(self, logger: Any) -> AustialApplication:
+        """Replaces the framework's logger (a ``LoggerService``, a list of levels, or ``False``) and flushes
+        any output held back by ``buffer_logs=True``. Mirrors ``app.useLogger()``."""
+        Logger.override_logger(logger)
+        Logger.flush()
+        return self
+
     def use_static_assets(self, directory: str, *, prefix: str = "/", **options: Any) -> AustialApplication:
         """Serves the files in ``directory`` under ``prefix`` (``html=True`` serves ``index.html``),
         mirrors Nest's ``app.useStaticAssets``. Mounted *after* the API routes, so those win."""
@@ -150,6 +157,8 @@ class AustialApplication(AustialApplicationContext):
         """Builds routes and runs the ``on_module_init`` / ``on_application_bootstrap`` hooks
         without starting a server -- mirrors Nest's ``await app.init()``, the entry point
         ``@nestjs/testing`` e2e tests use alongside ``request(app.getHttpServer())``."""
+        Logger.flush()
+        await self._container.init_async_providers()  # controllers may depend on async providers
         self._build_routes()
         await super().init()
         return self
@@ -195,15 +204,24 @@ class AustialApplication(AustialApplicationContext):
     def _install_fallback_exception_handlers(self) -> None:
         async def handle_validation_error(request: Request, exc: RequestValidationError) -> Response:
             converted = BadRequestException({"message": jsonable_encoder(exc.errors()), "error": "Bad Request"})
-            filters = self._global_filters or [AllExceptionsFilter()]
-            return await dispatch_exception(converted, request, filters)
+            return await dispatch_exception(converted, request, self._fallback_filters())
 
         async def handle_uncaught(request: Request, exc: Exception) -> Response:
-            filters = self._global_filters or [AllExceptionsFilter()]
-            return await dispatch_exception(exc, request, filters)
+            return await dispatch_exception(exc, request, self._fallback_filters())
 
         self._fastapi_app.add_exception_handler(RequestValidationError, handle_validation_error)  # type: ignore[arg-type]
         self._fastapi_app.add_exception_handler(Exception, handle_uncaught)
+
+    def _fallback_filters(self) -> list:
+        """Filters for errors raised outside a route handler (e.g. FastAPI's own validation errors):
+        ``use_global_filters`` instances, filters registered under ``APP_FILTER``, then the default
+        ``AllExceptionsFilter`` so nothing escapes unrendered."""
+        filters = list(self._global_filters)
+        for token in self._container.global_components("filters"):
+            if not self._container.is_request_bound(token):
+                filters.append(self._container.resolve(token))
+        filters.append(AllExceptionsFilter())
+        return filters
 
     def _install_middleware(self) -> None:
         if not self._middleware_bindings:

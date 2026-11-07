@@ -52,6 +52,8 @@ mypy_path = [
     "packages/auth/src",
     "packages/authz/src",
     "packages/audit/src",
+    "packages/cache/src",
+    "packages/events/src",
     "packages/cli/src",
     "packages/i18n/src",
     "packages/jobs/src",

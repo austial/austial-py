@@ -15,8 +15,14 @@ class ArgumentsHost:
     def __init__(self, request: Request):
         self._request = request
 
+    def get_type(self) -> str:
+        return "http"
+
     def switch_to_http(self) -> ArgumentsHost:
         return self
+
+    def get_args(self) -> list:
+        return [self._request, None]
 
     def get_request(self) -> Request:
         return self._request

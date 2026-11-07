@@ -60,7 +60,7 @@ def test_defaulted_param_is_injected_when_its_type_is_provided() -> None:
     container.register(Dep)
     needs = container.resolve(Needs)
     assert needs.other is container.resolve(Dep)  # `Dep`-typed + provided -> injected despite the default
-    assert needs.dep is None  # a union type isn't a provider token -> default kept
+    assert needs.dep is container.resolve(Dep)  # `Dep | None` is unwrapped: provided -> injected
 
 
 @Injectable()
@@ -253,3 +253,17 @@ def test_scanner_registers_controllers_from_dynamic_modules() -> None:
     result = scan_module(Module(imports=[dynamic])(type("Root2", (), {})), container)
     assert result.controllers == [DynController]
     assert container.controllers == [DynController]
+
+
+class OptionalDeps:
+    def __init__(self, present: Present | None, missing: str | None, plain: Dep | None = None):
+        self.present, self.missing, self.plain = present, missing, plain
+
+
+def test_optional_union_hints_inject_when_provided_and_fall_back_otherwise() -> None:
+    container = Container()
+    container.register(Present)
+    deps = container.resolve(OptionalDeps)
+    assert isinstance(deps.present, Present)  # `Present | None`, registered -> injected
+    assert deps.missing is None  # `str | None` with no provider and no default -> None, not an error
+    assert isinstance(deps.plain, Dep)  # `Dep | None = None`: Dep is @Injectable, so it is provided anyway

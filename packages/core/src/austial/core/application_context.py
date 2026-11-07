@@ -17,6 +17,7 @@ import os
 import signal as signal_module
 from typing import Any
 
+from austial.common.logger import Logger
 from austial.core.container import Container
 from austial.core.module_ref import ModuleRef
 from austial.core.request_context import ContextId
@@ -51,6 +52,8 @@ class AustialApplicationContext:
         if not self._initialized:
             self._initialized = True
             self._install_signal_handlers()
+            Logger.flush()
+            await self._container.init_async_providers()
             await self._container.lifecycle.run_init()
         return self
 

@@ -86,7 +86,7 @@ from austial.common.lifecycle import (
     OnModuleDestroy,
     OnModuleInit,
 )
-from austial.common.logger import Logger
+from austial.common.logger import LOG_LEVELS, ConsoleLogger, Logger, LoggerService
 from austial.common.mapped_types import IntersectionType, OmitType, PartialType, PickType
 from austial.common.middleware import LoggingMiddleware, MiddlewareConsumer, NestMiddleware
 from austial.common.pipes import (
@@ -109,6 +109,9 @@ from austial.common.serializer import ClassSerializerInterceptor, Exclude, Expos
 from austial.common.sse import MessageEvent
 
 __all__ = [
+    "LOG_LEVELS",
+    "ConsoleLogger",
+    "LoggerService",
     "DeferredParam",
     "HostParam",
     "Ip",

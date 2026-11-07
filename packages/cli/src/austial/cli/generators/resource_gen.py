@@ -7,7 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from austial.cli.generators.app_module_patcher import register_module
-from austial.cli.generators.base import find_project_root, render, write_file
+from austial.cli.generators.base import find_project_root, is_dry_run, render, write_file
 from austial.cli.naming import to_kebab_case, to_pascal_case, to_snake_case
 
 
@@ -30,7 +30,7 @@ def generate_resource(name: str, *, project_root: Path | None = None) -> Path:
     write_file(module_dir / f"{snake_name}_module.py", render("resource/module.py.j2", **ctx))
 
     app_module_path = root / "src" / "app_module.py"
-    if app_module_path.exists():
+    if app_module_path.exists() and not is_dry_run():
         register_module(
             app_module_path,
             f"{class_name}Module",

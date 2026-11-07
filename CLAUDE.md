@@ -1,7 +1,7 @@
 # Austial (framework repo)
 
 A NestJS-style, batteries-included web framework for Python on FastAPI. This repo is the **framework**
-(a uv workspace of 17 independently published packages under `packages/`). It has no sample app: the
+(a uv workspace of 19 independently published packages under `packages/`). It has no sample app: the
 generated project from `austial new` plays that role. The documentation site is a **separate repo**,
 `../austial-py-doc` (Next.js + Nextra, MDX under `content/`).
 
@@ -27,7 +27,7 @@ Run `/code-reviewer` on your own diff before committing or opening a PR.
 | `packages/core` | DI `Container`, module scanner, `RouterBuilder`, `AustialApplication`, lifecycle, request context, `ModuleRef` |
 | `packages/common` | Decorators, pipes, guards, interceptors, filters, exceptions, `StreamableFile`, serializer, mapped types |
 | `packages/austial` | The umbrella `austial` package: re-exports the everyday symbols and owns the CLI entry point |
-| `packages/{orm,config,terminus,testing,cli,auth,authz,tenancy,security,audit,jobs,storage,i18n,migrations}` | One feature each; `austial.<name>` via a pkgutil namespace shim |
+| `packages/{orm,config,terminus,testing,cli,auth,authz,tenancy,security,audit,jobs,storage,i18n,migrations,cache,events}` | One feature each; `austial.<name>` via a pkgutil namespace shim |
 
 - A new **public** symbol is exported from its package `__init__.py` **and** from
   `packages/austial/src/austial/__init__.py` (+ `__all__`) when it is an everyday import.
@@ -50,6 +50,11 @@ Run `/code-reviewer` on your own diff before committing or opening a PR.
 - Constructor params *with defaults* are injected only when their type is provided (`retries: int = 3`
   keeps `3`). Annotations are read with `typing.get_type_hints`; classes defined inside a function with
   `from __future__ import annotations` can't be resolved, so define DI test fixtures at module level.
+- **Async factory providers** are awaited by `Container.init_async_providers()` (called from `init()`, the ASGI
+  lifespan, `create_application_context()` and `compile()`); sync `resolve()` of one that hasn't run raises.
+- **`APP_GUARD`/`APP_PIPE`/`APP_INTERCEPTOR`/`APP_FILTER`** providers are filed under unique tokens by
+  `Container.register` and picked up by `RouterBuilder`; the filter chain always ends in `AllExceptionsFilter`.
+- Builtin types are never auto-built by the container, and `X | None` hints are unwrapped.
 - Param helpers (`Param`, `Query`, ...) are **default values**, not decorators. Values that must be read
   after guards ran are `DeferredParam`s.
 

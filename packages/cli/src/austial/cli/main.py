@@ -5,6 +5,9 @@ austial generate module cats      (alias: austial g module cats)
 austial generate controller cats
 austial generate service cats
 austial generate resource cats
+austial generate guard auth/api-key [--flat] [--dry-run]
+   (also: pipe, interceptor, filter, middleware, decorator, class)
+austial info
 austial serve
 """
 
@@ -16,13 +19,15 @@ import typer
 from rich.console import Console
 
 from austial.cli.generators import (
+    COMPONENT_KINDS,
     create_new_project,
+    generate_component,
     generate_controller,
     generate_module,
     generate_resource,
     generate_service,
 )
-from austial.cli.generators.base import ProjectNotFoundError, find_project_root
+from austial.cli.generators.base import ProjectNotFoundError, dry_run, find_project_root
 
 console = Console()
 app = typer.Typer(
@@ -36,8 +41,31 @@ _SCHEMATICS = {
     "module": generate_module,
     "controller": generate_controller,
     "service": generate_service,
+    "provider": generate_service,  # Nest calls a service a "provider"; same schematic
     "resource": generate_resource,
 }
+
+# Schematics that accept `--flat` (the ones that create a single file rather than a feature folder).
+_FLAT_SCHEMATICS = set(COMPONENT_KINDS)
+
+# `nest g` short aliases.
+_ALIASES = {
+    "mo": "module",
+    "co": "controller",
+    "s": "service",
+    "pr": "provider",
+    "r": "resource",
+    "gu": "guard",
+    "pi": "pipe",
+    "in": "interceptor",
+    "f": "filter",
+    "mi": "middleware",
+    "d": "decorator",
+    "cl": "class",
+}
+
+_ALL_SCHEMATICS = sorted({*_SCHEMATICS, *COMPONENT_KINDS})
+_SCHEMATIC_HELP = "One of: " + ", ".join(_ALL_SCHEMATICS) + " (or a short alias: " + ", ".join(sorted(_ALIASES)) + ")"
 
 
 @app.command("new")
@@ -78,35 +106,82 @@ def new_project(
     console.print("  uv run austial serve\n")
 
 
-def _generate(schematic: str, name: str) -> None:
-    schematic = schematic.lower()
-    if schematic not in _SCHEMATICS:
-        console.print(f"[bold red]Unknown schematic[/bold red] '{schematic}'. Choose one of: {', '.join(_SCHEMATICS)}.")
+def _generate(schematic: str, name: str, *, flat: bool = False, dry: bool = False) -> None:
+    schematic = _ALIASES.get(schematic.lower(), schematic.lower())
+    if schematic not in _ALL_SCHEMATICS:
+        console.print(
+            f"[bold red]Unknown schematic[/bold red] '{schematic}'. Choose one of: {', '.join(_ALL_SCHEMATICS)}."
+        )
         raise typer.Exit(code=1)
+    if flat and schematic not in _FLAT_SCHEMATICS:
+        console.print(f"[bold red]\u2716[/bold red] --flat applies to: {', '.join(sorted(_FLAT_SCHEMATICS))}.")
+        raise typer.Exit(code=1)
+
+    def run() -> Path:
+        if schematic in COMPONENT_KINDS:
+            return generate_component(schematic, name, flat=flat)
+        return _SCHEMATICS[schematic](name)
+
     try:
-        path = _SCHEMATICS[schematic](name)
+        if dry:
+            with dry_run() as created:
+                run()
+            for path in created:
+                console.print(f"[bold yellow]CREATE[/bold yellow] {path} [dim](dry run)[/dim]")
+            console.print("[dim]Dry run: nothing was written.[/dim]")
+            return
+        path = run()
     except ProjectNotFoundError as exc:
         console.print(f"[bold red]\u2716[/bold red] {exc}")
         raise typer.Exit(code=1) from exc
     console.print(f"[bold green]CREATE[/bold green] {path}")
 
 
+_FLAT_HELP = "Don't create a folder for the file (guard, pipe, interceptor, filter, middleware, decorator, class)."
+_DRY_HELP = "Show what would be created without writing anything."
+
+
 @app.command("generate")
 def generate(
-    schematic: str = typer.Argument(..., help="One of: module, controller, service, resource"),
-    name: str = typer.Argument(..., help="Name for the generated artifact, e.g. 'cats'."),
+    schematic: str = typer.Argument(..., help=_SCHEMATIC_HELP),
+    name: str = typer.Argument(..., help="Name, optionally with a path: 'cats' or 'auth/api-key'."),
+    flat: bool = typer.Option(False, "--flat", help=_FLAT_HELP),
+    dry: bool = typer.Option(False, "--dry-run", "-d", help=_DRY_HELP),
 ) -> None:
-    """Generate a module/controller/service/resource -- mirrors `nest generate`."""
-    _generate(schematic, name)
+    """Generate an artifact -- mirrors `nest generate`."""
+    _generate(schematic, name, flat=flat, dry=dry)
 
 
 @app.command("g", hidden=True)
 def generate_alias(
-    schematic: str = typer.Argument(..., help="One of: module, controller, service, resource"),
-    name: str = typer.Argument(..., help="Name for the generated artifact, e.g. 'cats'."),
+    schematic: str = typer.Argument(..., help=_SCHEMATIC_HELP),
+    name: str = typer.Argument(..., help="Name, optionally with a path: 'cats' or 'auth/api-key'."),
+    flat: bool = typer.Option(False, "--flat", help=_FLAT_HELP),
+    dry: bool = typer.Option(False, "--dry-run", "-d", help=_DRY_HELP),
 ) -> None:
     """Alias for `generate` -- mirrors Nest CLI's `nest g`."""
-    _generate(schematic, name)
+    _generate(schematic, name, flat=flat, dry=dry)
+
+
+@app.command("info")
+def info() -> None:
+    """Prints Python, platform and installed Austial package versions -- mirrors `nest info`."""
+    import importlib.metadata as metadata
+    import platform
+
+    console.print(f"[bold]Python[/bold]    {platform.python_version()} ({platform.system()} {platform.machine()})")
+    packages = sorted(
+        (dist.metadata["Name"], dist.version)
+        for dist in metadata.distributions()
+        if (dist.metadata["Name"] or "").lower().startswith("austial")
+    )
+    console.print("[bold]Austial packages[/bold]")
+    for name, version in packages:
+        console.print(f"  {name:<22} {version}")
+    try:
+        console.print(f"[bold]Project[/bold]   {find_project_root()}")
+    except ProjectNotFoundError:
+        console.print("[bold]Project[/bold]   [dim](not inside an Austial project)[/dim]")
 
 
 @app.command("serve")

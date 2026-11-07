@@ -1,0 +1,11 @@
+from austial.core.metadata import set_metadata
+
+{{ constant_name }}_KEY = "{{ snake_name }}"
+
+
+def {{ class_name }}(*values: str):
+    """Marks a controller or handler: ``@{{ class_name }}("a", "b")``.
+
+    Read it back with ``Reflector.get({{ constant_name }}_KEY, context.get_handler())`` in a guard or interceptor.
+    """
+    return set_metadata({{ constant_name }}_KEY, list(values))
