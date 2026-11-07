@@ -1,0 +1,45 @@
+name: Claude
+
+# `@claude` in an issue, PR comment or review: Claude reads the repo (CLAUDE.md, .claude/) and can
+# implement, fix or answer. The action only responds to users with write access.
+# Setup: install the Claude GitHub App and add an `ANTHROPIC_API_KEY` repository secret
+# (or `claude_code_oauth_token`). See https://github.com/anthropics/claude-code-action
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  issues:
+    types: [opened, assigned]
+
+jobs:
+  claude:
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write  # required by the action's auth exchange
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages --group dev
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: |
+            --max-turns 20
+            --allowedTools "Bash(uv run pytest *),Bash(uv run ruff *),Bash(uv run mypy *),Edit,Read,Write,Glob,Grep"

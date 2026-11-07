@@ -1,0 +1,12 @@
+from typing import Any
+
+from austial import CallHandler, ExecutionContext, Injectable, NestInterceptor
+
+
+@Injectable()
+class {{ class_name }}Interceptor(NestInterceptor):
+    async def intercept(self, context: ExecutionContext, next: CallHandler) -> Any:
+        # Runs before the handler...
+        result = await next.handle()
+        # ...and after it.
+        return result

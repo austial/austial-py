@@ -11,17 +11,23 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable
+from typing import Any
 
 from fastapi import APIRouter, Request, Response
+from fastapi import params as fastapi_params
+from starlette.responses import RedirectResponse, StreamingResponse
 
 from austial.common.decorators.controllers import ControllerMetadata, RouteMetadata
-from austial.common.decorators.params import GuardStateMarker
+from austial.common.decorators.params import DeferredParam, get_param_pipes, is_raw_string_param, param_kind
+from austial.common.enums import VersioningType
 from austial.common.exceptions.http_exceptions import ForbiddenException
+from austial.common.file.streamable_file import StreamableFile
 from austial.common.filters.all_exceptions_filter import AllExceptionsFilter
 from austial.common.guards.base import ExecutionContext
 from austial.common.interceptors.base import CallHandler
 from austial.common.logger import Logger
 from austial.common.pipes.validation_pipe import ArgumentMetadata
+from austial.common.sse import format_sse
 from austial.core.container import Container
 from austial.core.exception_dispatch import dispatch_exception
 from austial.core.metadata import (
@@ -32,8 +38,21 @@ from austial.core.metadata import (
     HTTP_CODE_METADATA,
     INTERCEPTORS_METADATA,
     PIPES_METADATA,
+    REDIRECT_METADATA,
     ROUTE_METADATA,
+    SSE_METADATA,
+    VERSION_METADATA,
     get_metadata,
+)
+from austial.core.request_context import ContextIdFactory, use_context
+from austial.core.routing import (
+    GlobalPrefix,
+    VersioningOptions,
+    effective_versions,
+    host_matcher,
+    route_class_for,
+    uri_version_segment,
+    version_matcher,
 )
 
 _logger = Logger("RoutesResolver")
@@ -41,6 +60,34 @@ _logger = Logger("RoutesResolver")
 _REQUEST_PARAM_NAME = "__austial_request__"
 _RESPONSE_PARAM_NAME = "__austial_response__"
 _DEFAULT_STATUS = {"POST": 201}
+_ALL_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
+
+
+class _ContainerToken:
+    """A global component registered through DI (``{"provide": APP_GUARD, ...}``), by its unique token."""
+
+    __slots__ = ("token",)
+
+    def __init__(self, token: Any) -> None:
+        self.token = token
+
+
+class _ScopedRef:
+    """A pipeline component (guard, pipe, interceptor, filter) that depends on request-scoped
+    providers: it can't be built at startup, so it's resolved afresh for every request."""
+
+    __slots__ = ("_container", "_token")
+
+    def __init__(self, container: Container, token: Any) -> None:
+        self._container = container
+        self._token = token
+
+    def get(self) -> Any:
+        return self._container.resolve(self._token)
+
+
+def _materialize(items: list) -> list:
+    return [item.get() if isinstance(item, _ScopedRef) else item for item in items]
 
 
 class RouterBuilder:
@@ -52,12 +99,20 @@ class RouterBuilder:
         global_pipes: list | None = None,
         global_interceptors: list | None = None,
         global_filters: list | None = None,
+        global_prefix: GlobalPrefix | None = None,
+        versioning: VersioningOptions | None = None,
     ):
         self._container = container
-        self._global_guards = global_guards or []
-        self._global_pipes = global_pipes or []
-        self._global_interceptors = global_interceptors or []
-        self._global_filters = global_filters or []
+        # `app.use_global_*()` instances first, then providers registered under APP_GUARD & co.
+        self._global_guards = [*(global_guards or []), *self._di_globals("guards")]
+        self._global_pipes = [*(global_pipes or []), *self._di_globals("pipes")]
+        self._global_interceptors = [*(global_interceptors or []), *self._di_globals("interceptors")]
+        self._global_filters = [*(global_filters or []), *self._di_globals("filters")]
+        self._global_prefix = global_prefix
+        self._versioning = versioning
+
+    def _di_globals(self, kind: str) -> list[_ContainerToken]:
+        return [_ContainerToken(token) for token in self._container.global_components(kind)]
 
     def build(self, controllers: list[type]) -> APIRouter:
         root_router = APIRouter()
@@ -67,9 +122,10 @@ class RouterBuilder:
 
     def _register_controller(self, root_router: APIRouter, controller_cls: type) -> None:
         controller_meta: ControllerMetadata = get_metadata(CONTROLLER_METADATA, controller_cls) or ControllerMetadata()
-        instance = self._container.resolve(controller_cls)
-        tags = controller_meta.tags or [controller_cls.__name__.replace("Controller", "") or controller_cls.__name__]
-        router = APIRouter(prefix=controller_meta.prefix, tags=tags)
+        # A controller that depends (even transitively) on a request-scoped provider is itself
+        # request-scoped: no instance exists at startup, one is built per request.
+        request_bound = self._container.is_request_bound(controller_cls)
+        instance = None if request_bound else self._container.resolve(controller_cls)
 
         for name, member in vars(controller_cls).items():
             if not callable(member):
@@ -77,12 +133,23 @@ class RouterBuilder:
             route_meta: RouteMetadata | None = get_metadata(ROUTE_METADATA, member)
             if route_meta is None:
                 continue
-            bound_handler = getattr(instance, name)
-            self._register_route(router, controller_meta, controller_cls, bound_handler, route_meta)
-            full_path = f"{controller_meta.prefix}{route_meta.path}" or "/"
-            _logger.log(f"Mapped {{{route_meta.method}, {full_path}}} route", context="RoutesResolver")
+            self._register_route(root_router, controller_meta, controller_cls, name, member, instance, route_meta)
 
-        root_router.include_router(router)
+    def _resolve_item(self, item: Any) -> Any:
+        if isinstance(item, _ContainerToken):
+            token = item.token
+            return (
+                _ScopedRef(self._container, token)
+                if self._container.is_request_bound(token)
+                else (self._container.resolve(token))
+            )
+        if isinstance(item, type):
+            return (
+                _ScopedRef(self._container, item)
+                if self._container.is_request_bound(item)
+                else (self._container.resolve(item))
+            )
+        return item
 
     def _resolve_chain(
         self,
@@ -97,33 +164,75 @@ class RouterBuilder:
         raw += get_metadata(key, handler, [])
         if not raw and default:
             raw = list(default)
-        resolved = []
-        for item in raw:
-            resolved.append(self._container.resolve(item) if isinstance(item, type) else item)
-        return resolved
+        return [self._resolve_item(item) for item in raw]
+
+    def _paths_for(
+        self, controller_meta: ControllerMetadata, route_meta: RouteMetadata, versions: list[str] | None
+    ) -> list[str]:
+        """Every concrete path a route is mounted at: global prefix + (URI version) + controller + route."""
+        base = f"{controller_meta.prefix}{route_meta.path}"
+        paths = [base]
+        if versions and self._versioning is not None and self._versioning.type == VersioningType.URI:
+            paths = [uri_version_segment(v, self._versioning) + base for v in versions]
+        if self._global_prefix is not None and self._global_prefix.applies_to(base or "/", route_meta.method):
+            paths = [f"/{self._global_prefix.prefix.strip('/')}{p}" for p in paths]
+        return [p or "/" for p in paths]
 
     def _register_route(
         self,
         router: APIRouter,
         controller_meta: ControllerMetadata,
         controller_cls: type,
-        handler: Callable,
+        name: str,
+        member: Callable,
+        instance: Any,
         route_meta: RouteMetadata,
     ) -> None:
-        guards = self._resolve_chain(GUARDS_METADATA, controller_cls, handler, self._global_guards)
-        interceptors = self._resolve_chain(INTERCEPTORS_METADATA, controller_cls, handler, self._global_interceptors)
-        pipes = self._resolve_chain(PIPES_METADATA, controller_cls, handler, self._global_pipes)
-        filters = self._resolve_chain(
-            FILTERS_METADATA, controller_cls, handler, self._global_filters, default=[AllExceptionsFilter()]
+        guards = self._resolve_chain(GUARDS_METADATA, controller_cls, member, self._global_guards)
+        interceptors = self._resolve_chain(INTERCEPTORS_METADATA, controller_cls, member, self._global_interceptors)
+        pipes = self._resolve_chain(PIPES_METADATA, controller_cls, member, self._global_pipes)
+        # `AllExceptionsFilter` always closes the chain: a scoped filter that doesn't match the exception
+        # must fall through to the standard Nest-shaped rendering instead of escaping as a bare exception.
+        filters = [
+            *self._resolve_chain(FILTERS_METADATA, controller_cls, member, self._global_filters),
+            AllExceptionsFilter(),
+        ]
+
+        redirect = get_metadata(REDIRECT_METADATA, member)
+        is_sse = bool(get_metadata(SSE_METADATA, member))
+        status_code = get_metadata(HTTP_CODE_METADATA, member) or _DEFAULT_STATUS.get(route_meta.method, 200)
+        headers_meta = get_metadata(HEADER_METADATA, member, {})
+
+        endpoint, return_annotation = self._build_endpoint(
+            controller_cls, name, member, instance, guards, interceptors, pipes, filters, headers_meta,
+            redirect=redirect, is_sse=is_sse, status_code=status_code,
+        )  # fmt: skip
+
+        versions = effective_versions(
+            get_metadata(VERSION_METADATA, member) or controller_meta.version, self._versioning
         )
+        matchers = [
+            m
+            for m in (
+                host_matcher(controller_meta.host),
+                version_matcher(versions, self._versioning) if self._versioning else None,
+            )
+            if m is not None
+        ]
+        methods = _ALL_METHODS if route_meta.method == "ALL" else [route_meta.method]
+        raw_return = return_annotation
+        skip_response_model = (
+            is_sse or redirect is not None or (isinstance(raw_return, type) and issubclass(raw_return, StreamableFile))
+        )
+        extra: dict[str, Any] = {"response_model": None} if skip_response_model else {}
+        route_class = route_class_for(matchers)
+        if route_class is not None:
+            extra["route_class_override"] = route_class
+        tags = controller_meta.tags or [controller_cls.__name__.replace("Controller", "") or controller_cls.__name__]
 
-        status_code = get_metadata(HTTP_CODE_METADATA, handler) or _DEFAULT_STATUS.get(route_meta.method, 200)
-        headers_meta = get_metadata(HEADER_METADATA, handler, {})
-
-        endpoint = self._build_endpoint(controller_cls, handler, guards, interceptors, pipes, filters, headers_meta)
-
-        path = route_meta.path or ("/" if not controller_meta.prefix else "")
-        router.add_api_route(path, endpoint, methods=[route_meta.method], status_code=status_code)
+        for path in self._paths_for(controller_meta, route_meta, versions):
+            router.add_api_route(path, endpoint, methods=methods, status_code=status_code, tags=tags, **extra)
+            _logger.log(f"Mapped {{{route_meta.method}, {path}}} route", context="RoutesResolver")
 
     @staticmethod
     def _wrap_interceptor(interceptor, context: ExecutionContext, next_call: Callable):
@@ -135,30 +244,57 @@ class RouterBuilder:
     def _build_endpoint(
         self,
         controller_cls: type,
-        handler: Callable,
+        name: str,
+        member: Callable,
+        instance: Any,
         guards: list,
         interceptors: list,
         pipes: list,
         filters: list,
         headers_meta: dict,
-    ) -> Callable:
-        original_sig = inspect.signature(handler, eval_str=True)  # bound method -> `self` already excluded
+        *,
+        redirect: dict | None,
+        is_sse: bool,
+        status_code: int,
+    ) -> tuple[Callable, Any]:
+        container = self._container
+        full_sig = inspect.signature(member, eval_str=True)
+        original_params = list(full_sig.parameters.values())[1:]  # drop `self`
+        original_sig = full_sig.replace(parameters=original_params)
+        is_coroutine = inspect.iscoroutinefunction(member)
 
-        # Params bound via `FromRequestState(...)` (e.g. `austial.auth.CurrentUser()`) read
-        # `request.state` as it stands *after* the guard loop below -- FastAPI must never resolve
-        # them itself (that would happen before the guard loop even runs, over an empty state), so
-        # they are stripped from `new_sig` entirely and injected manually inside `endpoint()`.
-        deferred_params: dict[str, GuardStateMarker] = {
-            name: p.default for name, p in original_sig.parameters.items() if isinstance(p.default, GuardStateMarker)
+        # Params bound via `FromRequestState(...)`, `Ip()`, `create_param_decorator(...)` etc. are
+        # `DeferredParam`s: they read the request as it stands *after* the guard loop below -- FastAPI
+        # must never resolve them itself (that would happen before the guards ran), so they are
+        # stripped from `new_sig` entirely and injected manually inside `endpoint()`.
+        deferred_params: dict[str, DeferredParam] = {
+            n: p.default for n, p in original_sig.parameters.items() if isinstance(p.default, DeferredParam)
         }
-        fastapi_params = [p for name, p in original_sig.parameters.items() if name not in deferred_params]
+        # Params carrying their own pipes (`Param("id", ParseIntPipe)`), applied after the scoped ones.
+        param_markers: dict[str, Any] = {
+            n: p.default
+            for n, p in original_sig.parameters.items()
+            if isinstance(p.default, fastapi_params.Param | fastapi_params.Body | fastapi_params.File)  # noqa: E501
+        }
+        param_pipes: dict[str, list] = {
+            n: [self._resolve_item(item) for item in get_param_pipes(marker)]
+            for n, marker in param_markers.items()
+            if get_param_pipes(marker)
+        }
+        annotations = {n: p.annotation for n, p in original_sig.parameters.items()}
 
-        request_param_name = next(
-            (name for name, p in original_sig.parameters.items() if p.annotation is Request), None
-        )
-        response_param_name = next(
-            (name for name, p in original_sig.parameters.items() if p.annotation is Response), None
-        )
+        fastapi_params_list = []
+        for n, p in original_sig.parameters.items():
+            if n in deferred_params:
+                continue
+            if n in param_markers and is_raw_string_param(param_markers[n]):
+                # Hand FastAPI the raw text: the attached pipes (ParseIntPipe, ...) do the parsing.
+                optional = getattr(param_markers[n], "default", ...) is None
+                p = p.replace(annotation=(str | None) if optional else str)
+            fastapi_params_list.append(p)
+
+        request_param_name = next((n for n, p in original_sig.parameters.items() if p.annotation is Request), None)
+        response_param_name = next((n for n, p in original_sig.parameters.items() if p.annotation is Response), None)
         extra_params = []
         if request_param_name is None:
             request_param_name = _REQUEST_PARAM_NAME
@@ -170,8 +306,81 @@ class RouterBuilder:
             extra_params.append(
                 inspect.Parameter(_RESPONSE_PARAM_NAME, kind=inspect.Parameter.KEYWORD_ONLY, annotation=Response)
             )
-        new_sig = original_sig.replace(parameters=[*fastapi_params, *extra_params])
-        is_coroutine = inspect.iscoroutinefunction(handler)
+        new_sig = original_sig.replace(parameters=[*fastapi_params_list, *extra_params])
+        skip_pipes = {request_param_name, response_param_name}
+
+        def finalize(result: Any, response: Response) -> Any:
+            """Turns Austial-specific return values (redirect, SSE, StreamableFile) into responses."""
+            converted: Response | None = None
+            if redirect is not None:
+                target = dict(redirect)
+                if isinstance(result, dict) and "url" in result:
+                    target.update({k: result[k] for k in ("url", "status_code") if k in result})
+                converted = RedirectResponse(target["url"], status_code=target["status_code"])
+            elif is_sse:
+                converted = StreamingResponse(
+                    _sse_frames(result),
+                    status_code=status_code,
+                    media_type="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+                )
+            elif isinstance(result, StreamableFile):
+                stream_headers = {k: v for k, v in result.headers.items() if k != "Content-Type"}
+                converted = StreamingResponse(
+                    result.stream(), status_code=status_code, media_type=result.type, headers=stream_headers
+                )
+            if converted is None:
+                for key, value in headers_meta.items():
+                    response.headers[key] = value
+                return result
+            for key, value in headers_meta.items():
+                converted.headers[key] = value
+            return converted
+
+        async def run(request: Request, response: Response, kwargs: dict[str, Any]) -> Any:
+            active_filters = _materialize(filters)
+            try:
+                target_instance = instance if instance is not None else container.resolve(controller_cls)
+                handler = getattr(target_instance, name)
+                context = ExecutionContext(request, controller_cls, handler, response)
+
+                for guard in _materialize(guards):
+                    if not await guard.can_activate(context):
+                        raise ForbiddenException("Forbidden resource")
+
+                scoped_pipes = _materialize(pipes)
+                for arg_name, value in list(kwargs.items()):
+                    if arg_name in skip_pipes:
+                        continue
+                    marker = param_markers.get(arg_name)
+                    annotation = annotations.get(arg_name)
+                    metadata = ArgumentMetadata(
+                        type=param_kind(marker) if marker is not None else "custom",  # type: ignore[arg-type]
+                        data=arg_name,
+                        metatype=annotation if isinstance(annotation, type) else type(value),
+                        request=request,
+                    )
+                    for pipe in [*scoped_pipes, *_materialize(param_pipes.get(arg_name, []))]:
+                        value = pipe.transform(value, metadata)
+                        if inspect.isawaitable(value):
+                            value = await value
+                    kwargs[arg_name] = value
+
+                # Populated only now, after every guard above has had the chance to write to
+                # `request.state` -- see `deferred_params`'s construction above.
+                for arg_name, deferred in deferred_params.items():
+                    kwargs[arg_name] = await deferred.resolve(context)
+
+                async def call_handler():
+                    return await handler(**kwargs) if is_coroutine else handler(**kwargs)
+
+                chain = call_handler
+                for interceptor in reversed(_materialize(interceptors)):
+                    chain = self._wrap_interceptor(interceptor, context, chain)
+
+                return finalize(await chain(), response)
+            except Exception as exc:  # noqa: BLE001 - dispatched to exception filters below
+                return await dispatch_exception(exc, request, active_filters)
 
         async def endpoint(**kwargs):
             request: Request = (
@@ -184,38 +393,20 @@ class RouterBuilder:
                 if response_param_name == _RESPONSE_PARAM_NAME
                 else kwargs[response_param_name]
             )
-            context = ExecutionContext(request, controller_cls, handler)
-
-            try:
-                for guard in guards:
-                    if not await guard.can_activate(context):
-                        raise ForbiddenException("Forbidden resource")
-
-                for name, value in list(kwargs.items()):
-                    metadata = ArgumentMetadata(type="custom", data=name, metatype=type(value))
-                    for pipe in pipes:
-                        value = pipe.transform(value, metadata)
-                    kwargs[name] = value
-
-                # Populated only now, after every guard above has had the chance to write to
-                # `request.state` -- see `deferred_params`'s construction above.
-                for name, marker in deferred_params.items():
-                    kwargs[name] = getattr(request.state, marker.attribute, marker.default)
-
-                async def call_handler():
-                    return await handler(**kwargs) if is_coroutine else handler(**kwargs)
-
-                chain = call_handler
-                for interceptor in reversed(interceptors):
-                    chain = self._wrap_interceptor(interceptor, context, chain)
-
-                result = await chain()
-                for key, value in headers_meta.items():
-                    response.headers[key] = value
-                return result
-            except Exception as exc:  # noqa: BLE001 - dispatched to exception filters below
-                return await dispatch_exception(exc, request, filters)
+            # Everything below -- guards, pipes, the handler, filters -- resolves request-scoped
+            # providers against this request's context.
+            with use_context(ContextIdFactory.get_by_request(request)):
+                return await run(request, response, kwargs)
 
         endpoint.__signature__ = new_sig  # type: ignore[attr-defined]  # FastAPI reads this to build the OpenAPI schema
-        endpoint.__name__ = getattr(handler, "__name__", "endpoint")
-        return endpoint
+        endpoint.__name__ = getattr(member, "__name__", "endpoint")
+        return endpoint, original_sig.return_annotation
+
+
+async def _sse_frames(source: Any):
+    if hasattr(source, "__aiter__"):
+        async for event in source:
+            yield format_sse(event)
+    else:
+        for event in source:
+            yield format_sse(event)

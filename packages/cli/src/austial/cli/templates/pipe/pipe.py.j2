@@ -1,0 +1,9 @@
+from typing import Any
+
+from austial import ArgumentMetadata, Injectable, PipeTransform
+
+
+@Injectable()
+class {{ class_name }}Pipe(PipeTransform):
+    def transform(self, value: Any, metadata: ArgumentMetadata) -> Any:
+        return value

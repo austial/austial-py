@@ -3,6 +3,9 @@ discovery, mirroring what the ``nest`` CLI's schematics engine does."""
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -23,12 +26,36 @@ def render(template_relpath: str, **context: Any) -> str:
     return template.render(**context)
 
 
+_dry_run: ContextVar[list[Path] | None] = ContextVar("austial_dry_run", default=None)
+
+
+@contextmanager
+def dry_run() -> Iterator[list[Path]]:
+    """Inside the block nothing is written; the paths that *would* be created are collected instead
+    (``austial generate ... --dry-run``)."""
+    created: list[Path] = []
+    token = _dry_run.set(created)
+    try:
+        yield created
+    finally:
+        _dry_run.reset(token)
+
+
+def is_dry_run() -> bool:
+    return _dry_run.get() is not None
+
+
 def write_file(path: Path, content: str, *, force: bool = False) -> bool:
     """Writes `content` to `path`, creating parent directories as needed.
     Returns False (and leaves the file untouched) if it already exists and
     `force` wasn't given -- mirrors `nest g`'s "already exists" guard."""
     if path.exists() and not force:
         return False
+    collector = _dry_run.get()
+    if collector is not None:
+        if path.name != "__init__.py":  # package markers are noise in the report
+            collector.append(path)
+        return True
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content)
     return True

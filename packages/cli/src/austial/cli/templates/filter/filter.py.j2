@@ -1,0 +1,11 @@
+from austial import ArgumentsHost, Catch, ExceptionFilter, HttpException, Injectable
+from starlette.responses import JSONResponse
+
+
+@Injectable()
+@Catch(HttpException)
+class {{ class_name }}Filter(ExceptionFilter):
+    async def catch(self, exception: HttpException, host: ArgumentsHost) -> JSONResponse:
+        request = host.get_request()
+        body = {**exception.get_response(), "path": request.url.path}
+        return JSONResponse(status_code=exception.get_status(), content=body)

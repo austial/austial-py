@@ -1,0 +1,8 @@
+from austial import CanActivate, ExecutionContext, Injectable
+
+
+@Injectable()
+class {{ class_name }}Guard(CanActivate):
+    async def can_activate(self, context: ExecutionContext) -> bool:
+        request = context.get_request()  # noqa: F841 - inspect headers, state, etc.
+        return True

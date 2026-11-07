@@ -1,0 +1,87 @@
+name: CI
+
+# Runs on every PR and on pushes to main: the same gate as pre-commit/publish.yml (lint, format, types,
+# tests) but across the supported Python versions, plus a coverage floor (see `fail_under` in
+# pyproject.toml). Publishing stays in publish.yml (tag-triggered) and re-runs the gate itself.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint & format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages --group dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  typecheck:
+    name: Type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages --group dev
+      - run: uv run mypy packages integration
+
+  test:
+    name: Test (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv python install ${{ matrix.python }}
+      - run: uv sync --all-packages --group dev --python ${{ matrix.python }}
+      - name: Test with coverage floor
+        run: uv run --python ${{ matrix.python }} pytest -q --cov --cov-report=term-missing --cov-report=xml
+      - uses: actions/upload-artifact@v4
+        if: matrix.python == '3.12'
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+  build:
+    name: Build all distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # hatch-vcs derives versions from tags
+      - uses: astral-sh/setup-uv@v3
+      - run: uv build --all-packages --out-dir dist
+
+  docs-sync:
+    name: Public API is documented (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true  # the docs live in another repo; flag drift without blocking the PR
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: austial/austial-py-doc
+          path: docs-site
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync --all-packages --group dev
+      - run: uv run python scripts/check_docs_sync.py docs-site/content

@@ -26,6 +26,10 @@ HTTP_CODE_METADATA = "austial:http_code"
 HEADER_METADATA = "austial:header"
 INJECT_TOKENS_METADATA = "austial:inject_tokens"
 CATCH_METADATA = "austial:catch"
+VERSION_METADATA = "austial:version"
+REDIRECT_METADATA = "austial:redirect"
+SSE_METADATA = "austial:sse"
+SERIALIZE_OPTIONS_METADATA = "austial:serialize_options"
 
 
 def _bucket(target: Any) -> dict:

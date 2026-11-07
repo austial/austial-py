@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -13,10 +13,12 @@ members = [
     "austial-audit",
     "austial-auth",
     "austial-authz",
+    "austial-cache",
     "austial-cli",
     "austial-common",
     "austial-config",
     "austial-core",
+    "austial-events",
     "austial-i18n",
     "austial-jobs",
     "austial-migrations",
@@ -248,10 +250,12 @@ dependencies = [
     { name = "austial-audit" },
     { name = "austial-auth" },
     { name = "austial-authz" },
+    { name = "austial-cache" },
     { name = "austial-cli" },
     { name = "austial-common" },
     { name = "austial-config" },
     { name = "austial-core" },
+    { name = "austial-events" },
     { name = "austial-i18n" },
     { name = "austial-jobs" },
     { name = "austial-migrations" },
@@ -268,10 +272,12 @@ requires-dist = [
     { name = "austial-audit", editable = "packages/audit" },
     { name = "austial-auth", editable = "packages/auth" },
     { name = "austial-authz", editable = "packages/authz" },
+    { name = "austial-cache", editable = "packages/cache" },
     { name = "austial-cli", editable = "packages/cli" },
     { name = "austial-common", editable = "packages/common" },
     { name = "austial-config", editable = "packages/config" },
     { name = "austial-core", editable = "packages/core" },
+    { name = "austial-events", editable = "packages/events" },
     { name = "austial-i18n", editable = "packages/i18n" },
     { name = "austial-jobs", editable = "packages/jobs" },
     { name = "austial-migrations", editable = "packages/migrations" },
@@ -333,6 +339,20 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "austial-auth", editable = "packages/auth" },
+    { name = "austial-common", editable = "packages/common" },
+    { name = "austial-core", editable = "packages/core" },
+]
+
+[[package]]
+name = "austial-cache"
+source = { editable = "packages/cache" }
+dependencies = [
+    { name = "austial-common" },
+    { name = "austial-core" },
+]
+
+[package.metadata]
+requires-dist = [
     { name = "austial-common", editable = "packages/common" },
     { name = "austial-core", editable = "packages/core" },
 ]
@@ -407,6 +427,20 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "starlette" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
+]
+
+[[package]]
+name = "austial-events"
+source = { editable = "packages/events" }
+dependencies = [
+    { name = "austial-common" },
+    { name = "austial-core" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "austial-common", editable = "packages/common" },
+    { name = "austial-core", editable = "packages/core" },
 ]
 
 [[package]]
