@@ -21,8 +21,8 @@ jobs:
     name: Lint & format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv sync --all-packages --group dev
@@ -34,8 +34,8 @@ jobs:
     name: Type-check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv sync --all-packages --group dev
@@ -49,15 +49,15 @@ jobs:
       matrix:
         python: ["3.11", "3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv python install ${{ matrix.python }}
       - run: uv sync --all-packages --group dev --python ${{ matrix.python }}
       - name: Test with coverage floor
         run: uv run --python ${{ matrix.python }} pytest -q --cov --cov-report=term-missing --cov-report=xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: matrix.python == '3.12'
         with:
           name: coverage-xml
@@ -67,10 +67,10 @@ jobs:
     name: Build all distributions
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # hatch-vcs derives versions from tags
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v7
       - run: uv build --all-packages --out-dir dist
 
   docs-sync:
@@ -78,12 +78,12 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true  # the docs live in another repo; flag drift without blocking the PR
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           repository: austial/austial-py-doc
           path: docs-site
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync --all-packages --group dev
       - run: uv run python scripts/check_docs_sync.py docs-site/content
 
@@ -98,8 +98,8 @@ jobs:
       AUSTIAL_TEST_MQTT_URL: localhost:1883
       AUSTIAL_TEST_KAFKA_URL: localhost:9092
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv sync --all-packages --group dev
