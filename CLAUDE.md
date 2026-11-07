@@ -12,6 +12,13 @@ npm run build     # next build + pagefind; MUST pass before you say a docs chang
 npm run lint
 ```
 
+## Project skills
+
+- `/design <task>`: change the theme, layout or components in the established visual language (tokens only,
+  light and dark, mobile, accessible), and verify it in the browser.
+- `/code-reviewer [base]`: review a docs change for accuracy against the framework, navigation, design-system
+  and accessibility, and build safety. Run it before committing.
+
 ## Rules
 
 - **Docs follow the framework.** Every example must match the current API in `../austial-py`: check
