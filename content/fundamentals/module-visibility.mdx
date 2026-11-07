@@ -1,0 +1,69 @@
+---
+title: Module Visibility
+---
+
+# Module Visibility
+
+By default every provider lives in one application-wide container, so a service can inject anything registered anywhere, whether or not
+its module imports the other. That is convenient and forgiving; it also hides wrong `imports`/`exports` until you move code around.
+**Strict mode** turns `imports` and `exports` into a real boundary, as in NestJS:
+
+```python
+app = AustialFactory.create(AppModule, strict_modules=True)
+ctx = await AustialFactory.create_application_context(AppModule, strict_modules=True)
+```
+
+A provider (or controller) may then inject only:
+
+1. what **its own module** provides;
+2. what the modules it **imports export** — a module can re-export an imported module by listing that module in its own `exports`;
+3. what a [`@Global`](/overview/modules#global-modules) module exports.
+
+Framework tokens (`ModuleRef`, `DiscoveryService`, `REQUEST`, `INQUIRER`, ...) are always visible. Anything else raises
+`ModuleVisibilityError` when it is built:
+
+```
+SneakyService (module SneakyModule) can't inject Secrets: Secrets is provided by a module that SneakyModule doesn't import,
+or that doesn't export it. Import the module and add Secrets to its `exports=[...]` (or make the module @Global).
+```
+
+```python
+@Module(providers=[Mailer, Secrets], exports=[Mailer])        # Secrets stays private
+class MailModule: ...
+
+@Module(imports=[MailModule], providers=[OrdersService])      # OrdersService may inject Mailer, not Secrets
+class OrdersModule: ...
+```
+
+Providers that no module declares (classes the container auto-registers) are not checked. Turn strict mode on in your test or CI
+configuration first to find the violations, then in production once they are fixed.
+
+## `app.select(Module)`
+
+Narrow lookups to one module, like `app.select(CatsModule)`:
+
+```python
+cats = app.select(CatsModule)
+cats.get(CatsService)                    # same as app.get
+cats.get(Mailer, strict=True)            # must be visible from CatsModule, else ModuleVisibilityError
+cats.select(MailModule)
+```
+
+Selecting a module that is not part of the application raises `KeyError`.
+
+## Inspecting the module graph
+
+```python
+graph = app.get_module_graph()          # a ModuleGraph
+graph.to_dict()          # {"modules": [{"name", "imports", "providers", "controllers", "exports", "global"}, ...]}
+graph.to_mermaid()       # a Mermaid flowchart; an arrow A --> B means A imports B
+```
+
+The same from the shell, without starting the app:
+
+```bash
+austial graph                                  # mermaid, for src.app_module:AppModule
+austial graph src.app_module:AppModule --format json
+```
+
+Paste the Mermaid output into any Mermaid renderer (GitHub renders it in a fenced `mermaid` block) to see your architecture.

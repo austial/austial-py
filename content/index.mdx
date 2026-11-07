@@ -65,6 +65,7 @@ guard, interceptor, handler -- reads top to bottom in the order it executes.
 - **Middleware** — `NestMiddleware` ABC, wired up via `configure(consumer)` on modules.
 - **Config** — `ConfigModule.for_root(env_file=".env")` / `ConfigService`.
 - **Database** — `austial.orm`, a from-scratch TypeORM-shaped ORM: `@Entity()`, `Repository`, `QueryBuilder`, wired up via `OrmModule.for_root(...)`.
+- **More building blocks** — `austial.websockets` (gateways, rooms), `austial.microservices` (TCP/local transports, hybrid apps), `austial.cqrs`, `austial.schedule` (`@Cron`/`@Interval`/`@Timeout` and a runtime registry), `austial.http` (an injectable HTTP client), `austial.openapi`, `austial.graphql` (Strawberry), `austial.mongo`, `austial.prisma`, OAuth/OIDC social login in `austial.auth`, and `@Render` templates.
 - **Cross-cutting techniques** — `austial.cache` (`CacheModule`, `CacheInterceptor`, `@CacheKey`/`@CacheTTL`), `austial.events` (`EventEmitter`, `@OnEvent` with wildcards), a pluggable `Logger`/`LoggerService`, global `APP_GUARD`/`APP_PIPE`/`APP_INTERCEPTOR`/`APP_FILTER` providers, async providers, and testing overrides.
 - **HTTP extras** — API versioning, a global prefix, host routing, `@Redirect`, `@Sse`, `StreamableFile`, file-upload helpers, response serialization (`@Exclude`/`@Expose`) and mapped types (`PartialType`, …).
 - **Health checks** — `austial.terminus.HealthCheckService` + `MemoryHealthIndicator`, `DatabaseHealthIndicator`.
@@ -87,13 +88,18 @@ Austial is deliberately opinionated but not a 1:1 port of any single
 framework. A few concepts are intentionally out of scope for now, so you
 don't go looking for them:
 
-- **Module `imports`/`exports` visibility enforcement** — every module's
-  providers currently register into one flat, application-wide container
-  (visibility is documentation-only, not enforced at resolve time).
+- **Module visibility is opt-in** — by default every module's providers live in one
+  flat, application-wide container; `strict_modules=True` enforces `imports`/`exports`
+  (see [Module Visibility](/fundamentals/module-visibility)).
 - **Pluggable HTTP platform** — Austial runs on FastAPI/Starlette only; there is no
   Express-or-Fastify-style adapter layer.
-- **Microservices, WebSockets, GraphQL and CQRS** — no transports, gateways or
-  resolvers ship with the framework.
+- **Broker transports are lightly tested** — Redis, NATS, Kafka, MQTT, RabbitMQ and gRPC ship, but
+  only gRPC and Redis run against the real client libraries in CI; the rest use fakes (see
+  [Microservices](/techniques/microservices)).
+- **GraphQL beyond Strawberry** — code-first schemas via Strawberry only; no schema-first
+  mode or federation helpers (subscriptions work over WebSocket).
+- **ORMs** — the built-in ORM supports PostgreSQL and SQLite; MongoDB and Prisma are wired in
+  at the connection level, not as mapped entities.
 - **RxJS-style interceptor streams** — `CallHandler.handle()` is a plain
   async continuation, not an Observable.
 

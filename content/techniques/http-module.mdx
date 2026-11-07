@@ -1,0 +1,74 @@
+---
+title: HTTP Module
+---
+
+# HTTP Module
+
+```bash
+pip install austial-http      # included in the `austial` umbrella package
+```
+
+`HttpModule` gives you an injectable, lifecycle-managed HTTP client (built on `httpx`) with a base URL, default headers, timeouts,
+retries and interceptors:
+
+```python
+from austial import Module
+from austial.http import HttpModule
+
+
+@Module(imports=[HttpModule.register(base_url="https://api.weather.example", timeout=3, retries=2)])
+class WeatherModule:
+    pass
+```
+
+```python
+from austial.http import HttpService
+
+
+@Injectable()
+class WeatherService:
+    def __init__(self, http: HttpService):
+        self.http = http
+
+    async def forecast(self, city: str) -> dict:
+        response = await self.http.get("/forecast", params={"city": city})
+        return response.json()
+```
+
+`get`, `post`, `put`, `patch`, `delete`, `head` and `request(method, url, ...)` return the `httpx.Response`; keyword arguments go
+straight to `httpx` (`params`, `json`, `data`, `headers`, `timeout`...). The client closes when the application shuts down.
+
+## Options
+
+| Option | Default | Meaning |
+|---|---|---|
+| `base_url` | `""` | Prefix for relative URLs. |
+| `timeout` | `5.0` | Seconds for connect/read/write/pool; `None` disables. |
+| `headers` | `{}` | Sent with every request. |
+| `follow_redirects` | `True` | |
+| `raise_for_status` | `True` | A non-2xx answer raises `HttpStatusError` (with `.response` and `.status_code`), like axios. Pass `raise_for_status=False` per call to inspect errors yourself. |
+| `retries` | `0` | Extra attempts after the first, on transport errors and `retry_statuses` (`502`, `503`, `504`), with exponential backoff (`retry_backoff` seconds, doubling). |
+| `retry_non_idempotent` | `False` | `POST` and `PATCH` are **not** retried unless you opt in: a retry could duplicate the side effect. |
+| `transport` | `None` | Swap the network layer, e.g. `httpx.MockTransport(...)` in tests. |
+
+`retries=` can also be passed per call. For options that depend on other providers use `HttpModule.register_async(use_factory=,
+inject=, imports=)` returning an `HttpModuleOptions`.
+
+## Interceptors
+
+```python
+http.add_request_interceptor(lambda request: request.headers.update({"Authorization": f"Bearer {token()}"}))
+http.add_response_interceptor(log_response)          # sync or async functions
+```
+
+Request interceptors may mutate the `httpx.Request` before it is sent; response interceptors see every response before it is returned.
+
+## Testing
+
+```python
+module = await Test.create_testing_module(
+    imports=[HttpModule.register(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"ok": True})))]
+).compile()
+```
+
+Nothing touches the network.

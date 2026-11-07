@@ -52,6 +52,70 @@ Use `get_or_throw` for configuration that has no sane default (a secret
 key, an external API URL) so a missing value fails fast at
 startup-adjacent code rather than silently falling through as `None`.
 
+## Validating configuration
+
+Pass a pydantic model as `validation_schema` and the environment is checked — and coerced — at startup. A bad
+deployment fails to boot with every problem listed, instead of failing later on the first request that needs a value:
+
+```python
+from pydantic import BaseModel, Field
+
+
+class Settings(BaseModel):
+    PORT: int = Field(default=3000, ge=1)
+    DATABASE_URL: str
+    DEBUG: bool = False
+
+
+ConfigModule.for_root(validation_schema=Settings)
+```
+
+`config.get("PORT")` is now the **int** `8080`, not the string `"8080"`, and defaults are filled in. Failures raise
+`ConfigValidationError` (its `.errors` lists `DATABASE_URL: Field required`, ...). For a custom check use
+`validate=fn(env) -> env`, which may raise.
+
+## Namespaced configuration
+
+Group related settings with `register_as`, and read them by dotted path or inject the whole object:
+
+```python
+from austial.config import register_as
+
+database_config = register_as("database", lambda: {
+    "host": os.environ.get("DB_HOST", "localhost"),
+    "port": int(os.environ.get("DB_PORT", 5432)),
+})
+
+ConfigModule.for_root(load=[database_config])
+```
+
+```python
+config.get("database.host")             # "localhost"
+config.get(database_config)             # the whole dict
+class Repo:
+    def __init__(self, db=Inject(database_config.KEY)): ...      # injected directly
+```
+
+A factory may take the config environment as its argument instead of reading `os.environ`:
+`register_as("cache", lambda env: {"ttl": int(env.get("CACHE_TTL", 60))})`.
+
+A feature module can contribute its own namespace with `ConfigModule.for_feature(factory)`; it is registered when the
+application initialises.
+
+## Variable expansion and several env files
+
+```python
+ConfigModule.for_root([".env.local", ".env"], expand=True)
+```
+
+- With several files, the **first** file defining a variable wins; real environment variables beat them all.
+- `expand=True` resolves `${VAR}`, `$VAR` and `${VAR:-default}` between values (`URL=${BASE}/api`), including chains,
+  and writes the result back to `os.environ`. A circular reference raises.
+- `ignore_env_file=True` skips file loading (CI, containers).
+
+`config.set(key, value)` overrides a value for the service only; `config.has(key)` and `config.get_or_throw(key)` work
+for dotted paths too.
+
 ## `.env` files
 
 A scaffolded project ships a `.env.example` — copy it to `.env` before

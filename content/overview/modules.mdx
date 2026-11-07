@@ -90,27 +90,29 @@ class AppModule:
 from austial import Global, Module
 
 
-@Global()
+@Global                      # a bare decorator: no parentheses
 @Module(providers=[ConfigService], exports=[ConfigService])
 class ConfigModule:
     pass
 ```
 
-`@Global()` marks a module's exports as available everywhere without every
+`@Global` marks a module's exports as available everywhere without every
 consumer needing to list it in their own `imports` (used internally by
 `ConfigModule.for_root()`).
 
 ## A note on module visibility
 
-Austial's DI container is currently **application-wide and flat**: every
+By default Austial's DI container is **application-wide and flat**: every
 module's `providers` register into the same `Container` instance
-regardless of `imports`/`exports`. In practice this means anything
-registered anywhere in the graph is resolvable anywhere else — `imports`
-and `exports` are honored for *scanning* (so you must still `import` a
-module for its controllers/providers to be registered at all) but are not
-yet enforced as a visibility boundary. Write your `imports`/`exports`
-correctly anyway: it documents intent and means nothing changes for your
-code if/when strict visibility lands.
+regardless of `imports`/`exports`, so anything registered anywhere in the
+graph is resolvable anywhere else. `imports` and `exports` still decide
+what gets *scanned* (you must import a module for its controllers and
+providers to exist at all).
+
+To make them a real visibility boundary, as in NestJS, opt in with
+`AustialFactory.create(AppModule, strict_modules=True)` — see
+[Module Visibility](/fundamentals/module-visibility). Write your
+`imports`/`exports` correctly either way.
 
 ## Dynamic modules
 

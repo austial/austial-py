@@ -1,0 +1,49 @@
+---
+title: MongoDB
+---
+
+# MongoDB
+
+```bash
+pip install 'austial-mongo[pymongo]'
+```
+
+`MongoModule` provides PyMongo's **async** client (`AsyncMongoClient`, PyMongo 4.9+), the database and any collections you declare, and ties
+the client to the application's lifecycle: it pings the server during startup — so a bad URI fails the deployment, not the first request —
+and closes on shutdown.
+
+```python
+from austial import Injectable, Module
+from austial.mongo import InjectCollection, MongoModule
+
+
+@Module(
+    imports=[
+        MongoModule.for_root(uri="mongodb://localhost:27017", database="zoo", maxPoolSize=20),
+        MongoModule.for_feature(["cats", "owners"]),
+    ],
+    providers=[CatsService],
+)
+class AppModule:
+    pass
+
+
+@Injectable()
+class CatsService:
+    def __init__(self, cats=InjectCollection("cats")):
+        self.cats = cats                                     # a pymongo AsyncCollection
+
+    async def find(self, name: str):
+        return await self.cats.find_one({"name": name})
+```
+
+| | |
+|---|---|
+| `MongoModule.for_root(uri=, database=, connect_on_init=True, client_factory=None, **client_kwargs)` | The client and database. Extra keyword arguments go to `AsyncMongoClient` (`tls`, `maxPoolSize`, `serverSelectionTimeoutMS`...). |
+| `MongoModule.for_root_async(use_factory=, inject=, imports=)` | Same, with a `MongoOptions` computed from other providers (e.g. `ConfigService`). |
+| `MongoModule.for_feature(["cats"])` | Declares collections. |
+| `InjectCollection(name)`, `InjectDatabase()`, `InjectClient()` | Constructor defaults for injection. |
+
+`connect_on_init=False` skips the startup ping. Mongo has no ORM layer here: you work with PyMongo's own collections and documents
+(for object mapping use a library such as Beanie on the injected database). `client_factory` replaces the client class — useful for
+fakes in tests. For health checks see [`MongoHealthIndicator`](/techniques/health-checks#mongohealthindicator).

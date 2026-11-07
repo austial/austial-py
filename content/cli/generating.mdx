@@ -78,6 +78,26 @@ These schematics create only the file; they don't register anything in a module.
 it (`@UseGuards(AuthGuard)`, `providers=[...]`, `{"provide": APP_GUARD, "useClass": AuthGuard}`). Existing files are
 never overwritten.
 
+## Libraries and extra applications
+
+For a repository with more than one deployable (a monorepo), generate shared code and extra apps next to `src/`:
+
+```bash
+austial generate library billing        # libs/billing/billing_module.py + billing_service.py (exports BillingService)
+austial generate app admin              # apps/admin/app_module.py + main.py
+```
+
+```python
+# anywhere that should use the library
+from libs.billing.billing_module import BillingModule
+
+# run the extra app
+austial start --app apps.admin.main:app --watch        # or: uvicorn apps.admin.main:app
+```
+
+Both live at the project root, which `austial` and pytest already have on the import path. Libraries aren't registered anywhere
+automatically: add `BillingModule` to the `imports` of the apps that use it.
+
 ## `resource` — full CRUD
 
 ```bash

@@ -48,6 +48,26 @@ so `uv sync` inside `my-app` resolves `austial` from your checkout instead
 of PyPI — edits to the framework are picked up immediately without
 reinstalling.
 
+## `austial start`, `build`, `add`, `graph`, `repl`
+
+```bash
+austial start [--port 8000] [--watch/-w] [--app apps.admin.main:app]   # like `nest start`; --watch reloads on changes
+austial build                                                           # byte-compile src/libs/apps and scan the module graph
+austial add cache                                                       # uv add austial-cache (also: events, websockets, cqrs ...)
+austial add events --dry-run                                            # print the command only
+austial graph [src.app_module:AppModule] [--format mermaid|json]       # the module graph, no server needed
+austial repl  [src.app_module:AppModule]                                # a Python REPL with the app booted
+```
+
+- `serve` keeps reloading by default (development); `start` does not unless you pass `--watch`. `--app` runs any ASGI app, such as one
+  generated with `austial generate app`.
+- `build` is a fast pre-flight check, not a bundler: it fails on syntax errors and on module-graph problems (an import or scan error), and
+  prints how many modules it scanned.
+- `add` accepts `cache`, `events`, `http`, `schedule`, `cqrs`, `websockets`, `microservices`, `openapi`, `graphql`, `mongo`, `prisma`
+  and the other `austial-*` packages, and runs `uv add austial-<name>` in the project root.
+- In `repl` there is no top-level `await`: use `run(coroutine)`. Names available: `app` (the application context), `get(Token)`, `run`,
+  and your root module.
+
 ## `austial info`
 
 ```bash
@@ -77,6 +97,8 @@ austial g <schematic> <name>                                 # short alias
 | `middleware` | `mi` | a `NestMiddleware` |
 | `decorator` | `d` | a metadata decorator factory plus its key |
 | `class` | `cl` | a plain class |
+| `library` | `lib` | `libs/<name>/`: a module + service apps can share |
+| `app` | | `apps/<name>/`: another application with its own `main.py` |
 
 | Flag | Effect |
 |---|---|

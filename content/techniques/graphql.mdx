@@ -1,0 +1,76 @@
+---
+title: GraphQL
+---
+
+# GraphQL
+
+```bash
+pip install 'austial-graphql[strawberry]'
+```
+
+Austial serves a [Strawberry](https://strawberry.rocks) schema and gives its resolvers dependency injection. Define the schema with
+Strawberry (code-first, with Python types), and mount it with `GraphQLModule`:
+
+```python
+import strawberry
+from strawberry.types import Info
+
+from austial import Injectable, Module
+from austial.graphql import GraphQLModule, inject
+
+
+@strawberry.type
+class Query:
+    @strawberry.field
+    def greeting(self, info: Info, name: str = "world") -> str:
+        return inject(info, GreetingService).greet(name)        # any provider
+
+
+@strawberry.type
+class Mutation:
+    @strawberry.mutation
+    async def create_cat(self, info: Info, name: str) -> str:
+        return await inject(info, CatsService).create(name)
+
+
+schema = strawberry.Schema(query=Query, mutation=Mutation)
+
+
+@Module(imports=[GraphQLModule.for_root(schema=schema)], providers=[GreetingService, CatsService])
+class AppModule:
+    pass
+```
+
+`POST /graphql` runs queries and mutations; a browser gets GraphiQL.
+
+## Options
+
+| Option | Default | Meaning |
+|---|---|---|
+| `schema` | required | A `strawberry.Schema`, or a function `(module_ref) -> Schema` for schemas built from providers. |
+| `path` | `/graphql` | |
+| `ide` | `"graphiql"` | `"apollo-sandbox"`, `"pathfinder"`, or `None` to switch the browser UI off (do this in production). |
+| `context_getter` | `None` | `fn(request)` (sync or async) returning a dict merged into every resolver's context, e.g. the authenticated user. |
+| `allow_queries_via_get` | `True` | |
+
+## Dependency injection in resolvers
+
+Resolvers are Strawberry's, so there is no constructor injection; `inject(info, Token)` resolves a provider through the request context.
+It resolves **request-scoped** providers once per GraphQL request, so every resolver in one request shares them. The context also holds
+`request`, `response`, `module_ref` and `context_id`:
+
+```python
+@strawberry.field
+def me(self, info: Info) -> str:
+    return info.context["request"].headers.get("x-user", "anonymous")
+```
+
+## Auth and guards
+
+Austial's `@UseGuards` does not wrap Strawberry resolvers. Authenticate with a `context_getter` (or ASGI middleware) that puts the user
+in the context, and authorise with [Strawberry permission classes](https://strawberry.rocks/docs/guides/permissions) that read it.
+
+## What's not included
+
+Schema-first mode, federation helpers and a generated schema from decorated classes are Strawberry's domain; use its own tooling for those.
+Subscriptions are Strawberry's feature; Austial does not wire or test them.

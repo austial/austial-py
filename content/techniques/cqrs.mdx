@@ -1,0 +1,124 @@
+---
+title: CQRS
+---
+
+# CQRS
+
+```bash
+pip install austial-cqrs      # included in the `austial` umbrella package
+```
+
+Command Query Responsibility Segregation splits *changing* things (commands), *reading* them (queries) and *announcing* what
+happened (events). Each travels over its own bus to handlers you register by decorator. Messages are plain classes — dataclasses are
+ideal.
+
+```python
+from dataclasses import dataclass
+
+from austial import Injectable, Module
+from austial.cqrs import CommandBus, CommandHandler, CqrsModule, EventBus, EventsHandler, QueryBus, QueryHandler, Saga
+
+
+@dataclass
+class CreateCat:            # a command
+    name: str
+
+@dataclass
+class FindCat:              # a query
+    name: str
+
+@dataclass
+class CatCreated:           # an event
+    name: str
+
+
+@CommandHandler(CreateCat)
+@Injectable()
+class CreateCatHandler:
+    def __init__(self, repo: CatsRepository, events: EventBus):
+        self.repo, self.events = repo, events
+
+    async def execute(self, command: CreateCat) -> str:
+        await self.repo.save(command.name)
+        await self.events.publish(CatCreated(command.name))
+        return command.name
+
+
+@QueryHandler(FindCat)
+@Injectable()
+class FindCatHandler:
+    def __init__(self, repo: CatsRepository):
+        self.repo = repo
+
+    async def execute(self, query: FindCat):
+        return await self.repo.find(query.name)
+
+
+@EventsHandler(CatCreated)
+@Injectable()
+class IndexOnCreate:
+    async def handle(self, event: CatCreated) -> None: ...
+
+
+@Module(imports=[CqrsModule.for_root()], providers=[CatsRepository, CreateCatHandler, FindCatHandler, IndexOnCreate])
+class CatsModule:
+    pass
+```
+
+```python
+await commands.execute(CreateCat("Tom"))        # exactly one handler; returns its result
+await queries.execute(FindCat("Tom"))
+```
+
+Handlers are discovered when the application bootstraps. `execute` may be sync or async, and a message with no handler raises
+`HandlerNotFoundError`; registering two handlers for one command or query raises `DuplicateHandlerError`.
+
+## Events
+
+`await events.publish(event)` delivers to **every** `@EventsHandler` registered for the event's type or a base class of it,
+concurrently. A failing handler is logged and doesn't stop the others (`CqrsModule.for_root(raise_event_errors=True)` makes
+`publish` raise instead). `publish_all([...])` publishes in order.
+
+## Sagas
+
+A saga reacts to events by producing new commands — a long-running process split into steps:
+
+```python
+@Injectable()
+class CatsSagas:
+    @Saga()
+    def welcome(self, event):
+        if isinstance(event, CatCreated):
+            return SendWelcomeEmail(event.name)        # a command, a list of commands, or None
+```
+
+Unlike NestJS, where a saga transforms an RxJS stream, an Austial saga is a function from one event to commands. The returned
+commands are executed on the command bus.
+
+## Aggregates
+
+`AggregateRoot` keeps domain events next to the state they change:
+
+```python
+from austial.cqrs import AggregateRoot, EventPublisher
+
+
+class Cat(AggregateRoot):
+    def __init__(self, name):
+        super().__init__()
+        self.name = name
+
+    def rename(self, new):
+        self.apply(CatRenamed(self.name, new))        # queues the event and calls on_cat_renamed
+
+    def on_cat_renamed(self, event):                  # on_<EventClassNameInSnakeCase>
+        self.name = event.new
+
+
+cat = publisher.merge_object_context(Cat("Tom"))      # EventPublisher is injectable
+cat.rename("Tommy")
+await cat.commit()                                    # publishes the queued events and clears them
+```
+
+`load_from_history(events)` rebuilds state from stored events without queueing them; `uncommit()` drops queued events;
+`publisher.merge_class_context(Cat)` returns a subclass already connected to the bus. Committing an unconnected aggregate raises.

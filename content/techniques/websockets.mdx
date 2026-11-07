@@ -1,0 +1,114 @@
+---
+title: WebSockets
+---
+
+import { Callout } from "@/components/mdx";
+
+# WebSockets
+
+```bash
+pip install austial-websockets      # included in the `austial` umbrella package
+```
+
+A **gateway** is a provider that serves a WebSocket endpoint. Clients and the server exchange JSON text frames
+`{"event": "name", "data": ..., "id": optional}`; a handler is picked by `event`, and what it returns is sent back as
+`{"event": "name", "data": <return value>}` (with the same `id`, so a client can match replies to requests).
+
+```python
+from austial import Injectable, Module
+from austial.websockets import (
+    ConnectedSocket, MessageBody, OnGatewayConnection, OnGatewayDisconnect,
+    SubscribeMessage, WebSocketGateway, WebSocketsModule, WsClient, WsServer,
+)
+
+
+@WebSocketGateway("/chat")
+@Injectable()
+class ChatGateway(OnGatewayConnection, OnGatewayDisconnect):
+    server: WsServer                                   # set by the framework
+
+    def __init__(self, messages: MessagesService):     # normal dependency injection
+        self.messages = messages
+
+    async def handle_connection(self, client: WsClient) -> None:
+        await client.send("welcome", {"id": client.id})
+
+    def handle_disconnect(self, client: WsClient) -> None: ...
+
+    @SubscribeMessage("message")
+    async def on_message(self, text: str = MessageBody("text"), client: WsClient = ConnectedSocket()):
+        saved = await self.messages.save(client.id, text)
+        await self.server.to("lobby").emit("message", saved)         # broadcast to a room
+        return {"delivered": True}                                    # reply to the sender
+
+
+@Module(imports=[WebSocketsModule.for_root()], providers=[ChatGateway, MessagesService])
+class ChatModule:
+    pass
+```
+
+Gateways are mounted when the application bootstraps. Two gateways on one path fail at startup.
+
+## Handler arguments
+
+| You write | You get |
+|---|---|
+| `x = MessageBody()` | the message `data` |
+| `x = MessageBody("key")` | `data["key"]`; extra positional arguments are pipes: `MessageBody("n", ParseIntPipe)` |
+| `client: WsClient = ConnectedSocket()`, or just annotate `client: WsClient` | the sender |
+| a first unmarked parameter | the `data` |
+
+## Replies
+
+| Return | Sends |
+|---|---|
+| a value | `{"event": <received event>, "data": value}` |
+| `WsResponse("other-event", data)` | that event name instead |
+| `None` | nothing |
+| `raise WsException("message")` | `{"event": "exception", "data": {"status": "error", "message": "..."}}` |
+
+An `HttpException` raised in a handler is turned into the same `exception` event; any other exception is logged and answered with
+`Internal server error` (details are never leaked). Malformed frames and unknown events also get an `exception` event. The
+connection stays open.
+
+## Clients, rooms and broadcasting
+
+`WsClient` has `id`, `send(event, data)`, `await join(room)`, `await leave(room)`, `rooms`, `close(code)`, `headers`, `query_params` and a free-form
+`data` dict for per-connection state (the authenticated user, ...). `WsServer` has `clients`, `emit(event, data)` for everyone and
+`to(room).emit(...)` (chainable: `to("a").to("b")`). A client's rooms are left automatically on disconnect.
+
+## Guards, pipes and interceptors
+
+`@UseGuards`, `@UsePipes` and `@UseInterceptors` work on a gateway class or a message handler. Guards get a context whose
+`get_type()` is `"ws"`; read the sender and the data with `context.switch_to_ws()`:
+
+```python
+class WsAuthGuard(CanActivate):
+    async def can_activate(self, context):
+        client = context.switch_to_ws().get_client()
+        return client.query_params.get("token") == "ok"        # the upgrade request's query string and headers
+```
+
+A denied message is answered with a `Forbidden resource` exception event. Guards run per **message**, not at connection time; to
+refuse a connection, check in `handle_connection` and `await client.close(4401)`.
+
+## Socket.IO
+
+By default the server speaks plain WebSocket text frames (use the browser's `WebSocket`). To serve the same gateways to
+`socket.io-client`, install `pip install 'austial-websockets[socketio]'` and pass an adapter:
+
+```python
+from austial.websockets import SocketIoAdapter, WebSocketsModule
+
+@Module(imports=[WebSocketsModule.for_root(adapter=SocketIoAdapter(cors_allowed_origins="https://app.example.com"))],
+        providers=[ChatGateway])
+class ChatModule: ...
+```
+
+* The engine is mounted at `/socket.io`; a gateway's path is its Socket.IO **namespace** (`@WebSocketGateway("/chat")` is `io("/chat")`).
+* Gateway code is unchanged. A handler's return value is the **acknowledgement** when the client asked for one; `WsResponse` and
+  `await client.send(...)` emit events; errors become `exception` events and the connection stays open.
+* `client.data["auth"]` holds the client's `auth` payload. Reject a connection with `await client.close()` in `handle_connection`.
+* `client.join` / `client.leave` are `async` (`await client.join(room)`) and `server.to(room).emit(...)` maps to Socket.IO rooms.
+* Extra keyword arguments to `SocketIoAdapter` go to `socketio.AsyncServer`. Scaling across processes needs a Socket.IO client
+  manager (Redis, say), passed as `client_manager=`.

@@ -103,6 +103,55 @@ class ClientInfo:
         return self.request.headers.get("user-agent", "")
 ```
 
+### Durable providers
+
+A request-scoped provider is built for every request. When many requests share the same *context* — all the requests of
+one tenant — that is wasteful. A **durable** provider is built once per context key instead:
+
+```python
+from austial import ContextIdFactory, ContextIdStrategy, Injectable, Scope
+
+
+@Injectable(scope=Scope.REQUEST, durable=True)
+class TenantConnection:                      # one per tenant, not one per request
+    def __init__(self):
+        self.pool = open_pool()
+
+
+class ByTenantHeader(ContextIdStrategy):
+    def get_key(self, request):
+        return request.headers.get("x-tenant")       # None -> no sharing for this request
+
+
+ContextIdFactory.apply_strategy(ByTenantHeader())    # once, at startup
+```
+
+Requests with the same key get the same `TenantConnection`; other request-scoped providers are still per request. Without a
+strategy (or when it returns `None`) a durable provider behaves like a normal request-scoped one. A durable provider must
+not depend on non-durable request-scoped providers or on the `REQUEST` token: it would capture the first request's.
+
+### Knowing who asked: `INQUIRER`
+
+A provider that injects the `INQUIRER` token receives **the class that is asking for it** — and is therefore built once per
+consumer, never shared. The classic use is a logger tagged with its owner:
+
+```python
+from austial import INQUIRER, Inject, Injectable
+
+
+@Injectable()
+class ContextLogger:
+    def __init__(self, inquirer=Inject(INQUIRER)):
+        self.context = inquirer.__name__            # "OrdersService", "UsersService", ...
+
+@Injectable()
+class OrdersService:
+    def __init__(self, log: ContextLogger):         # its own ContextLogger("OrdersService")
+        self.log = log
+```
+
+For a factory provider, add `INQUIRER` to its `inject` list. The consumers themselves stay singletons.
+
 ### Outside a request
 
 Resolving a request-scoped provider with `app.get()` / `ModuleRef.get()` outside a request raises

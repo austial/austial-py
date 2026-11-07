@@ -78,6 +78,32 @@ async def find_all(self):
 reading the same metadata key stamped at both the controller and handler
 level and combining them.
 
+## `Reflector.create_decorator`
+
+Writing a key constant, a decorator factory and a `Reflector.get` call for every piece of metadata is repetitive.
+`create_decorator` builds the decorator **and** its key together:
+
+```python
+from austial import Reflector
+
+Roles = Reflector.create_decorator()                                   # @Roles(["admin"])
+Tags = Reflector.create_decorator(transform=lambda v: sorted(set(v)))  # values are normalised when stamped
+
+
+@Get("users")
+@Roles(["admin", "editor"])
+async def list_users(self): ...
+```
+
+```python
+required = self.reflector.get(Roles, context.get_handler())                       # ["admin", "editor"]
+required = self.reflector.get_all_and_override(Roles, [context.get_handler(), context.get_class()])
+```
+
+`Roles(value=True)` stamps `value`, so a flag decorator is just `Public = Reflector.create_decorator()` used as `@Public()`.
+`Roles.KEY` is the underlying metadata key; `reflector.get`, `get_all_and_merge` and `get_all_and_override` accept either
+the decorator or a plain string key.
+
 ## Custom parameter decorators
 
 Python has no parameter decorators, so `create_param_decorator` builds a *marker* you use as a

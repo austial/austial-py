@@ -1,0 +1,80 @@
+---
+title: OpenAPI
+---
+
+# OpenAPI
+
+FastAPI already generates an OpenAPI schema and serves it at `/openapi.json` with interactive docs at `/docs`. `austial.openapi`
+adds the NestJS-style layer on top: decorators that describe controllers and routes, and a `DocumentBuilder` for the document itself.
+
+```bash
+pip install austial-openapi      # included in the `austial` umbrella package
+```
+
+## Describing routes
+
+```python
+from austial import Controller, Get
+from austial.openapi import ApiBearerAuth, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags
+
+
+@ApiTags("cats")
+@ApiBearerAuth()
+@Controller("cats")
+class CatsController:
+    @Get(":id")
+    @ApiOperation(summary="Find one cat", description="Looks a cat up by id.")
+    @ApiOkResponse("The cat", model=Cat)
+    @ApiNotFoundResponse(model=Problem)
+    async def find_one(self, id: int) -> Cat: ...
+```
+
+| Decorator | Effect |
+|---|---|
+| `ApiTags(*tags)` | Groups operations (controller or route). Route tags add to the controller's. Without tags the controller name is used. |
+| `ApiOperation(summary=, description=, deprecated=, operation_id=)` | The operation's text and flags. |
+| `ApiResponse(status, description, model=)` | Documents a response; `model` is a pydantic model. Shortcuts: `ApiOkResponse`, `ApiCreatedResponse`, `ApiAcceptedResponse`, `ApiNoContentResponse`, `ApiBadRequestResponse`, `ApiUnauthorizedResponse`, `ApiForbiddenResponse`, `ApiNotFoundResponse`, `ApiConflictResponse`, `ApiUnprocessableEntityResponse`, `ApiTooManyRequestsResponse`, `ApiInternalServerErrorResponse`. |
+| `ApiSecurity(name, scopes)`, `ApiBearerAuth(name="bearer")`, `ApiBasicAuth(name="basic")` | Marks operations as needing a security scheme declared on the document. |
+| `ApiExcludeEndpoint()`, `ApiExcludeController()` | Hide from the docs (they still work). |
+
+Controller-level decorators apply to every route; a route's own `summary`, `description` and `operation_id` override the controller's.
+
+## Describing models
+
+```python
+from pydantic import BaseModel
+from austial.openapi import ApiProperty, ApiPropertyOptional
+
+
+class CreateCatDto(BaseModel):
+    name: str = ApiProperty(description="The cat's name", example="Tom", min_length=1)
+    age: int | None = ApiPropertyOptional(minimum=0, maximum=40)
+```
+
+`ApiProperty` is a pydantic `Field` with `description=` and `example=`; `minimum`/`maximum` map to `ge`/`le`, and any other pydantic
+constraint passes through, so the rules are enforced as well as documented.
+
+## The document: `DocumentBuilder` and `SwaggerModule`
+
+```python
+from austial.openapi import DocumentBuilder, SwaggerModule
+
+config = (
+    DocumentBuilder()
+    .set_title("Cats API").set_description("Everything about cats").set_version("1.0")
+    .set_contact("Ada", "https://example.com", "ada@example.com").set_license("MIT")
+    .add_server("https://api.example.com", "production")
+    .add_tag("cats", "Everything about cats")
+    .add_bearer_auth()                      # also add_basic_auth(), add_api_key(name, header), add_oauth2(name, flows)
+    .build()
+)
+
+SwaggerModule.setup(app, config, path="api-docs")             # UI at /api-docs, schema at /api-docs-json
+```
+
+`setup(..., redoc=True)` serves ReDoc instead of Swagger UI. FastAPI's own `/docs`, `/redoc` and `/openapi.json` keep working and
+reflect the same configuration. `SwaggerModule.create_document(app, config)` returns the schema as a dict (for writing it to a
+file in CI, or contract tests).
+
+Call `setup` before the application is first used. Security schemes declared with `add_*_auth` only describe how clients
+authenticate; enforcing it is the job of your [guards](/overview/guards).

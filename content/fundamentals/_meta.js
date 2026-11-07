@@ -7,4 +7,5 @@ export default {
   "module-reference": "Module Reference",
   "standalone-applications": "Standalone Applications",
   "execution-context": "Execution Context",
+  "module-visibility": "Module Visibility",
 };

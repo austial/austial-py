@@ -96,6 +96,8 @@ async def create(self, dto: CreateCatDto = Body()) -> Cat:
 | `Ip()` | the client's IP address |
 | `HostParam(name=None)` | a value captured by the controller's host pattern |
 | `Session(name=None)` | the session dict (or one key); needs `SessionMiddleware` |
+| `Cookies(name=None)` | one request cookie (or `None`), or all of them as a dict |
+| `RawBody()` | the request body as `bytes`, exactly as it arrived (webhook signature checks) |
 
 `Param`, `Query`, `Headers`, `Body` and `UploadedFile(s)` also accept **pipes** after the name, which
 run on that one parameter — `Param("id", ParseIntPipe)`. See [Pipes](/overview/pipes#built-in-pipes).
@@ -146,6 +148,51 @@ async def go(self, version: str | None = Query("version")):
     if version == "5":
         return {"url": "https://example.com/v5", "status_code": 307}
 ```
+
+## Cookies and the raw body
+
+```python
+from austial import Cookies, RawBody, Res
+
+@Get("login")
+async def login(self, response: Res):
+    response.set_cookie("session", token, httponly=True, secure=True, samesite="lax")
+
+@Get("me")
+async def me(self, session: str | None = Cookies("session")): ...
+
+@Post("webhook")
+async def webhook(self, body: bytes = RawBody(), signature: str = Headers("x-signature")):
+    expected = hmac.new(SECRET, body, hashlib.sha256).hexdigest()      # the bytes the sender signed
+```
+
+`RawBody()` is safe to combine with a parsed `Body()` parameter: Starlette caches the body. Rendering HTML with
+`@Render` is covered in [MVC](/techniques/mvc).
+
+## Falling through to the next route: `Next()`
+
+Like Express's `next()`, a handler can decline a request so the next matching route answers it:
+
+```python
+from austial import Next, Param
+
+@Controller("files")
+class CacheController:
+    @Get(":name")
+    async def cached(self, name: str = Param("name"), next=Next()):
+        if name not in CACHE:
+            return next()          # raises internally; nothing after this line runs
+        return CACHE[name]
+
+@Controller("files")
+class OriginController:
+    @Get(":name")
+    async def origin(self, name: str = Param("name")): ...
+```
+
+Routes are tried in registration order. The declining route's guards, pipes and interceptors have already run, and the request body is
+replayed to the next route. If every matching route declines, the response is `404`. Use it for cache-then-origin and
+tenant-specific overrides; to choose a handler by version or host, use [versioning](/techniques/versioning) instead.
 
 ## Streaming and server-sent events
 

@@ -53,6 +53,11 @@ assert module_ref.resolve(RequestId, ContextIdFactory.create()) is not a
 Omit the context id and each call gets a fresh dependency tree. `app.resolve(Token)` is the same
 thing on the application object.
 
+## `HttpAdapterHost`
+
+Inject `HttpAdapterHost` to reach the FastAPI app from a provider; `host.http_adapter` is set as soon as the application
+object exists. See [HTTP Server](/techniques/http-server#https-the-listening-url-and-the-http-adapter).
+
 ## `DiscoveryService`
 
 `DiscoveryService` lists what the application registered. It is how a feature module wires itself
