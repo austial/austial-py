@@ -75,3 +75,14 @@ mypy_path = [
     # `explicit_package_bases` above exists to prevent, just one level deeper.
     "packages/orm/test",
 ]
+
+[tool.coverage.run]
+source = ["packages"]
+omit = ["*/test/*", "*/templates/*"]
+
+[tool.coverage.report]
+# Ratchet: current coverage is ~91%. Raise this as it grows; never lower it to land a change.
+fail_under = 88
+show_missing = true
+skip_empty = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "@abstractmethod"]

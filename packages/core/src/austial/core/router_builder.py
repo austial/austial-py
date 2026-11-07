@@ -171,9 +171,12 @@ class RouterBuilder:
         guards = self._resolve_chain(GUARDS_METADATA, controller_cls, member, self._global_guards)
         interceptors = self._resolve_chain(INTERCEPTORS_METADATA, controller_cls, member, self._global_interceptors)
         pipes = self._resolve_chain(PIPES_METADATA, controller_cls, member, self._global_pipes)
-        filters = self._resolve_chain(
-            FILTERS_METADATA, controller_cls, member, self._global_filters, default=[AllExceptionsFilter()]
-        )
+        # `AllExceptionsFilter` always closes the chain: a scoped filter that doesn't match the exception
+        # must fall through to the standard Nest-shaped rendering instead of escaping as a bare exception.
+        filters = [
+            *self._resolve_chain(FILTERS_METADATA, controller_cls, member, self._global_filters),
+            AllExceptionsFilter(),
+        ]
 
         redirect = get_metadata(REDIRECT_METADATA, member)
         is_sse = bool(get_metadata(SSE_METADATA, member))

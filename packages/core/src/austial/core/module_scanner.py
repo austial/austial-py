@@ -75,6 +75,8 @@ def scan_module(root_module: type, container: Container, *, visited: set | None 
             for imported in static_metadata.imports:
                 visit(imported)
 
+        if not first_visit and dynamic is None:
+            return  # a module already (being) scanned -- e.g. the far side of a circular import
         record = record_for(module_cls)
         if static_metadata is not None:
             add_providers(record, static_metadata.providers)

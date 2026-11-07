@@ -94,9 +94,9 @@ class ParseBoolPipe(_ParsePipe):
             return value
         if isinstance(value, bool):
             return value
-        if value in ("true", True):
+        if value == "true":
             return True
-        if value in ("false", False):
+        if value == "false":
             return False
         self._fail("Validation failed (boolean string is expected)")
 
