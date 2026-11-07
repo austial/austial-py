@@ -1,0 +1,9 @@
+from austial import Injectable
+from austial.events import OnEvent
+
+
+@Injectable()
+class {{ class_name }}Listener:
+    @OnEvent("{{ kebab_name }}.created")
+    async def on_created(self, payload) -> None:
+        print(f"{{ kebab_name }}.created: {payload}")

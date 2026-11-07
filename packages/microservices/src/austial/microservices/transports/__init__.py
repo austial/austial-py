@@ -5,6 +5,7 @@ from austial.microservices.transports.kafka import KafkaBackend
 from austial.microservices.transports.mqtt import MqttBackend
 from austial.microservices.transports.nats import NatsBackend
 from austial.microservices.transports.pubsub import (
+    JsonCodec,
     PubSubBackend,
     PubSubClient,
     PubSubServer,
@@ -21,6 +22,7 @@ __all__ = [
     "NatsBackend",
     "PubSubBackend",
     "PubSubClient",
+    "JsonCodec",
     "PubSubServer",
     "RabbitMqBackend",
     "RedisBackend",

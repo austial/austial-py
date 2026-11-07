@@ -58,6 +58,7 @@ def build_server_transport(options: MicroserviceOptions) -> ServerTransport:
             _backend(options.transport, options.url, options.group, options.extra),
             prefix=options.prefix,
             group=options.group if grouped else None,
+            codec=options.codec,
         )
     if options.transport == Transport.GRPC:
         from austial.microservices.transports import GrpcServer
@@ -80,6 +81,7 @@ def build_client_transport(options: ClientOptions) -> ClientTransport:
             _backend(options.transport, options.url, "austial", options.extra),
             prefix=options.prefix,
             timeout=options.timeout,
+            codec=options.codec,
         )
     if options.transport == Transport.GRPC:
         from austial.microservices.transports import GrpcClient

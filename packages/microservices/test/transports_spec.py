@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import inspect
+import json
 from types import SimpleNamespace
 from typing import Any
 
@@ -160,6 +161,29 @@ async def test_redis_transport_with_the_real_client() -> None:
         MicroserviceOptions(Transport.REDIS, extra=extra),
         ClientOptions(name="R", transport=Transport.REDIS, extra=extra, timeout=2),
     )
+
+
+async def test_a_custom_codec_changes_the_wire_format_on_both_sides() -> None:
+    import base64
+
+    seen: list[bytes] = []
+
+    class Base64Codec:
+        def encode(self, message):
+            raw = base64.b64encode(json.dumps(message).encode())
+            seen.append(raw)
+            return raw
+
+        def decode(self, raw):
+            return json.loads(base64.b64decode(raw))
+
+    fake_server = fakeredis.FakeServer()
+    extra = {"client_factory": lambda: fakeredis.aioredis.FakeRedis(server=fake_server)}
+    await exercise(
+        MicroserviceOptions(Transport.REDIS, extra=extra, codec=Base64Codec()),
+        ClientOptions(name="C", transport=Transport.REDIS, extra=extra, codec=Base64Codec(), timeout=2),
+    )
+    assert seen and all(not chunk.startswith(b"{") for chunk in seen)  # nothing went out as plain JSON
 
 
 async def test_redis_clients_have_private_reply_topics_and_prefixes_isolate_environments() -> None:

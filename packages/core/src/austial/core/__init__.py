@@ -24,9 +24,11 @@ from austial.core.module_graph import ModuleGraph, ModuleVisibilityError
 from austial.core.module_ref import ModuleRef
 from austial.core.reflector import Reflector
 from austial.core.request_context import REQUEST, ContextId, ContextIdFactory, ContextIdStrategy
+from austial.core.serverless import create_lambda_handler
 from austial.core.tokens import APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE, INQUIRER
 
 __all__ = [
+    "create_lambda_handler",
     "ModuleGraph",
     "ModuleVisibilityError",
     "ContextIdStrategy",

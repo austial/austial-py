@@ -54,7 +54,19 @@ def test_every_component_kind_generates_importable_python(project: Path, kind, f
 
 
 def test_all_declared_kinds_are_covered() -> None:
-    assert set(COMPONENT_KINDS) == {"guard", "pipe", "interceptor", "filter", "middleware", "decorator", "class"}
+    assert set(COMPONENT_KINDS) == {
+        "guard",
+        "pipe",
+        "interceptor",
+        "filter",
+        "middleware",
+        "decorator",
+        "class",
+        "gateway",
+        "resolver",
+        "command",
+        "listener",
+    }
 
 
 def test_generated_files_pass_ruff(project: Path) -> None:
@@ -131,7 +143,7 @@ def test_cli_flat_flag_and_validation(project: Path) -> None:
     rejected = runner.invoke(app, ["generate", "module", "cats", "--flat"])
     assert rejected.exit_code == 1 and "--flat applies to" in rejected.output
 
-    unknown = runner.invoke(app, ["generate", "gateway", "chat"])
+    unknown = runner.invoke(app, ["generate", "scheduler", "chat"])
     assert unknown.exit_code == 1 and "Unknown schematic" in unknown.output
 
 
@@ -148,3 +160,19 @@ def test_info_lists_python_and_austial_packages(project: Path) -> None:
 
     outside = runner.invoke(app, ["info"])
     assert outside.exit_code == 0
+
+
+def test_generated_gateway_resolver_command_and_listener_import_and_register(project: Path) -> None:
+    from austial.commander.decorators import command_spec
+    from austial.websockets import WebSocketGateway  # noqa: F401
+
+    gateway = _import_file(generate_component("gateway", "live-chat")).LiveChatGateway
+    assert gateway.__name__ == "LiveChatGateway"
+    assert hasattr(gateway, "on_message")
+    resolver = _import_file(generate_component("resolver", "cats")).CatsQuery
+    assert hasattr(resolver, "cats_hello")
+    command = _import_file(generate_component("command", "seed-db")).SeedDbCommand
+    spec = command_spec(command)
+    assert spec is not None and spec.name == "seed-db"
+    listener = _import_file(generate_component("listener", "order")).OrderListener
+    assert hasattr(listener, "on_created")

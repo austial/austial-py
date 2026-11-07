@@ -169,6 +169,7 @@ from austial.core import (
     ModuleRef,
     ModuleVisibilityError,
     Reflector,
+    create_lambda_handler,
     forward_ref,
 )
 from austial.core.app import AustialApplication
@@ -327,4 +328,5 @@ __all__ = [
     "apply_decorators",
     "create_param_decorator",
     "forward_ref",
+    "create_lambda_handler",
 ]

@@ -1,0 +1,13 @@
+from austial import Injectable
+from austial.commander import Command, CommandRunner, Option
+
+
+@Command(name="{{ kebab_name }}", description="TODO: describe {{ kebab_name }}", arguments="[name]")
+@Injectable()
+class {{ class_name }}Command(CommandRunner):
+    async def run(self, passed_params: list[str], options: dict) -> None:
+        print(f"{{ kebab_name }}: {passed_params} {options}")
+
+    @Option(flags="-v, --verbose", description="More output")
+    def parse_verbose(self, value) -> bool:
+        return True

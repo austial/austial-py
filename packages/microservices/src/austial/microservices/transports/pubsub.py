@@ -44,6 +44,18 @@ def topic_for(pattern_key: str, prefix: str = "") -> str:
     return f"{prefix}p_{hashlib.sha1(pattern_key.encode()).hexdigest()[:16]}"  # noqa: S324 - a name, not security
 
 
+class JsonCodec:
+    """The default wire encoding. Any object with ``encode(dict) -> bytes`` and ``decode(bytes) -> dict`` can replace it
+    (``codec=`` on the options): msgpack, a schema registry, a compressing or encrypting wrapper..."""
+
+    def encode(self, message: dict[str, Any]) -> bytes:
+        return json.dumps(message, default=str).encode()
+
+    def decode(self, raw: bytes) -> dict[str, Any]:
+        decoded: dict[str, Any] = json.loads(raw)
+        return decoded
+
+
 class PubSubBackend(ABC):
     @abstractmethod
     async def connect(self) -> None: ...
@@ -61,7 +73,8 @@ class PubSubBackend(ABC):
 
 
 class PubSubServer(ServerTransport):
-    def __init__(self, backend: PubSubBackend, *, prefix: str = "", group: str | None = None):
+    def __init__(self, backend: PubSubBackend, *, prefix: str = "", group: str | None = None, codec: Any = None):
+        self.codec = codec or JsonCodec()
         self.backend, self.prefix, self.group = backend, prefix, group
         self.patterns: dict[str, list[str]] = {"request": [], "event": []}  # set by MicroserviceServer before listen()
         self._handler: ServerHandler | None = None
@@ -76,7 +89,7 @@ class PubSubServer(ServerTransport):
         async def on_message(payload: bytes) -> None:
             assert self._handler is not None
             try:
-                message = json.loads(payload)
+                message = self.codec.decode(payload)
             except ValueError:
                 _logger.warn(f"Dropping a non-JSON message on '{key}'")
                 return
@@ -96,7 +109,7 @@ class PubSubServer(ServerTransport):
             except Exception as exc:  # noqa: BLE001
                 reply = {"id": message["id"], "err": {"status": "error", "message": f"{type(exc).__name__}: {exc}"}}
             if message.get("reply_to"):
-                await self.backend.publish(message["reply_to"], json.dumps(reply, default=str).encode())
+                await self.backend.publish(message["reply_to"], self.codec.encode(reply))
 
         return on_message
 
@@ -105,7 +118,8 @@ class PubSubServer(ServerTransport):
 
 
 class PubSubClient(ClientTransport):
-    def __init__(self, backend: PubSubBackend, *, prefix: str = "", timeout: float = 5.0):
+    def __init__(self, backend: PubSubBackend, *, prefix: str = "", timeout: float = 5.0, codec: Any = None):
+        self.codec = codec or JsonCodec()
         self.backend, self.prefix, self.timeout = backend, prefix, timeout
         self._client_id = uuid.uuid4().hex[:12]
         self._pending: dict[str, asyncio.Future[Any]] = {}
@@ -127,8 +141,8 @@ class PubSubClient(ClientTransport):
         return reply_topic
 
     async def _on_reply(self, payload: bytes) -> None:
-        reply = json.loads(payload)
-        future = self._pending.pop(reply.get("id"), None)
+        reply = self.codec.decode(payload)
+        future = self._pending.pop(str(reply.get("id")), None)
         if future is None or future.done():
             return
         if "err" in reply:
@@ -144,7 +158,7 @@ class PubSubClient(ClientTransport):
         future: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
         self._pending[message_id] = future
         try:
-            body = json.dumps({"id": message_id, "data": data, "reply_to": reply_to}, default=str).encode()
+            body = self.codec.encode({"id": message_id, "data": data, "reply_to": reply_to})
             await self.backend.publish(topic, body)
             return await asyncio.wait_for(future, self.timeout)
         finally:
@@ -152,7 +166,7 @@ class PubSubClient(ClientTransport):
 
     async def emit(self, pattern: str, data: Any) -> None:
         await self.connect()
-        await self.backend.publish(topic_for(pattern, self.prefix), json.dumps({"data": data}, default=str).encode())
+        await self.backend.publish(topic_for(pattern, self.prefix), self.codec.encode({"data": data}))
 
     async def close(self) -> None:
         for future in self._pending.values():
