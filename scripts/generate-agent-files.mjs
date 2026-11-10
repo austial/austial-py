@@ -20,7 +20,7 @@ const publicDir = join(root, "public");
 const SITE = "https://docs.austial.com";
 
 const SUMMARY =
-  "Austial is a batteries-included, NestJS-style web framework for Python built on FastAPI: " +
+  "Austial is a production-ready, NestJS-style web framework for Python built on FastAPI: " +
   "modules, controllers, dependency injection, guards, pipes, interceptors, an ORM, auth, " +
   "multi-tenancy, security, jobs, storage and a CLI.";
 

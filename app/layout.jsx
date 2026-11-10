@@ -16,7 +16,7 @@ export const metadata = {
     template: "%s - Austial",
   },
   description:
-    "Austial: a NestJS-style, batteries-included web framework for Python, built on top of FastAPI.",
+    "Austial: a NestJS-style, production-ready web framework for Python, built on top of FastAPI.",
   applicationName: "Austial",
   generator: "Next.js",
   appleWebApp: {
