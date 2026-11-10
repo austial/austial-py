@@ -1,7 +1,7 @@
 # austial-py-doc
 
 Documentation site for [Austial](https://github.com/austial/austial-py) --
-a NestJS-style, batteries-included web framework for Python built on
+a NestJS-style, production-ready web framework for Python built on
 FastAPI. Published at **docs.austial.com**.
 
 Built with [Next.js](https://nextjs.org/) and [Nextra](https://nextra.site/)
