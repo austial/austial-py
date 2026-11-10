@@ -21,7 +21,6 @@ repository on 2026-11-07; things I could not verify are marked **(unverified)**.
 | `scripts/check_docs_sync.py` | Fails if an exported symbol is not mentioned in `austial-py-doc`. |
 | `.github/workflows/ci.yml` | lint, format, mypy, tests on Python 3.11-3.14 with a coverage floor, build of all 6 packages, advisory docs-sync. |
 | `.github/workflows/claude.yml` | `@claude` in issues/PRs. |
-| `.github/workflows/claude-review.yml` | Automatic review of non-draft, same-repo PRs. Advisory: CI is the merge gate. |
 | `.github/dependabot.yml`, PR/issue templates | Weekly dependency + Actions updates; a checklist that matches the definition of done. |
 
 Releases stay as they were: push a `vX.Y.Z` tag and `publish.yml` does the rest (versions come from git tags).
@@ -62,7 +61,7 @@ Also listed in the same directory, names verified but behaviour **not** reviewed
 |---|---|---|
 | [trailofbits/skills](https://github.com/trailofbits/skills) | `modern-python` (uv + ruff + pytest, matches our toolchain), `property-based-testing` (Hypothesis: ideal for pipes, version matching, serializer, mapped types), `static-analysis` (Semgrep/CodeQL), `differential-review`, `supply-chain-risk-auditor` (we publish 6 PyPI packages). | **CC-BY-SA-4.0.** Install as a marketplace plugin; do not copy their text into this repo, or ShareAlike applies to it. |
 | [obra/superpowers](https://github.com/obra/superpowers) (MIT) | `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `writing-plans`. Very widely used. | Enforces a heavy design -> plan -> execute process and can burn tokens on small changes. Overlaps the `tdd`/`diagnosing-bugs` skills you already have from `mattpocock-skills`: use one set, not both, or triggers conflict. |
-| [anthropics/claude-code-security-review](https://github.com/anthropics/claude-code-security-review) (MIT) | Security-focused PR review Action. | **Not hardened against prompt injection**: trusted, same-repo PRs only, and enable "Require approval for all external contributors". Our `claude-review.yml` already covers general review; add this only if you want a dedicated security pass. |
+| [anthropics/claude-code-security-review](https://github.com/anthropics/claude-code-security-review) (MIT) | Security-focused PR review Action. | **Not hardened against prompt injection**: trusted, same-repo PRs only, and enable "Require approval for all external contributors". Add this only if you want a dedicated security pass. |
 
 Already available in your sessions, no install needed: `/code-review`, `/simplify`, `/security-review`,
 and from your installed skills `mattpocock-skills:tdd`, `:code-review`, `:diagnosing-bugs`,

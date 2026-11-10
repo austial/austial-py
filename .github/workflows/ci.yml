@@ -79,13 +79,21 @@ jobs:
     continue-on-error: true  # the docs live in another repo; flag drift without blocking the PR
     steps:
       - uses: actions/checkout@v4
+      # The docs repo is private, so the default GITHUB_TOKEN cannot read it. Add a DOCS_REPO_TOKEN secret
+      # (read access to austial/austial-py-doc) to enable this check; without it the job is skipped, not red.
       - uses: actions/checkout@v4
+        id: docs
+        continue-on-error: true
         with:
           repository: austial/austial-py-doc
           path: docs-site
-      - uses: astral-sh/setup-uv@v3
-      - run: uv sync --all-packages --group dev
-      - run: uv run python scripts/check_docs_sync.py docs-site/content
+          token: ${{ secrets.DOCS_REPO_TOKEN || github.token }}
+      - if: steps.docs.outcome == 'success'
+        uses: astral-sh/setup-uv@v3
+      - if: steps.docs.outcome == 'success'
+        run: uv sync --all-packages --group dev
+      - if: steps.docs.outcome == 'success'
+        run: uv run python scripts/check_docs_sync.py docs-site/content
 
   brokers:
     name: Live brokers (Redis, NATS, RabbitMQ, MQTT, Kafka, MongoDB)
