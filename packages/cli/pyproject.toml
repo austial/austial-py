@@ -3,11 +3,55 @@ name = "austial-cli"
 dynamic = ["version"]
 description = "The `austial` scaffolding CLI (new/generate) and its Jinja2 project templates -- mirrors the separate @nestjs/cli repo."
 requires-python = ">=3.11"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Aayush Solanki" }]
+keywords = [
+    "austial",
+    "nestjs",
+    "fastapi",
+    "python",
+    "web-framework",
+    "dependency-injection",
+    "asgi",
+    "decorators",
+    "async",
+    "pydantic",
+    "cli",
+    "scaffolding",
+    "generator",
+    "code-generation",
+    "nest-cli",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: AsyncIO",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
 dependencies = [
     "jinja2>=3.1.0",
     "rich>=13.7.0",
     "typer>=0.27.3",
 ]
+
+[project.urls]
+Homepage = "https://github.com/austial/austial-py"
+Documentation = "https://docs.austial.com"
+Repository = "https://github.com/austial/austial-py"
+Issues = "https://github.com/austial/austial-py/issues"
+Changelog = "https://github.com/austial/austial-py/releases"
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]

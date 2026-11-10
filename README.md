@@ -15,13 +15,23 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/austial/austial-py/actions/workflows/ci.yml"><img src="https://github.com/austial/austial-py/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status"></a>
   <a href="https://pypi.org/project/austial/"><img src="https://img.shields.io/pypi/v/austial?label=pypi" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/austial/"><img src="https://img.shields.io/pypi/dm/austial?label=downloads" alt="PyPI downloads"></a>
   <a href="https://github.com/austial/austial-py/tags"><img src="https://img.shields.io/github/v/tag/austial/austial-py?label=tag&sort=semver" alt="Latest tag"></a>
   <a href="https://github.com/austial/austial-py/commits/main"><img src="https://img.shields.io/github/last-commit/austial/austial-py" alt="Last commit"></a>
   <a href="https://github.com/austial/austial-py/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+"></a>
   <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/built%20with-FastAPI-009688?logo=fastapi&logoColor=white" alt="Built with FastAPI"></a>
   <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/badge/managed%20with-uv-DE5FE9" alt="Managed with uv"></a>
+</p>
+
+<p align="center">
+  <a href="https://docs.austial.com"><b>Documentation</b></a> &middot;
+  <a href="#austial-in-one-file">Example</a> &middot;
+  <a href="#quickstart">Quickstart</a> &middot;
+  <a href="https://github.com/austial/austial-py/discussions">Discussions</a> &middot;
+  <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
 # Austial
@@ -37,6 +47,75 @@ This repository (`austial-py`) is the **framework itself** -- an installable
 library, no bundled sample app. To see it in action, scaffold a new project
 with the CLI (see [Quickstart](#quickstart) below); that generated project is
 the "hello world" app, kept separate from the framework's own source tree.
+
+> **If you know NestJS, you already know Austial.** Modules, controllers, providers and constructor-based
+> dependency injection, with the whole request lifecycle, on FastAPI and Pydantic. If it saves you from
+> hand-rolling architecture, a star helps other Python developers find it.
+
+## Austial in one file
+
+```python
+# main.py
+from austial import AustialFactory, Body, Controller, Injectable, Module, Post
+from pydantic import BaseModel
+
+
+class CreateCatDto(BaseModel):
+    name: str
+    age: int
+
+
+@Injectable()
+class CatsService:
+    def __init__(self) -> None:
+        self.cats: list[dict] = []
+
+    def create(self, dto: CreateCatDto) -> dict:
+        self.cats.append({"id": len(self.cats) + 1, **dto.model_dump()})
+        return self.cats[-1]
+
+
+@Controller("cats")
+class CatsController:
+    def __init__(self, cats: CatsService) -> None:  # injected by type hint
+        self.cats = cats
+
+    @Post()
+    async def create(self, dto: CreateCatDto = Body()) -> dict:
+        return self.cats.create(dto)
+
+
+@Module(controllers=[CatsController], providers=[CatsService])
+class AppModule:
+    pass
+
+
+app = AustialFactory.create(AppModule, title="Cats")
+```
+
+```bash
+pip install austial
+uvicorn main:app --reload      # Swagger UI at http://localhost:8000/docs
+```
+
+A fuller version with a guard, validation and error handling is in
+[`examples/hello-world`](examples/hello-world/main.py).
+
+## What you get
+
+- **Architecture, not just routing:** `@Module`, `@Controller`, `@Injectable`, a DI container with singleton and
+  transient scopes, and `Test.create_testing_module(...)` to override providers in tests.
+- **The full request lifecycle:** guards, pipes, interceptors, exception filters and middleware, bindable per
+  route or globally with `APP_GUARD` and friends.
+- **Batteries included:** config, a TypeORM-shaped ORM with Alembic migrations, MongoDB, caching, scheduling,
+  CQRS, events, WebSockets, GraphQL, OpenAPI, health checks, i18n, file storage and background jobs.
+- **Microservices:** `@MessagePattern` / `@EventPattern` over TCP, Redis, NATS, Kafka, MQTT, RabbitMQ and gRPC,
+  plus hybrid HTTP + broker apps.
+- **Auth and security:** Argon2, JWT, TOTP, OAuth2 / OIDC, roles and permissions, security headers, rate
+  limiting and CSRF.
+- **A CLI like `nest`:** `austial new` and `austial generate resource|module|controller|guard|...` patch your
+  app module for you.
+- **Still FastAPI underneath:** your Pydantic models, ASGI middleware and deployment setup keep working.
 
 ## Why
 
@@ -112,16 +191,18 @@ uv run austial serve                    # http://localhost:8000, auto-reload
 ```bash
 git clone https://github.com/austial/austial-py
 cd austial-py
-uv sync --all-extras
+uv sync --all-packages --group dev
 uv run pytest
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 
 ## Linting, type-checking & pre-commit hooks
 
 ```bash
 uv run ruff check .           # lint
 uv run ruff format .          # format
-uv run mypy austial tests     # type-check
+uv run mypy packages integration   # type-check
 
 uv run pre-commit install --hook-type pre-commit --hook-type pre-push
 uv run pre-commit run --all-files   # run every hook once, on demand
@@ -269,6 +350,15 @@ own PyPI project and each need a trusted publisher added for `austial-py`'s `pub
 on the project's publishing settings page
 (`https://pypi.org/manage/project/<name>/settings/publishing/`), or via a
 ["pending publisher"](https://pypi.org/manage/account/publishing/) for a name that doesn't exist on PyPI yet.
+
+## Community
+
+- Questions and ideas: [GitHub Discussions](https://github.com/austial/austial-py/discussions)
+- Bugs and feature requests: [issues](https://github.com/austial/austial-py/issues/new/choose)
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). Good first issues are labelled
+  [`good first issue`](https://github.com/austial/austial-py/labels/good%20first%20issue).
+- Security reports: [SECURITY.md](SECURITY.md)
+- Documentation source: [`austial/austial-py-doc`](https://github.com/austial/austial-py-doc)
 
 ## License
 
