@@ -3,6 +3,46 @@ name = "austial-microservices"
 dynamic = ["version"]
 description = "Message-driven applications: @MessagePattern / @EventPattern handlers served over TCP, in-process, Redis (Pub/Sub and Streams), NATS, Kafka, MQTT, RabbitMQ and gRPC (JSON or protobuf with streaming), plus ClientProxy and hybrid apps -- mirrors @nestjs/microservices."
 requires-python = ">=3.11"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Aayush Solanki" }]
+keywords = [
+    "austial",
+    "nestjs",
+    "fastapi",
+    "python",
+    "web-framework",
+    "dependency-injection",
+    "asgi",
+    "decorators",
+    "async",
+    "pydantic",
+    "microservices",
+    "message-broker",
+    "kafka",
+    "nats",
+    "rabbitmq",
+    "redis",
+    "mqtt",
+    "grpc",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: AsyncIO",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
 dependencies = [
     "austial-core",
 ]
@@ -16,6 +56,13 @@ mqtt = ["aiomqtt>=2.3"]
 rabbitmq = ["aio-pika>=9.4"]
 grpc = ["grpcio>=1.66"]
 grpc-proto = ["grpcio>=1.66", "grpcio-tools>=1.66", "protobuf>=5"]
+
+[project.urls]
+Homepage = "https://github.com/austial/austial-py"
+Documentation = "https://docs.austial.com"
+Repository = "https://github.com/austial/austial-py"
+Issues = "https://github.com/austial/austial-py/issues"
+Changelog = "https://github.com/austial/austial-py/releases"
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]

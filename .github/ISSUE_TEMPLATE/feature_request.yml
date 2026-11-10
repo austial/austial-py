@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest a NestJS-parity feature or an improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The problem, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: nest
+    attributes:
+      label: NestJS equivalent
+      description: The Nest feature or package this mirrors, with a link to its docs. Write "none" if it has no equivalent.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API
+      description: A short code sketch of how you would like to use it.
+      render: python
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Would you like to implement it?
+      options:
+        - label: Yes, I can open a PR

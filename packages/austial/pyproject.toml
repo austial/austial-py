@@ -4,8 +4,46 @@ dynamic = ["version"]
 description = "A NestJS-inspired, batteries-included web framework for Python, built on top of FastAPI."
 readme = "README.md"
 requires-python = ">=3.11"
+authors = [{ name = "Aayush Solanki" }]
+keywords = [
+    "austial",
+    "nestjs",
+    "fastapi",
+    "python",
+    "web-framework",
+    "dependency-injection",
+    "asgi",
+    "decorators",
+    "async",
+    "pydantic",
+    "framework",
+    "backend",
+    "api",
+    "rest",
+    "openapi",
+    "cli",
+    "microservices",
+    "orm",
+    "authentication",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: AsyncIO",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
 license = { text = "MIT" }
-urls = { Homepage = "https://github.com/austial/austial-py", Repository = "https://github.com/austial/austial-py", Issues = "https://github.com/austial/austial-py/issues" }
 dependencies = [
     "austial-core",
     "austial-microservices",
@@ -30,6 +68,13 @@ pymongo = ["austial-orm[pymongo]"]
 
 [project.scripts]
 austial = "austial.cli.main:run"
+
+[project.urls]
+Homepage = "https://github.com/austial/austial-py"
+Documentation = "https://docs.austial.com"
+Repository = "https://github.com/austial/austial-py"
+Issues = "https://github.com/austial/austial-py/issues"
+Changelog = "https://github.com/austial/austial-py/releases"
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]

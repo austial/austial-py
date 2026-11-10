@@ -3,6 +3,46 @@ name = "austial-core"
 dynamic = ["version"]
 description = "Austial's platform: decorators and exceptions, DI container, router and application bootstrap, config, testing, events, cache, scheduling, CQRS, HTTP client, i18n, storage, jobs, health checks, WebSockets, GraphQL, OpenAPI and Commander."
 requires-python = ">=3.11"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Aayush Solanki" }]
+keywords = [
+    "austial",
+    "nestjs",
+    "fastapi",
+    "python",
+    "web-framework",
+    "dependency-injection",
+    "asgi",
+    "decorators",
+    "async",
+    "pydantic",
+    "framework",
+    "backend",
+    "api",
+    "rest",
+    "openapi",
+    "graphql",
+    "websockets",
+    "cqrs",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: AsyncIO",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
 dependencies = [
     "fastapi>=0.115.0",
     "starlette",
@@ -21,6 +61,13 @@ dependencies = [
 strawberry = ["strawberry-graphql[fastapi]>=0.250"]      # austial.graphql
 socketio = ["python-socketio>=5.11"]                     # austial.websockets: SocketIoAdapter
 lambda = ["mangum>=0.17"]                                # create_lambda_handler
+
+[project.urls]
+Homepage = "https://github.com/austial/austial-py"
+Documentation = "https://docs.austial.com"
+Repository = "https://github.com/austial/austial-py"
+Issues = "https://github.com/austial/austial-py/issues"
+Changelog = "https://github.com/austial/austial-py/releases"
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]

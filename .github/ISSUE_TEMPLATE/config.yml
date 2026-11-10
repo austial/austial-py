@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea
+    url: https://github.com/austial/austial-py/discussions
+    about: Ask how to do something, or float an idea before filing a feature request.
+  - name: Documentation
+    url: https://docs.austial.com
+    about: Guides and API reference.
+  - name: Security vulnerability
+    url: https://github.com/austial/austial-py/security/advisories/new
+    about: Report privately, not in a public issue.
