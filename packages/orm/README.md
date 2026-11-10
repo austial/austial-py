@@ -3,7 +3,7 @@
 Data access: a TypeORM-shaped ORM on SQLAlchemy, Alembic migrations, MongoDB models, Prisma wiring, audit log and multi-tenancy.
 
 This is one of the six distributions of [Austial](https://github.com/austial/austial-py), a NestJS-style,
-batteries-included web framework for Python built on FastAPI. Most people want the umbrella package, which
+production-ready web framework for Python built on FastAPI. Most people want the umbrella package, which
 installs everything and provides the `austial` CLI:
 
 ```bash

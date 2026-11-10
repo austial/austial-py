@@ -1,6 +1,6 @@
 # Austial (framework repo)
 
-A NestJS-style, batteries-included web framework for Python on FastAPI. This repo is the **framework**
+A NestJS-style, production-ready web framework for Python on FastAPI. This repo is the **framework**
 (a uv workspace of 6 published distributions under `packages/`; modules keep their `austial.<name>` import paths). It has no sample app: the
 generated project from `austial new` plays that role. The documentation site is a **separate repo**,
 `../austial-py-doc` (Next.js + Nextra, MDX under `content/`).

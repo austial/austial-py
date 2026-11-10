@@ -1,4 +1,4 @@
-"""Austial -- a NestJS-inspired, batteries-included web framework for Python,
+"""Austial -- a NestJS-inspired, production-ready web framework for Python,
 built on top of FastAPI.
 
 Quickstart::

@@ -3,7 +3,7 @@
 Identity and access: Argon2, JWT, TOTP, OAuth2/OIDC, auth strategies, roles and permissions, security headers, rate limiting, CSRF and encryption.
 
 This is one of the six distributions of [Austial](https://github.com/austial/austial-py), a NestJS-style,
-batteries-included web framework for Python built on FastAPI. Most people want the umbrella package, which
+production-ready web framework for Python built on FastAPI. Most people want the umbrella package, which
 installs everything and provides the `austial` CLI:
 
 ```bash

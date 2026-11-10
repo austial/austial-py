@@ -1,7 +1,7 @@
 [project]
 name = "austial"
 dynamic = ["version"]
-description = "A NestJS-inspired, batteries-included web framework for Python, built on top of FastAPI."
+description = "A NestJS-inspired, production-ready web framework for Python, built on top of FastAPI."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Aayush Solanki" }]
