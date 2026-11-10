@@ -52,7 +52,7 @@ Then, by hand, replace the generated placeholder `name` column and DTO fields wi
 In `src/app_module.py`, once, import `OrmModule.for_root(...)` with every entity:
 
 ```python
-OrmModule.for_root(type_="sqlite", url="sqlite+aiosqlite:///./app.db", entities=[Cat, Owner], synchronize=True)   # dev
+OrmModule.for_root(type_="sqlite", url="sqlite+aiosqlite:///./app.db", entities=[Cat, Owner], synchronize=True)  # dev
 ```
 
 It connects on startup and closes on shutdown; there is no manual `initialize()`. `synchronize=True` is for local development and tests only: for anything deployed,
@@ -69,6 +69,7 @@ CQRS, OpenAPI docs, health checks, MongoDB, outbound HTTP. Add them one at a tim
 import pytest
 from httpx import ASGITransport, AsyncClient
 from austial.testing import Test
+
 
 @pytest.mark.asyncio
 async def test_create_and_list():

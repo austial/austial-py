@@ -310,8 +310,7 @@ class CatsController:
     @Get(":id")
     @UseGuards(ApiKeyGuard)
     @UseInterceptors(TransformInterceptor())
-    async def find_one(self, id: int):
-        ...
+    async def find_one(self, id: int): ...
 ```
 
 Note path params use Nest's `:id` syntax (translated to FastAPI's `{id}`
