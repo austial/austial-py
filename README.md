@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <b>A NestJS-style, batteries-included web framework for Python, built on top of FastAPI.</b>
+  <b>A NestJS-style, production-ready web framework for Python, built on top of FastAPI.</b>
 </p>
 
 <p align="center">
@@ -107,7 +107,7 @@ A fuller version with a guard, validation and error handling is in
   transient scopes, and `Test.create_testing_module(...)` to override providers in tests.
 - **The full request lifecycle:** guards, pipes, interceptors, exception filters and middleware, bindable per
   route or globally with `APP_GUARD` and friends.
-- **Batteries included:** config, a TypeORM-shaped ORM with Alembic migrations, MongoDB, caching, scheduling,
+- **Everything you need in production:** config, a TypeORM-shaped ORM with Alembic migrations, MongoDB, caching, scheduling,
   CQRS, events, WebSockets, GraphQL, OpenAPI, health checks, i18n, file storage and background jobs.
 - **Microservices:** `@MessagePattern` / `@EventPattern` over TCP, Redis, NATS, Kafka, MQTT, RabbitMQ and gRPC,
   plus hybrid HTTP + broker apps.
@@ -310,8 +310,7 @@ class CatsController:
     @Get(":id")
     @UseGuards(ApiKeyGuard)
     @UseInterceptors(TransformInterceptor())
-    async def find_one(self, id: int):
-        ...
+    async def find_one(self, id: int): ...
 ```
 
 Note path params use Nest's `:id` syntax (translated to FastAPI's `{id}`

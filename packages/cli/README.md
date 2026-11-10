@@ -3,7 +3,7 @@
 The `austial` CLI: `austial new`, `generate`, `serve`, `build` and friends, with the Jinja2 project templates.
 
 This is one of the six distributions of [Austial](https://github.com/austial/austial-py), a NestJS-style,
-batteries-included web framework for Python built on FastAPI. Most people want the umbrella package, which
+production-ready web framework for Python built on FastAPI. Most people want the umbrella package, which
 installs everything and provides the `austial` CLI:
 
 ```bash

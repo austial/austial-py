@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This is an **Austial** application: a NestJS-style, batteries-included web
+This is an **Austial** application: a NestJS-style, production-ready web
 framework for Python, built on FastAPI. Austial is not FastAPI, Django, or
 NestJS. It looks like all three, and guessing from them produces code that
 does not run. When you are unsure of an API, read the docs instead of
