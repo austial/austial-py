@@ -9,9 +9,9 @@ import pytest
 from austial.testing import Test
 from httpx import ASGITransport, AsyncClient
 
-from src.app_controller import AppController
-from src.app_service import AppService
-from src.modules.health.health_module import HealthModule
+from src.app.app_controller import AppController
+from src.app.app_service import AppService
+from src.app.modules.health.health_module import HealthModule
 
 
 @pytest.mark.asyncio

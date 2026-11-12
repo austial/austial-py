@@ -237,3 +237,20 @@ def test_daily_shorthand_lands_on_next_midnight():
     schedule = parse_schedule("@daily")
     after = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
     assert schedule.next_run_at(after) == datetime(2026, 1, 2, 0, 0, 0, tzinfo=UTC)
+
+
+def test_default_module_path_follows_the_project_layout(tmp_path, monkeypatch):
+    from austial.jobs.cli import _default_module_path
+
+    monkeypatch.chdir(tmp_path)
+    assert (
+        _default_module_path() == "src.app.app_module:AppModule"
+    )  # nothing there yet: the layout `austial new` writes
+
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app_module.py").write_text("")
+    assert _default_module_path() == "src.app_module:AppModule"  # an older flat project
+
+    (tmp_path / "src" / "app").mkdir()
+    (tmp_path / "src" / "app" / "app_module.py").write_text("")
+    assert _default_module_path() == "src.app.app_module:AppModule"  # the modular layout wins

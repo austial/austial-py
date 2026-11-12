@@ -1,9 +1,9 @@
 from austial import Body, Controller, Delete, Get, Patch, Post
 
-from src.modules.{{ snake_name }}.{{ snake_name }}_service import {{ class_name }}Service
-from src.modules.{{ snake_name }}.dto.create_{{ snake_name }}_dto import Create{{ class_name }}Dto
-from src.modules.{{ snake_name }}.dto.update_{{ snake_name }}_dto import Update{{ class_name }}Dto
-from src.modules.{{ snake_name }}.entities.{{ snake_name }}_entity import {{ class_name }}
+from {{ modules_pkg }}.{{ snake_name }}.{{ snake_name }}_service import {{ class_name }}Service
+from {{ modules_pkg }}.{{ snake_name }}.dto.create_{{ snake_name }}_dto import Create{{ class_name }}Dto
+from {{ modules_pkg }}.{{ snake_name }}.dto.update_{{ snake_name }}_dto import Update{{ class_name }}Dto
+from {{ modules_pkg }}.{{ snake_name }}.entities.{{ snake_name }}_entity import {{ class_name }}
 
 
 @Controller("{{ kebab_name }}")

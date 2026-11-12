@@ -1,9 +1,9 @@
 from austial import Injectable, NotFoundException
 from austial.orm import InjectRepository, Repository
 
-from src.modules.{{ snake_name }}.dto.create_{{ snake_name }}_dto import Create{{ class_name }}Dto
-from src.modules.{{ snake_name }}.dto.update_{{ snake_name }}_dto import Update{{ class_name }}Dto
-from src.modules.{{ snake_name }}.entities.{{ snake_name }}_entity import {{ class_name }}
+from {{ modules_pkg }}.{{ snake_name }}.dto.create_{{ snake_name }}_dto import Create{{ class_name }}Dto
+from {{ modules_pkg }}.{{ snake_name }}.dto.update_{{ snake_name }}_dto import Update{{ class_name }}Dto
+from {{ modules_pkg }}.{{ snake_name }}.entities.{{ snake_name }}_entity import {{ class_name }}
 
 
 @Injectable()

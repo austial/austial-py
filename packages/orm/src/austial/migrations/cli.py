@@ -74,7 +74,7 @@ def _load_metadata():
     module_name, _, attr = dotted.partition(":")
     if not attr:
         raise MigrationConfigurationError(
-            "AUSTIAL_METADATA_MODULE must be `module:attribute`, e.g. `src.app_module:target_metadata`."
+            "AUSTIAL_METADATA_MODULE must be `module:attribute`, e.g. `src.app.app_module:target_metadata`."
         )
     sys.path.insert(0, os.getcwd())
     try:

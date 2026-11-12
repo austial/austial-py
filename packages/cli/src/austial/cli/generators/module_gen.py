@@ -5,7 +5,16 @@ from __future__ import annotations
 from pathlib import Path
 
 from austial.cli.generators.app_module_patcher import register_module
-from austial.cli.generators.base import find_project_root, is_dry_run, render, write_file
+from austial.cli.generators.base import (
+    app_module_file,
+    ensure_packages,
+    find_project_root,
+    is_dry_run,
+    modules_dir,
+    modules_package,
+    render,
+    write_file,
+)
 from austial.cli.naming import to_kebab_case, to_pascal_case, to_snake_case
 
 
@@ -15,16 +24,16 @@ def generate_module(name: str, *, project_root: Path | None = None) -> Path:
     class_name = to_pascal_case(name)
     ctx = {"snake_name": snake_name, "class_name": class_name, "kebab_name": to_kebab_case(name)}
 
-    module_dir = root / "src" / "modules" / snake_name
-    write_file(module_dir / "__init__.py", "")
+    module_dir = modules_dir(root) / snake_name
+    ensure_packages(module_dir, root)
     file_path = module_dir / f"{snake_name}_module.py"
     write_file(file_path, render("module/module.py.j2", **ctx))
 
-    app_module_path = root / "src" / "app_module.py"
+    app_module_path = app_module_file(root)
     if app_module_path.exists() and not is_dry_run():
         register_module(
             app_module_path,
             f"{class_name}Module",
-            f"from src.modules.{snake_name}.{snake_name}_module import {class_name}Module",
+            f"from {modules_package(root)}.{snake_name}.{snake_name}_module import {class_name}Module",
         )
     return file_path

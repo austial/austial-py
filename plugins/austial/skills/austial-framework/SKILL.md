@@ -1,6 +1,6 @@
 ---
 name: austial-framework
-description: Ground rules and API map for the Austial framework (a NestJS-style Python framework on FastAPI, imported as `austial`). Use whenever a project imports `austial`, has `src/app_module.py`, or the user mentions Austial, `austial g`, `@Module`/`@Controller`/`@Injectable` in Python, or asks to build a Python backend with it. Load before writing any Austial code: Austial is not FastAPI, Django or NestJS, and code guessed from them does not run.
+description: Ground rules and API map for the Austial framework (a NestJS-style Python framework on FastAPI, imported as `austial`). Use whenever a project imports `austial`, has `src/app/app_module.py` (or the older `src/app_module.py`), or the user mentions Austial, `austial g`, `@Module`/`@Controller`/`@Injectable` in Python, or asks to build a Python backend with it. Load before writing any Austial code: Austial is not FastAPI, Django or NestJS, and code guessed from them does not run.
 ---
 
 # Austial: how to work in an Austial project

@@ -38,21 +38,34 @@ and `pytest` all pass. Never report work as finished without running them.
 ```
 src/
 ├── main.py              # AustialFactory.create(AppModule) + global pipes/filters
-├── app_module.py        # root @Module: imports every feature module
-└── modules/<snake_name>/
-    ├── <name>_module.py
-    ├── <name>_controller.py
-    ├── <name>_service.py
-    ├── entities/<name>_entity.py
-    └── dto/create_<name>_dto.py, update_<name>_dto.py
+├── app/
+│   ├── app_module.py    # root @Module: imports every feature module
+│   ├── app_controller.py
+│   ├── app_service.py
+│   └── modules/<snake_name>/        # one folder per feature
+│       ├── <name>_module.py
+│       ├── <name>_controller.py
+│       ├── <name>_service.py
+│       ├── entities/<name>_entity.py
+│       └── dto/create_<name>_dto.py, update_<name>_dto.py
+├── shared/                          # used by more than one module
+│   ├── guards/ services/ pipes/ interceptors/ filters/ middleware/ decorators/ dto/
+└── templates/                       # non-Python assets
+    └── email/
 tests/unit/, tests/e2e/      # files named *_spec.py
 ```
 
 - One folder per feature. File names use underscore suffixes
   (`cats_controller.py`), never dots.
-- Imports are absolute from the project root: `from src.modules.cats...`.
+- Code used by two or more modules goes in `src/shared/<kind>/`, not in a feature
+  folder another module imports from.
+- Imports are absolute from the project root: `from src.app.modules.cats...`,
+  `from src.shared.guards...`.
 - Prefer `uv run austial g resource <name>` over hand-writing a feature. It
-  also patches `app_module.py`.
+  also patches `src/app/app_module.py`. Use `--shared` for cross-cutting pieces:
+  `uv run austial g guard roles --shared`, `uv run austial g service mailer --shared`.
+- More folders are fine when the app needs them (`src/config/`, `src/database/`,
+  `src/jobs/`, `src/events/`); keep the same one-folder-per-concern rule.
 
 ## The mental model
 

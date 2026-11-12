@@ -1,9 +1,9 @@
 from austial import Module
 from austial.orm import OrmModule
 
-from src.modules.{{ snake_name }}.{{ snake_name }}_controller import {{ class_name }}Controller
-from src.modules.{{ snake_name }}.{{ snake_name }}_service import {{ class_name }}Service
-from src.modules.{{ snake_name }}.entities.{{ snake_name }}_entity import {{ class_name }}
+from {{ modules_pkg }}.{{ snake_name }}.{{ snake_name }}_controller import {{ class_name }}Controller
+from {{ modules_pkg }}.{{ snake_name }}.{{ snake_name }}_service import {{ class_name }}Service
+from {{ modules_pkg }}.{{ snake_name }}.entities.{{ snake_name }}_entity import {{ class_name }}
 
 
 @Module(

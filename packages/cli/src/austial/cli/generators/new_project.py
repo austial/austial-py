@@ -7,7 +7,11 @@ from pathlib import Path
 
 from austial.cli.generators.agent_files import link_agent_files
 from austial.cli.generators.base import render, write_file
+from austial.cli.generators.component_gen import SHARED_FOLDERS
 from austial.cli.naming import to_kebab_case
+
+# Folders created under src/shared/ (each an importable package): one per `--shared` kind, plus dto/.
+SHARED_FOLDERS_SCAFFOLD = (*SHARED_FOLDERS.values(), "dto")
 
 
 def create_new_project(
@@ -38,24 +42,36 @@ def create_new_project(
         write_file(project_dir / "AGENTS.md", render("project/agents_md.j2", **ctx))
         link_agent_files(project_dir)
 
-    write_file(project_dir / "src" / "__init__.py", "")
-    write_file(project_dir / "src" / "main.py", render("project/main.py.j2", **ctx))
-    write_file(project_dir / "src" / "app_module.py", render("project/app_module.py.j2", **ctx))
-    write_file(project_dir / "src" / "app_controller.py", render("project/app_controller.py.j2", **ctx))
-    write_file(project_dir / "src" / "app_service.py", render("project/app_service.py.j2", **ctx))
+    src = project_dir / "src"
+    write_file(src / "__init__.py", "")
+    write_file(src / "main.py", render("project/main.py.j2", **ctx))
 
-    write_file(project_dir / "src" / "modules" / "__init__.py", "")
-    health_dir = project_dir / "src" / "modules" / "health"
+    # src/app/: the root module and the app-level controller/service, with the feature modules under it.
+    write_file(src / "app" / "__init__.py", "")
+    write_file(src / "app" / "app_module.py", render("project/app_module.py.j2", **ctx))
+    write_file(src / "app" / "app_controller.py", render("project/app_controller.py.j2", **ctx))
+    write_file(src / "app" / "app_service.py", render("project/app_service.py.j2", **ctx))
+
+    # src/app/modules/: one folder per feature.
+    write_file(src / "app" / "modules" / "__init__.py", "")
+    health_dir = src / "app" / "modules" / "health"
     write_file(health_dir / "__init__.py", "")
     write_file(health_dir / "health_module.py", render("project/modules/health/health_module.py.j2", **ctx))
     write_file(health_dir / "health_controller.py", render("project/modules/health/health_controller.py.j2", **ctx))
     write_file(health_dir / "health_service.py", render("project/modules/health/health_service.py.j2", **ctx))
     write_file(health_dir / "health_dto.py", render("project/modules/health/health_dto.py.j2", **ctx))
-    write_file(health_dir / "guards" / "__init__.py", "")
+
+    # src/shared/: code several modules use. Folders for the kinds you add later are ready (and importable).
+    write_file(src / "shared" / "__init__.py", "")
+    for folder in SHARED_FOLDERS_SCAFFOLD:
+        write_file(src / "shared" / folder / "__init__.py", "")
     write_file(
-        health_dir / "guards" / "api_key_guard.py",
-        render("project/modules/health/guards/api_key_guard.py.j2", **ctx),
+        src / "shared" / "guards" / "api_key_guard.py",
+        render("project/shared/guards/api_key_guard.py.j2", **ctx),
     )
+
+    # src/templates/: non-Python assets (email, ...). Not a package, so the folder is just kept in git.
+    write_file(src / "templates" / "email" / ".gitkeep", "")
 
     write_file(project_dir / "tests" / "__init__.py", "")
     write_file(project_dir / "tests" / "unit" / "__init__.py", "")

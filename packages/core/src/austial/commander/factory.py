@@ -4,7 +4,7 @@
 
     # cli.py
     from austial.commander import CommandFactory
-    from src.app_module import AppModule
+    from src.app.app_module import AppModule
 
     if __name__ == "__main__":
         CommandFactory.main(AppModule, name="mytool")        # exits with the command's code

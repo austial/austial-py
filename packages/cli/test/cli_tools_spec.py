@@ -37,7 +37,7 @@ def test_graph_command_prints_mermaid_and_json(project: Path) -> None:
 
     missing = runner.invoke(app, ["graph", "src.nope:Thing"])
     assert missing.exit_code == 1 and "Can't import" in missing.output
-    wrong_attr = runner.invoke(app, ["graph", "src.app_module:Nope"])
+    wrong_attr = runner.invoke(app, ["graph", "src.app.app_module:Nope"])
     assert wrong_attr.exit_code == 1 and "has no 'Nope'" in wrong_attr.output
 
 
@@ -122,7 +122,7 @@ def test_library_and_app_schematics(project: Path) -> None:
 
 
 def test_repl_session_namespace_and_run(project: Path) -> None:
-    root_module = load_target("src.app_module:AppModule", project)
+    root_module = load_target("src.app.app_module:AppModule", project)
     session = ReplSession(root_module)
     try:
         ns = session.namespace

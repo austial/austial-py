@@ -7,6 +7,8 @@ austial generate service cats
 austial generate resource cats
 austial generate guard auth/api-key [--flat] [--dry-run]
    (also: pipe, interceptor, filter, middleware, decorator, class)
+austial generate guard roles --shared        # src/shared/guards/roles_guard.py
+austial generate service mailer --shared     # src/shared/services/mailer_service.py
 austial info
 austial serve
 """
@@ -20,6 +22,7 @@ from rich.console import Console
 
 from austial.cli.generators import (
     COMPONENT_KINDS,
+    SHARED_FOLDERS,
     create_new_project,
     generate_app,
     generate_component,
@@ -29,7 +32,7 @@ from austial.cli.generators import (
     generate_resource,
     generate_service,
 )
-from austial.cli.generators.base import ProjectNotFoundError, dry_run, find_project_root
+from austial.cli.generators.base import ProjectNotFoundError, app_module_ref, dry_run, find_project_root
 
 console = Console()
 app = typer.Typer(
@@ -51,6 +54,9 @@ _SCHEMATICS = {
 
 # Schematics that accept `--flat` (the ones that create a single file rather than a feature folder).
 _FLAT_SCHEMATICS = set(COMPONENT_KINDS)
+
+# Schematics that accept `--shared` (cross-cutting pieces that live in `src/shared/` rather than a feature folder).
+_SHARED_SCHEMATICS = {*SHARED_FOLDERS, "provider"}
 
 # `nest g` short aliases.
 _ALIASES = {
@@ -115,7 +121,7 @@ def new_project(
     console.print("  uv run austial serve\n")
 
 
-def _generate(schematic: str, name: str, *, flat: bool = False, dry: bool = False) -> None:
+def _generate(schematic: str, name: str, *, flat: bool = False, shared: bool = False, dry: bool = False) -> None:
     schematic = _ALIASES.get(schematic.lower(), schematic.lower())
     if schematic not in _ALL_SCHEMATICS:
         console.print(
@@ -126,9 +132,18 @@ def _generate(schematic: str, name: str, *, flat: bool = False, dry: bool = Fals
         console.print(f"[bold red]\u2716[/bold red] --flat applies to: {', '.join(sorted(_FLAT_SCHEMATICS))}.")
         raise typer.Exit(code=1)
 
+    if shared and schematic not in _SHARED_SCHEMATICS:
+        console.print(f"[bold red]\u2716[/bold red] --shared applies to: {', '.join(sorted(_SHARED_SCHEMATICS))}.")
+        raise typer.Exit(code=1)
+    if shared and flat:
+        console.print("[bold red]\u2716[/bold red] --shared files are always flat; drop --flat.")
+        raise typer.Exit(code=1)
+
     def run() -> Path:
         if schematic in COMPONENT_KINDS:
-            return generate_component(schematic, name, flat=flat)
+            return generate_component(schematic, name, flat=flat, shared=shared)
+        if shared:  # only service/provider get here: the component kinds returned above
+            return generate_service(name, shared=True)
         return _SCHEMATICS[schematic](name)
 
     try:
@@ -147,6 +162,7 @@ def _generate(schematic: str, name: str, *, flat: bool = False, dry: bool = Fals
 
 
 _FLAT_HELP = "Don't create a folder for the file (guard, pipe, interceptor, filter, middleware, decorator, class)."
+_SHARED_HELP = "Put it in src/shared/ (guards/, pipes/, services/, ...) instead of a feature folder."
 _DRY_HELP = "Show what would be created without writing anything."
 
 
@@ -155,10 +171,11 @@ def generate(
     schematic: str = typer.Argument(..., help=_SCHEMATIC_HELP),
     name: str = typer.Argument(..., help="Name, optionally with a path: 'cats' or 'auth/api-key'."),
     flat: bool = typer.Option(False, "--flat", help=_FLAT_HELP),
+    shared: bool = typer.Option(False, "--shared", help=_SHARED_HELP),
     dry: bool = typer.Option(False, "--dry-run", "-d", help=_DRY_HELP),
 ) -> None:
     """Generate an artifact -- mirrors `nest generate`."""
-    _generate(schematic, name, flat=flat, dry=dry)
+    _generate(schematic, name, flat=flat, shared=shared, dry=dry)
 
 
 @app.command("g", hidden=True)
@@ -166,10 +183,11 @@ def generate_alias(
     schematic: str = typer.Argument(..., help=_SCHEMATIC_HELP),
     name: str = typer.Argument(..., help="Name, optionally with a path: 'cats' or 'auth/api-key'."),
     flat: bool = typer.Option(False, "--flat", help=_FLAT_HELP),
+    shared: bool = typer.Option(False, "--shared", help=_SHARED_HELP),
     dry: bool = typer.Option(False, "--dry-run", "-d", help=_DRY_HELP),
 ) -> None:
     """Alias for `generate` -- mirrors Nest CLI's `nest g`."""
-    _generate(schematic, name, flat=flat, dry=dry)
+    _generate(schematic, name, flat=flat, shared=shared, dry=dry)
 
 
 @app.command("info")
@@ -233,7 +251,7 @@ def build() -> None:
         console.print(f"[bold red]\u2716[/bold red] Compilation failed in: {', '.join(failed)}")
         raise typer.Exit(code=1)
     try:
-        graph = module_graph_for(load_target("src.app_module:AppModule", root))
+        graph = module_graph_for(load_target(app_module_ref(root), root))
     except TargetError as exc:
         console.print(f"[bold red]\u2716[/bold red] {exc}")
         raise typer.Exit(code=1) from exc
@@ -265,7 +283,7 @@ def add(
 
 @app.command("graph")
 def graph(
-    target: str = typer.Argument("src.app_module:AppModule", help="module.path:RootModule"),
+    target: str | None = typer.Argument(None, help="module.path:RootModule (default: the project's root module)"),
     fmt: str = typer.Option("mermaid", "--format", "-f", help="mermaid or json."),
 ) -> None:
     """Prints the module graph (imports, providers, controllers, exports), like Nest's devtools graph."""
@@ -273,8 +291,9 @@ def graph(
 
     from austial.cli.tools import TargetError, load_target, module_graph_for
 
+    root = _project_root_or_exit()
     try:
-        module_graph = module_graph_for(load_target(target, _project_root_or_exit()))
+        module_graph = module_graph_for(load_target(target or app_module_ref(root), root))
     except TargetError as exc:
         console.print(f"[bold red]\u2716[/bold red] {exc}")
         raise typer.Exit(code=1) from exc
@@ -282,14 +301,17 @@ def graph(
 
 
 @app.command("repl")
-def repl(target: str = typer.Argument("src.app_module:AppModule", help="module.path:RootModule")) -> None:
+def repl(
+    target: str | None = typer.Argument(None, help="module.path:RootModule (default: the project's root module)"),
+) -> None:
     """Starts a Python REPL with the app booted: get(Token), run(coroutine). Mirrors Nest's REPL."""
     import code
 
     from austial.cli.tools import ReplSession, TargetError, load_target
 
+    root = _project_root_or_exit()
     try:
-        session = ReplSession(load_target(target, _project_root_or_exit()))
+        session = ReplSession(load_target(target or app_module_ref(root), root))
     except TargetError as exc:
         console.print(f"[bold red]\u2716[/bold red] {exc}")
         raise typer.Exit(code=1) from exc

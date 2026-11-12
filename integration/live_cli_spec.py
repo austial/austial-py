@@ -21,7 +21,7 @@ def test_scaffold_generate_build_graph_and_start_a_real_project(tmp_path: Path) 
     created = austial("new", "demo", "--skip-install", "--skip-git", cwd=tmp_path)
     assert created.returncode == 0, created.stdout + created.stderr
     project = tmp_path / "demo"
-    assert (project / "src" / "main.py").exists() and (project / "src" / "app_module.py").exists()
+    assert (project / "src" / "main.py").exists() and (project / "src" / "app" / "app_module.py").exists()
 
     for schematic, name in [
         ("resource", "cats"),
@@ -35,9 +35,9 @@ def test_scaffold_generate_build_graph_and_start_a_real_project(tmp_path: Path) 
         result = austial("generate", schematic, name, cwd=project)
         assert result.returncode == 0, f"{schematic}: {result.stdout}{result.stderr}"
 
-    assert (project / "src" / "modules" / "cats" / "cats_controller.py").exists()
-    assert (project / "src" / "modules" / "chat" / "chat_gateway.py").exists()
-    assert "CatsModule" in (project / "src" / "app_module.py").read_text()  # the resource was registered
+    assert (project / "src" / "app" / "modules" / "cats" / "cats_controller.py").exists()
+    assert (project / "src" / "app" / "modules" / "chat" / "chat_gateway.py").exists()
+    assert "CatsModule" in (project / "src" / "app" / "app_module.py").read_text()  # the resource was registered
 
     # every generated file must be valid, importable Python
     compiled = subprocess.run(
@@ -64,15 +64,15 @@ def test_scaffold_generate_build_graph_and_start_a_real_project(tmp_path: Path) 
     )
     assert broken.returncode != 0 and "resolve dependency" in broken.stdout + broken.stderr
 
-    module_file = project / "src" / "app_module.py"
+    module_file = project / "src" / "app" / "app_module.py"
     source = module_file.read_text()
     source = source.replace(
         "from austial.config import ConfigModule",
         "from austial.config import ConfigModule\nfrom austial.orm import OrmModule",
     )
     source = source.replace(
-        "from src.app_controller import AppController",
-        "from src.app_controller import AppController\nfrom src.modules.cats.entities.cats_entity import Cats",
+        "from src.app.app_controller import AppController",
+        "from src.app.app_controller import AppController\nfrom src.app.modules.cats.entities.cats_entity import Cats",
     )
     source = source.replace(
         "ConfigModule.for_root(),",
