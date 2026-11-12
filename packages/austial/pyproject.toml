@@ -83,7 +83,6 @@ Documentation = "https://docs.austial.com"
 Guides = "https://austial.com/guides"
 Repository = "https://github.com/austial/austial-py"
 Issues = "https://github.com/austial/austial-py/issues"
-Issues = "https://github.com/austial/austial-py/issues"
 Changelog = "https://github.com/austial/austial-py/releases"
 
 [build-system]
