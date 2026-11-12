@@ -76,19 +76,20 @@ def test_new_project_uses_the_modular_layout(tmp_path):
     for name in ("app_module.py", "app_controller.py", "app_service.py"):
         assert (src / "app" / name).exists(), name
     assert not (src / "app_module.py").exists()  # the flat layout is gone
-    assert (src / "modules" / "health" / "health_module.py").exists()
+    assert (src / "app" / "modules" / "health" / "health_module.py").exists()
+    assert not (src / "modules").exists()  # feature modules live under src/app/
     assert (src / "shared" / "guards" / "api_key_guard.py").exists()
     for folder in ("guards", "services", "pipes", "interceptors", "filters", "decorators", "dto"):
         assert (src / "shared" / folder / "__init__.py").exists(), folder
     assert (src / "templates" / "email" / ".gitkeep").exists()
-    assert not (src / "modules" / "health" / "guards").exists()  # the guard moved to shared/
+    assert not (src / "app" / "modules" / "health" / "guards").exists()  # the guard moved to shared/
 
     app_module = (src / "app" / "app_module.py").read_text()
     assert "from src.app.app_controller import AppController" in app_module
-    assert "from src.modules.health.health_module import HealthModule" in app_module
+    assert "from src.app.modules.health.health_module import HealthModule" in app_module
     assert (
         "from src.shared.guards.api_key_guard import ApiKeyGuard"
-        in (src / "modules" / "health" / "health_module.py").read_text()
+        in (src / "app" / "modules" / "health" / "health_module.py").read_text()
     )
     assert "from src.app.app_module import AppModule" in (src / "main.py").read_text()
 

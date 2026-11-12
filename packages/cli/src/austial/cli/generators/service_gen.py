@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from austial.cli.generators.base import find_project_root, render, write_file
+from austial.cli.generators.base import find_project_root, modules_dir, render, write_file
 from austial.cli.naming import to_kebab_case, to_pascal_case, to_snake_case
 
 
@@ -17,7 +17,7 @@ def generate_service(name: str, *, shared: bool = False, project_root: Path | No
     class_name = to_pascal_case(name)
     ctx = {"snake_name": snake_name, "class_name": class_name, "kebab_name": to_kebab_case(name)}
 
-    module_dir = root / "src" / "shared" / "services" if shared else root / "src" / "modules" / snake_name
+    module_dir = root / "src" / "shared" / "services" if shared else modules_dir(root) / snake_name
     if shared:
         write_file(root / "src" / "shared" / "__init__.py", "")
     write_file(module_dir / "__init__.py", "")

@@ -45,15 +45,15 @@ def create_new_project(
     write_file(src / "__init__.py", "")
     write_file(src / "main.py", render("project/main.py.j2", **ctx))
 
-    # src/app/: the root module and the app-level controller/service.
+    # src/app/: the root module and the app-level controller/service, with the feature modules under it.
     write_file(src / "app" / "__init__.py", "")
     write_file(src / "app" / "app_module.py", render("project/app_module.py.j2", **ctx))
     write_file(src / "app" / "app_controller.py", render("project/app_controller.py.j2", **ctx))
     write_file(src / "app" / "app_service.py", render("project/app_service.py.j2", **ctx))
 
-    # src/modules/: one folder per feature.
-    write_file(src / "modules" / "__init__.py", "")
-    health_dir = src / "modules" / "health"
+    # src/app/modules/: one folder per feature.
+    write_file(src / "app" / "modules" / "__init__.py", "")
+    health_dir = src / "app" / "modules" / "health"
     write_file(health_dir / "__init__.py", "")
     write_file(health_dir / "health_module.py", render("project/modules/health/health_module.py.j2", **ctx))
     write_file(health_dir / "health_controller.py", render("project/modules/health/health_controller.py.j2", **ctx))

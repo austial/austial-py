@@ -11,9 +11,9 @@ src/
 ├── app/
 │   ├── app_module.py        # root module (mirrors app.module.ts)
 │   ├── app_controller.py
-│   └── app_service.py
-├── modules/                 # one folder per feature
-│   └── health/              # GET /health, GET /health/protected
+│   ├── app_service.py
+│   └── modules/             # one folder per feature
+│       └── health/          # GET /health, GET /health/protected
 ├── shared/                  # used by several modules
 │   ├── guards/              # api_key_guard.py
 │   └── services/ pipes/ interceptors/ filters/ decorators/ dto/

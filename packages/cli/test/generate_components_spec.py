@@ -47,8 +47,8 @@ def _import_file(path: Path):
 )
 def test_every_component_kind_generates_importable_python(project: Path, kind, file_name, class_name) -> None:
     path = generate_component(kind, "api-key")
-    assert path == project / "src" / "modules" / "api_key" / file_name
-    assert (path.parent / "__init__.py").exists() and (project / "src" / "modules" / "__init__.py").exists()
+    assert path == project / "src" / "app" / "modules" / "api_key" / file_name
+    assert (path.parent / "__init__.py").exists() and (project / "src" / "app" / "modules" / "__init__.py").exists()
     module = _import_file(path)
     assert hasattr(module, class_name)
 
@@ -95,14 +95,14 @@ def test_generated_guard_filter_and_decorator_actually_work(project: Path) -> No
 
 def test_name_with_a_path_and_flat(project: Path) -> None:
     nested = generate_component("guard", "auth/api-key")
-    assert nested == project / "src" / "modules" / "auth" / "api_key" / "api_key_guard.py"
-    assert (project / "src" / "modules" / "auth" / "__init__.py").exists()
+    assert nested == project / "src" / "app" / "modules" / "auth" / "api_key" / "api_key_guard.py"
+    assert (project / "src" / "app" / "modules" / "auth" / "__init__.py").exists()
 
     flat = generate_component("guard", "auth/other-key", flat=True)
-    assert flat == project / "src" / "modules" / "auth" / "other_key_guard.py"
+    assert flat == project / "src" / "app" / "modules" / "auth" / "other_key_guard.py"
 
     top_flat = generate_component("pipe", "slugify", flat=True)
-    assert top_flat == project / "src" / "modules" / "slugify_pipe.py"
+    assert top_flat == project / "src" / "app" / "modules" / "slugify_pipe.py"
 
 
 def test_existing_files_are_never_overwritten(project: Path) -> None:
@@ -115,11 +115,11 @@ def test_existing_files_are_never_overwritten(project: Path) -> None:
 def test_cli_generate_with_alias_and_provider(project: Path) -> None:
     result = runner.invoke(app, ["g", "gu", "auth/token"])
     assert result.exit_code == 0 and "CREATE" in result.output
-    assert (project / "src" / "modules" / "auth" / "token" / "token_guard.py").exists()
+    assert (project / "src" / "app" / "modules" / "auth" / "token" / "token_guard.py").exists()
 
     provider = runner.invoke(app, ["generate", "provider", "mailer"])
     assert provider.exit_code == 0
-    assert (project / "src" / "modules" / "mailer" / "mailer_service.py").exists()
+    assert (project / "src" / "app" / "modules" / "mailer" / "mailer_service.py").exists()
 
 
 def test_cli_dry_run_writes_nothing(project: Path) -> None:
@@ -131,14 +131,14 @@ def test_cli_dry_run_writes_nothing(project: Path) -> None:
 
     resource = runner.invoke(app, ["generate", "resource", "cats", "--dry-run"])
     assert resource.exit_code == 0 and "cats_controller.py" in resource.output
-    assert not (project / "src" / "modules" / "cats").exists()
+    assert not (project / "src" / "app" / "modules" / "cats").exists()
     assert "cats" not in (project / "src" / "app" / "app_module.py").read_text()  # not registered either
 
 
 def test_cli_flat_flag_and_validation(project: Path) -> None:
     ok = runner.invoke(app, ["generate", "interceptor", "timing", "--flat"])
     assert ok.exit_code == 0
-    assert (project / "src" / "modules" / "timing_interceptor.py").exists()
+    assert (project / "src" / "app" / "modules" / "timing_interceptor.py").exists()
 
     rejected = runner.invoke(app, ["generate", "module", "cats", "--flat"])
     assert rejected.exit_code == 1 and "--flat applies to" in rejected.output
@@ -195,7 +195,7 @@ def test_shared_flag_puts_components_in_src_shared(project: Path, kind, folder, 
     assert path == project / "src" / "shared" / folder / file_name
     assert (project / "src" / "shared" / folder / "__init__.py").exists()
     assert (project / "src" / "shared" / "__init__.py").exists()
-    assert not (project / "src" / "modules" / "roles").exists()
+    assert not (project / "src" / "app" / "modules" / "roles").exists()
     _import_file(path)
 
 
@@ -206,7 +206,7 @@ def test_cli_shared_flag_for_components_and_services(project: Path) -> None:
     service = runner.invoke(app, ["generate", "service", "mailer", "--shared"])
     assert service.exit_code == 0
     assert (project / "src" / "shared" / "services" / "mailer_service.py").exists()
-    assert not (project / "src" / "modules" / "mailer").exists()
+    assert not (project / "src" / "app" / "modules" / "mailer").exists()
 
     nested = runner.invoke(app, ["generate", "pipe", "auth/slug", "--shared"])
     assert nested.exit_code == 0
@@ -225,11 +225,17 @@ def test_cli_shared_flag_validation(project: Path) -> None:
 def _to_flat_layout(root: Path) -> None:
     """Turns a freshly scaffolded project into the older flat layout (src/app_module.py)."""
     src = root / "src"
-    for name in ("app_module.py", "app_controller.py", "app_service.py"):
-        (src / name).write_text((src / "app" / name).read_text().replace("src.app.", "src."))
-    (src / "main.py").write_text((src / "main.py").read_text().replace("src.app.app_module", "src.app_module"))
     import shutil
 
+    shutil.move(str(src / "app" / "modules"), str(src / "modules"))
+    for path in (*src.rglob("*.py"),):
+        if "app" in path.relative_to(src).parts[:1]:
+            continue
+        path.write_text(path.read_text().replace("src.app.modules.", "src.modules."))
+    for name in ("app_module.py", "app_controller.py", "app_service.py"):
+        text = (src / "app" / name).read_text().replace("src.app.modules.", "src.modules.").replace("src.app.", "src.")
+        (src / name).write_text(text)
+    (src / "main.py").write_text((src / "main.py").read_text().replace("src.app.app_module", "src.app_module"))
     shutil.rmtree(src / "app")
 
 
@@ -257,3 +263,36 @@ def test_modular_project_resolves_to_the_app_folder(project: Path) -> None:
     result = runner.invoke(app, ["generate", "resource", "cats"])
     assert result.exit_code == 0
     assert "CatsModule" in (project / "src" / "app" / "app_module.py").read_text()
+
+
+def test_modules_dir_follows_the_layout(project: Path) -> None:
+    from austial.cli.generators.base import modules_dir, modules_package
+
+    assert modules_dir(project) == project / "src" / "app" / "modules"
+    assert modules_package(project) == "src.app.modules"
+
+    _to_flat_layout(project)
+    assert modules_dir(project) == project / "src" / "modules"
+    assert modules_package(project) == "src.modules"
+
+
+def test_resource_imports_follow_the_layout(project: Path) -> None:
+    result = runner.invoke(app, ["generate", "resource", "cats"])
+    assert result.exit_code == 0
+    module_file = project / "src" / "app" / "modules" / "cats" / "cats_module.py"
+    assert "from src.app.modules.cats.cats_controller import CatsController" in module_file.read_text()
+    assert (
+        "src.app.modules.cats.cats_module import CatsModule" in (project / "src" / "app" / "app_module.py").read_text()
+    )
+
+
+def test_resource_in_a_flat_project_keeps_src_modules_imports(project: Path) -> None:
+    _to_flat_layout(project)
+
+    result = runner.invoke(app, ["generate", "resource", "dogs"])
+
+    assert result.exit_code == 0
+    module_file = project / "src" / "modules" / "dogs" / "dogs_module.py"
+    assert "from src.modules.dogs.dogs_controller import DogsController" in module_file.read_text()
+    assert "from src.modules.dogs.dogs_module import DogsModule" in (project / "src" / "app_module.py").read_text()
+    assert not (project / "src" / "app").exists()

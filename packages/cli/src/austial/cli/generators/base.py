@@ -94,6 +94,23 @@ def app_module_ref(root: Path) -> str:
     return APP_MODULE_REFS[1] if legacy else APP_MODULE_REFS[0]
 
 
+def modules_dir(root: Path) -> Path:
+    """Where feature modules live: ``src/app/modules/`` in the modular layout, ``src/modules/`` in the older flat one.
+    An existing folder wins; for a project with neither yet, the root module's layout decides."""
+    modular = root / "src" / "app" / "modules"
+    flat = root / "src" / "modules"
+    if modular.exists():
+        return modular
+    if flat.exists():
+        return flat
+    return modular if (root / APP_MODULE_PATHS[0]).exists() else flat
+
+
+def modules_package(root: Path) -> str:
+    """Dotted import path of :func:`modules_dir` (``src.app.modules`` or ``src.modules``)."""
+    return ".".join(modules_dir(root).relative_to(root).parts)
+
+
 def find_project_root(start: Path | None = None) -> Path:
     """Walks upward from `start` (default: cwd) looking for `src/app/app_module.py` (or the older flat
     `src/app_module.py`), the marker of an Austial project root."""

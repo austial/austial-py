@@ -41,13 +41,13 @@ src/
 ├── app/
 │   ├── app_module.py    # root @Module: imports every feature module
 │   ├── app_controller.py
-│   └── app_service.py
-├── modules/<snake_name>/            # one folder per feature
-│   ├── <name>_module.py
-│   ├── <name>_controller.py
-│   ├── <name>_service.py
-│   ├── entities/<name>_entity.py
-│   └── dto/create_<name>_dto.py, update_<name>_dto.py
+│   ├── app_service.py
+│   └── modules/<snake_name>/        # one folder per feature
+│       ├── <name>_module.py
+│       ├── <name>_controller.py
+│       ├── <name>_service.py
+│       ├── entities/<name>_entity.py
+│       └── dto/create_<name>_dto.py, update_<name>_dto.py
 ├── shared/                          # used by more than one module
 │   ├── guards/ services/ pipes/ interceptors/ filters/ decorators/ dto/
 └── templates/                       # non-Python assets
@@ -60,7 +60,7 @@ tests/unit/, tests/e2e/      # files named *_spec.py
 - Code used by two or more modules goes in `src/shared/<kind>/`, not in a feature
   folder another module imports from. Feature folders never import each other's internals;
   they go through the other module's exported provider.
-- Imports are absolute from the project root: `from src.modules.cats...`,
+- Imports are absolute from the project root: `from src.app.modules.cats...`,
   `from src.shared.guards...`.
 - Prefer `uv run austial g resource <name>` over hand-writing a feature. It
   also patches `src/app/app_module.py`. Use `--shared` for cross-cutting pieces:

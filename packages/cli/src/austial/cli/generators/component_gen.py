@@ -1,8 +1,9 @@
 """``austial generate guard|pipe|interceptor|filter|middleware|decorator|class <name>`` -- mirrors the
 same ``nest g`` schematics.
 
-``<name>`` may carry a path: ``auth/api-key`` creates ``src/modules/auth/api_key/api_key_guard.py``
-(``--flat`` drops the innermost folder: ``src/modules/auth/api_key_guard.py``).
+``<name>`` may carry a path: ``auth/api-key`` creates ``src/app/modules/auth/api_key/api_key_guard.py``
+(``--flat`` drops the innermost folder: ``src/app/modules/auth/api_key_guard.py``; projects with the older flat layout
+use ``src/modules/`` instead).
 
 ``--shared`` puts cross-cutting pieces in ``src/shared/<kind>s/`` instead of a feature folder:
 ``austial g guard roles --shared`` creates ``src/shared/guards/roles_guard.py``.
@@ -12,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from austial.cli.generators.base import find_project_root, render, write_file
+from austial.cli.generators.base import find_project_root, modules_dir, render, write_file
 from austial.cli.naming import to_kebab_case, to_pascal_case, to_snake_case
 
 # kind -> (template, file suffix)
@@ -63,7 +64,7 @@ def generate_component(
         base = src / "shared" / SHARED_FOLDERS[kind]
         directory = base.joinpath(*(to_snake_case(f) for f in folders))
     else:
-        base = src / "modules"
+        base = modules_dir(root)
         directory = base.joinpath(*(to_snake_case(f) for f in folders))
         if not flat:
             directory = directory / snake_name

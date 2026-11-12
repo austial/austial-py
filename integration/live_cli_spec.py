@@ -35,8 +35,8 @@ def test_scaffold_generate_build_graph_and_start_a_real_project(tmp_path: Path) 
         result = austial("generate", schematic, name, cwd=project)
         assert result.returncode == 0, f"{schematic}: {result.stdout}{result.stderr}"
 
-    assert (project / "src" / "modules" / "cats" / "cats_controller.py").exists()
-    assert (project / "src" / "modules" / "chat" / "chat_gateway.py").exists()
+    assert (project / "src" / "app" / "modules" / "cats" / "cats_controller.py").exists()
+    assert (project / "src" / "app" / "modules" / "chat" / "chat_gateway.py").exists()
     assert "CatsModule" in (project / "src" / "app" / "app_module.py").read_text()  # the resource was registered
 
     # every generated file must be valid, importable Python
@@ -72,7 +72,7 @@ def test_scaffold_generate_build_graph_and_start_a_real_project(tmp_path: Path) 
     )
     source = source.replace(
         "from src.app.app_controller import AppController",
-        "from src.app.app_controller import AppController\nfrom src.modules.cats.entities.cats_entity import Cats",
+        "from src.app.app_controller import AppController\nfrom src.app.modules.cats.entities.cats_entity import Cats",
     )
     source = source.replace(
         "ConfigModule.for_root(),",
