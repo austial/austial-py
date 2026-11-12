@@ -122,7 +122,7 @@ APIs), Function URLs and ALB:
 ```python
 # handler.py        (Lambda handler setting: handler.handler)
 from austial import create_lambda_handler
-from src.app_module import AppModule
+from src.app.app_module import AppModule
 
 handler = create_lambda_handler(AppModule)       # extra keyword arguments go to mangum.Mangum
 ```

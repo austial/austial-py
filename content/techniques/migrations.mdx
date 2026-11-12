@@ -104,7 +104,7 @@ From a shell (the standard deploy path):
 
 ```bash
 export AUSTIAL_DATABASE_URL="postgresql+psycopg://user:pass@localhost/mydb"
-export AUSTIAL_METADATA_MODULE="src.app_module:target_metadata"
+export AUSTIAL_METADATA_MODULE="src.app.app_module:target_metadata"
 
 austial-migrate revision -m "add users table" --autogenerate
 austial-migrate upgrade head
