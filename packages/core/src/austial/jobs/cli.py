@@ -1,7 +1,7 @@
 """``austial-worker`` -- run a worker, enqueue a job, or check status from the shell.
 
 Bootstraps a minimal DI container from a product-supplied module path (e.g.
-``src.app_module:AppModule``). The heavy DI lifting lives in ``austial.core``;
+``src.app.app_module:AppModule``). The heavy DI lifting lives in ``austial.core``;
 this file is glue that resolves the module, instantiates ``@Injectable`` classes
 that carry ``@Cron``/``@Job`` metadata, and delegates to :class:`JobQueue` /
 :class:`Worker`.
@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import importlib
+import importlib.util
 import json
 import signal
 from typing import Any
@@ -42,6 +43,16 @@ def _resolve_module(path: str) -> type:
     if not hasattr(module, attr):
         raise typer.BadParameter(f"{attr!r} not found in {mod_path!r}")
     return getattr(module, attr)
+
+
+def _default_module_path() -> str:
+    """The project's root module: ``src/app/app_module.py`` (the layout `austial new` writes), else the older flat
+    ``src/app_module.py``."""
+    try:
+        modular = importlib.util.find_spec("src.app.app_module") is not None
+    except (ImportError, ValueError):
+        modular = False
+    return "src.app.app_module:AppModule" if modular else "src.app_module:AppModule"
 
 
 def _bootstrap(module_cls: type) -> tuple[JobQueue, Worker, JobRegistry]:
@@ -82,7 +93,7 @@ def _bootstrap(module_cls: type) -> tuple[JobQueue, Worker, JobRegistry]:
 
 @app.command()
 def run(
-    module_path: str = typer.Argument(..., help="Product AppModule path, e.g. 'src.app_module:AppModule'."),
+    module_path: str = typer.Argument(..., help="Product AppModule path, e.g. 'src.app.app_module:AppModule'."),
 ) -> None:
     """Start the worker loop against the product's ``AppModule``."""
     module_cls = _resolve_module(module_path)
@@ -104,10 +115,12 @@ def run(
 @app.command()
 def status(
     job_id: str = typer.Argument(..., help="Job id returned by 'enqueue'."),
-    module_path: str = typer.Option("src.app_module:AppModule", "--module", help="Product AppModule path."),
+    module_path: str | None = typer.Option(
+        None, "--module", help="Product AppModule path (default: src.app.app_module:AppModule)."
+    ),
 ) -> None:
     """Print the current status of a single job."""
-    module_cls = _resolve_module(module_path)
+    module_cls = _resolve_module(module_path or _default_module_path())
     queue, _, _ = _bootstrap(module_cls)
 
     async def _main() -> None:
@@ -125,10 +138,12 @@ def enqueue(
     name: str = typer.Argument(..., help="Name of the @Job to enqueue."),
     payload: str = typer.Option("{}", "--payload", help="JSON-encoded payload dict."),
     idempotency_key: str | None = typer.Option(None, "--idempotency-key", help="Deduplicate on this key."),
-    module_path: str = typer.Option("src.app_module:AppModule", "--module", help="Product AppModule path."),
+    module_path: str | None = typer.Option(
+        None, "--module", help="Product AppModule path (default: src.app.app_module:AppModule)."
+    ),
 ) -> None:
     """Enqueue a job by name from the shell (ops one-offs, backfills, seeding)."""
-    module_cls = _resolve_module(module_path)
+    module_cls = _resolve_module(module_path or _default_module_path())
     queue, _, _ = _bootstrap(module_cls)
 
     try:

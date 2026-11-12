@@ -167,7 +167,9 @@ resolves `a` as a package and `b` as a submodule -- a literal file
 Austial uses underscore suffixes instead: `health_controller.py`,
 `health_service.py`, `health_module.py`, `health_dto.py`. The directory
 layout still mirrors Nest 1:1 -- one folder per feature under
-`src/modules/`.
+`src/modules/`, the root module in `src/app/`, code several modules share in
+`src/shared/` (guards, services, pipes, ...), and non-Python assets such as email
+templates in `src/templates/`.
 
 ## Quickstart
 
@@ -233,7 +235,7 @@ uv run austial serve
 > checkout rather than PyPI.
 
 `austial generate` (alias `austial g`) adds artifacts to an existing project,
-patching `src/app_module.py`'s imports/`imports=[...]` array automatically --
+patching `src/app/app_module.py`'s imports/`imports=[...]` array automatically --
 just like `nest g`:
 
 ```bash
@@ -242,6 +244,7 @@ uv run austial generate controller cats    # src/modules/cats/cats_controller.py
 uv run austial generate service cats       # src/modules/cats/cats_service.py
 uv run austial generate resource cats      # module + full CRUD controller/service/dto/entity
 uv run austial generate guard auth/api-key # also: pipe, interceptor, filter, middleware, decorator, class (--flat, --dry-run)
+uv run austial generate guard roles --shared    # src/shared/guards/roles_guard.py (also: service, pipe, ...)
 uv run austial info                        # Python + installed austial package versions
 uv run austial g resource cats             # same as above, short alias
 ```

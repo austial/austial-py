@@ -7,16 +7,25 @@ web framework for Python, built on FastAPI.
 
 ```
 src/
-├── main.py                 # entry point (mirrors Nest's main.ts)
-├── app_module.py            # root module (mirrors app.module.ts)
-├── app_controller.py
-├── app_service.py
-└── modules/
-    └── health/               # GET /health, GET /health/protected
+├── main.py                  # entry point (mirrors Nest's main.ts)
+├── app/
+│   ├── app_module.py        # root module (mirrors app.module.ts)
+│   ├── app_controller.py
+│   └── app_service.py
+├── modules/                 # one folder per feature
+│   └── health/              # GET /health, GET /health/protected
+├── shared/                  # used by several modules
+│   ├── guards/              # api_key_guard.py
+│   └── services/ pipes/ interceptors/ filters/ decorators/ dto/
+└── templates/               # non-Python assets
+    └── email/
 tests/
 ├── unit/
 └── e2e/
 ```
+
+Add what the app needs next to these: `src/config/`, `src/database/` (entities, migrations), `src/jobs/`,
+`src/events/`. Cross-cutting code goes in `src/shared/`, never in a feature folder another module reaches into.
 
 > Note: Python can't import filenames containing dots the way Node resolves
 > `health.controller.ts`, so Austial uses `health_controller.py` /
@@ -44,6 +53,8 @@ uv run austial generate module cats
 uv run austial generate controller cats
 uv run austial generate service cats
 uv run austial generate resource cats   # module + CRUD controller + service + dto
+uv run austial generate guard roles --shared    # src/shared/guards/roles_guard.py
+uv run austial generate service mailer --shared # src/shared/services/mailer_service.py
 ```
 
 ## Tests

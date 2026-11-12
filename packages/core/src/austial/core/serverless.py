@@ -4,7 +4,7 @@
 
     # handler.py
     from austial import create_lambda_handler
-    from src.app_module import AppModule
+    from src.app.app_module import AppModule
 
     handler = create_lambda_handler(AppModule)        # Lambda handler: "handler.handler"
 

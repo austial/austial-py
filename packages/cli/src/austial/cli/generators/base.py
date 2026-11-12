@@ -74,15 +74,35 @@ class ProjectNotFoundError(Exception):
     pass
 
 
+# Where the root module lives: the modular layout first, then the flat layout older projects use.
+APP_MODULE_PATHS = (Path("src") / "app" / "app_module.py", Path("src") / "app_module.py")
+APP_MODULE_REFS = ("src.app.app_module:AppModule", "src.app_module:AppModule")
+
+
+def app_module_file(root: Path) -> Path:
+    """The project's root-module file: ``src/app/app_module.py``, or the legacy ``src/app_module.py`` if that is
+    what the project has. Returns the modular path when neither exists (a new project)."""
+    for relative in APP_MODULE_PATHS:
+        if (root / relative).exists():
+            return root / relative
+    return root / APP_MODULE_PATHS[0]
+
+
+def app_module_ref(root: Path) -> str:
+    """``module.path:AppModule`` of the project's root module, for the layout the project actually uses."""
+    legacy = not (root / APP_MODULE_PATHS[0]).exists() and (root / APP_MODULE_PATHS[1]).exists()
+    return APP_MODULE_REFS[1] if legacy else APP_MODULE_REFS[0]
+
+
 def find_project_root(start: Path | None = None) -> Path:
-    """Walks upward from `start` (default: cwd) looking for `src/app_module.py`,
-    the marker of an Austial project root."""
+    """Walks upward from `start` (default: cwd) looking for `src/app/app_module.py` (or the older flat
+    `src/app_module.py`), the marker of an Austial project root."""
     current = (start or Path.cwd()).resolve()
     for candidate in (current, *current.parents):
-        if (candidate / "src" / "app_module.py").exists():
+        if any((candidate / relative).exists() for relative in APP_MODULE_PATHS):
             return candidate
     raise ProjectNotFoundError(
         "Couldn't find an Austial project in this or any parent directory "
-        "(looked for `src/app_module.py`). Run this inside a project created "
-        "with `austial new`, or create `src/app_module.py` by hand first."
+        "(looked for `src/app/app_module.py`). Run this inside a project created "
+        "with `austial new`, or create `src/app/app_module.py` by hand first."
     )

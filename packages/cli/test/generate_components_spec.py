@@ -132,7 +132,7 @@ def test_cli_dry_run_writes_nothing(project: Path) -> None:
     resource = runner.invoke(app, ["generate", "resource", "cats", "--dry-run"])
     assert resource.exit_code == 0 and "cats_controller.py" in resource.output
     assert not (project / "src" / "modules" / "cats").exists()
-    assert "cats" not in (project / "src" / "app_module.py").read_text()  # not registered either
+    assert "cats" not in (project / "src" / "app" / "app_module.py").read_text()  # not registered either
 
 
 def test_cli_flat_flag_and_validation(project: Path) -> None:
@@ -176,3 +176,84 @@ def test_generated_gateway_resolver_command_and_listener_import_and_register(pro
     assert spec is not None and spec.name == "seed-db"
     listener = _import_file(generate_component("listener", "order")).OrderListener
     assert hasattr(listener, "on_created")
+
+
+@pytest.mark.parametrize(
+    ("kind", "folder", "file_name"),
+    [
+        ("guard", "guards", "roles_guard.py"),
+        ("pipe", "pipes", "roles_pipe.py"),
+        ("interceptor", "interceptors", "roles_interceptor.py"),
+        ("filter", "filters", "roles_filter.py"),
+        ("middleware", "middleware", "roles_middleware.py"),
+        ("decorator", "decorators", "roles_decorator.py"),
+    ],
+)
+def test_shared_flag_puts_components_in_src_shared(project: Path, kind, folder, file_name) -> None:
+    path = generate_component(kind, "roles", shared=True)
+
+    assert path == project / "src" / "shared" / folder / file_name
+    assert (project / "src" / "shared" / folder / "__init__.py").exists()
+    assert (project / "src" / "shared" / "__init__.py").exists()
+    assert not (project / "src" / "modules" / "roles").exists()
+    _import_file(path)
+
+
+def test_cli_shared_flag_for_components_and_services(project: Path) -> None:
+    guard = runner.invoke(app, ["g", "guard", "roles", "--shared"])
+    assert guard.exit_code == 0 and "src/shared/guards/roles_guard.py" in guard.output.replace("\\", "/")
+
+    service = runner.invoke(app, ["generate", "service", "mailer", "--shared"])
+    assert service.exit_code == 0
+    assert (project / "src" / "shared" / "services" / "mailer_service.py").exists()
+    assert not (project / "src" / "modules" / "mailer").exists()
+
+    nested = runner.invoke(app, ["generate", "pipe", "auth/slug", "--shared"])
+    assert nested.exit_code == 0
+    assert (project / "src" / "shared" / "pipes" / "auth" / "slug_pipe.py").exists()
+    assert (project / "src" / "shared" / "pipes" / "auth" / "__init__.py").exists()
+
+
+def test_cli_shared_flag_validation(project: Path) -> None:
+    rejected = runner.invoke(app, ["generate", "module", "cats", "--shared"])
+    assert rejected.exit_code == 1 and "--shared applies to" in rejected.output
+
+    with_flat = runner.invoke(app, ["generate", "guard", "roles", "--shared", "--flat"])
+    assert with_flat.exit_code == 1 and "always flat" in with_flat.output
+
+
+def _to_flat_layout(root: Path) -> None:
+    """Turns a freshly scaffolded project into the older flat layout (src/app_module.py)."""
+    src = root / "src"
+    for name in ("app_module.py", "app_controller.py", "app_service.py"):
+        (src / name).write_text((src / "app" / name).read_text().replace("src.app.", "src."))
+    (src / "main.py").write_text((src / "main.py").read_text().replace("src.app.app_module", "src.app_module"))
+    import shutil
+
+    shutil.rmtree(src / "app")
+
+
+def test_legacy_flat_projects_still_work(project: Path) -> None:
+    from austial.cli.generators.base import app_module_file, app_module_ref, find_project_root
+
+    _to_flat_layout(project)
+
+    assert app_module_file(project) == project / "src" / "app_module.py"
+    assert app_module_ref(project) == "src.app_module:AppModule"
+    assert find_project_root(project / "src" / "modules") == project
+
+    result = runner.invoke(app, ["generate", "module", "cats"])
+    assert result.exit_code == 0
+    assert "CatsModule" in (project / "src" / "app_module.py").read_text()  # registered in the flat file
+    assert not (project / "src" / "app").exists()
+
+
+def test_modular_project_resolves_to_the_app_folder(project: Path) -> None:
+    from austial.cli.generators.base import app_module_file, app_module_ref
+
+    assert app_module_file(project) == project / "src" / "app" / "app_module.py"
+    assert app_module_ref(project) == "src.app.app_module:AppModule"
+
+    result = runner.invoke(app, ["generate", "resource", "cats"])
+    assert result.exit_code == 0
+    assert "CatsModule" in (project / "src" / "app" / "app_module.py").read_text()

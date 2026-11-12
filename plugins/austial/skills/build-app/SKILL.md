@@ -39,17 +39,18 @@ Use the project's own `AGENTS.md` from here on (it is the same rule set as the f
 One command per entity, never hand-write the boilerplate:
 
 ```bash
-uv run austial g resource <name>   # module + controller + service + entity + DTOs, registered in app_module.py
+uv run austial g resource <name>   # module + controller + service + entity + DTOs, registered in src/app/app_module.py
 ```
 
 Other schematics: `controller`, `service`, `guard`, `pipe`, `interceptor`, `filter`, `middleware`, `decorator`, `gateway` (WebSockets), `resolver`
-(GraphQL), `command` (CLI), `listener` (events), `library`, `app`. Use `--dry-run` to preview.
+(GraphQL), `command` (CLI), `listener` (events), `library`, `app`. Use `--dry-run` to preview. Add `--shared` to put a
+`guard`, `pipe`, `interceptor`, `filter`, `middleware`, `decorator` or `service` in `src/shared/` when more than one module uses it.
 
 Then, by hand, replace the generated placeholder `name` column and DTO fields with the real ones.
 
 ## 4. Wire the database
 
-In `src/app_module.py`, once, import `OrmModule.for_root(...)` with every entity:
+In `src/app/app_module.py`, once, import `OrmModule.for_root(...)` with every entity:
 
 ```python
 OrmModule.for_root(type_="sqlite", url="sqlite+aiosqlite:///./app.db", entities=[Cat, Owner], synchronize=True)  # dev

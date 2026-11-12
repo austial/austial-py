@@ -66,3 +66,37 @@ def test_existing_tool_file_is_left_untouched(tmp_path):
 
     assert (tmp_path / "CLAUDE.md").read_text() == "mine"
     assert (tmp_path / "GEMINI.md").read_text() == "canonical"
+
+
+def test_new_project_uses_the_modular_layout(tmp_path):
+    project = _scaffold(tmp_path)
+    src = project / "src"
+
+    assert (src / "main.py").exists()
+    for name in ("app_module.py", "app_controller.py", "app_service.py"):
+        assert (src / "app" / name).exists(), name
+    assert not (src / "app_module.py").exists()  # the flat layout is gone
+    assert (src / "modules" / "health" / "health_module.py").exists()
+    assert (src / "shared" / "guards" / "api_key_guard.py").exists()
+    for folder in ("guards", "services", "pipes", "interceptors", "filters", "decorators", "dto"):
+        assert (src / "shared" / folder / "__init__.py").exists(), folder
+    assert (src / "templates" / "email" / ".gitkeep").exists()
+    assert not (src / "modules" / "health" / "guards").exists()  # the guard moved to shared/
+
+    app_module = (src / "app" / "app_module.py").read_text()
+    assert "from src.app.app_controller import AppController" in app_module
+    assert "from src.modules.health.health_module import HealthModule" in app_module
+    assert (
+        "from src.shared.guards.api_key_guard import ApiKeyGuard"
+        in (src / "modules" / "health" / "health_module.py").read_text()
+    )
+    assert "from src.app.app_module import AppModule" in (src / "main.py").read_text()
+
+
+def test_generated_docs_describe_the_same_layout(tmp_path):
+    project = _scaffold(tmp_path)
+
+    for doc in ("README.md", "AGENTS.md"):
+        text = (project / doc).read_text()
+        assert "shared/" in text and "templates/" in text and "app_module.py" in text, doc
+        assert "{{" not in text and "{%" not in text, doc

@@ -3,6 +3,9 @@ same ``nest g`` schematics.
 
 ``<name>`` may carry a path: ``auth/api-key`` creates ``src/modules/auth/api_key/api_key_guard.py``
 (``--flat`` drops the innermost folder: ``src/modules/auth/api_key_guard.py``).
+
+``--shared`` puts cross-cutting pieces in ``src/shared/<kind>s/`` instead of a feature folder:
+``austial g guard roles --shared`` creates ``src/shared/guards/roles_guard.py``.
 """
 
 from __future__ import annotations
@@ -27,8 +30,20 @@ COMPONENT_KINDS: dict[str, tuple[str, str]] = {
     "class": ("class/class.py.j2", ""),
 }
 
+# Kinds that can live in `src/shared/` (`--shared`), and the folder each one goes to.
+SHARED_FOLDERS: dict[str, str] = {
+    "guard": "guards",
+    "pipe": "pipes",
+    "interceptor": "interceptors",
+    "filter": "filters",
+    "middleware": "middleware",
+    "decorator": "decorators",
+}
 
-def generate_component(kind: str, name: str, *, flat: bool = False, project_root: Path | None = None) -> Path:
+
+def generate_component(
+    kind: str, name: str, *, flat: bool = False, shared: bool = False, project_root: Path | None = None
+) -> Path:
     template, suffix = COMPONENT_KINDS[kind]
     root = project_root or find_project_root()
 
@@ -42,14 +57,20 @@ def generate_component(kind: str, name: str, *, flat: bool = False, project_root
         "constant_name": snake_name.upper(),
     }
 
-    base = root / "src" / "modules"
-    directory = base.joinpath(*(to_snake_case(f) for f in folders))
-    if not flat:
-        directory = directory / snake_name
+    src = root / "src"
+    if shared:
+        # Shared pieces are always flat: src/shared/guards/roles_guard.py (a name path adds subfolders).
+        base = src / "shared" / SHARED_FOLDERS[kind]
+        directory = base.joinpath(*(to_snake_case(f) for f in folders))
+    else:
+        base = src / "modules"
+        directory = base.joinpath(*(to_snake_case(f) for f in folders))
+        if not flat:
+            directory = directory / snake_name
 
-    # Every folder between src/modules and the file is a package.
+    # Every folder between src/ and the file is a package.
     for folder in (directory, *directory.parents):
-        if folder == base.parent or folder == base.parent.parent:
+        if folder == src:
             break
         write_file(folder / "__init__.py", "")
 
