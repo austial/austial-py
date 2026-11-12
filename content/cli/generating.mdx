@@ -56,8 +56,8 @@ array — see [App module patching](#app-module-patching) below.
 One file each, with a working skeleton:
 
 ```bash
-austial generate guard auth            # src/app/modules/auth/auth_guard.py          -> class AuthGuard(CanActivate)
-austial generate pipe slugify          # src/app/modules/slugify/slugify_pipe.py     -> class SlugifyPipe(PipeTransform)
+austial generate guard auth            # src/app/modules/auth/auth_guard.py      -> class AuthGuard(CanActivate)
+austial generate pipe slugify          # src/app/modules/slugify/slugify_pipe.py -> class SlugifyPipe(PipeTransform)
 austial generate interceptor timing    # .../timing_interceptor.py               -> class TimingInterceptor(NestInterceptor)
 austial generate filter database       # .../database_filter.py                  -> class DatabaseFilter(ExceptionFilter), @Catch(HttpException)
 austial generate middleware audit      # .../audit_middleware.py                 -> class AuditMiddleware(NestMiddleware)

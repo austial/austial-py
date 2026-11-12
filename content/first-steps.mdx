@@ -131,7 +131,7 @@ my-app/
 │   │           └── health_dto.py
 │   ├── shared/                    # used by more than one module
 │   │   ├── guards/api_key_guard.py    # ApiKeyGuard(CanActivate)
-│   │   └── services/  pipes/  interceptors/  filters/  decorators/  dto/    # empty, ready for your code
+│   │   └── services/  pipes/  interceptors/  filters/  middleware/  decorators/  dto/    # empty, ready for your code
 │   └── templates/                 # non-Python assets
 │       └── email/
 └── tests/
@@ -157,7 +157,7 @@ absolute from the project root (`from src.app.modules.health.health_module impor
 Two rules keep the structure healthy as it grows:
 
 - **Shared means two or more modules.** Start code inside the feature that uses it, and move it to `src/shared/` when a second
-  module needs it. A feature never imports another feature's internals: it imports the other module and injects its exported provider.
+  module needs it.
 - **A shared service is still a provider.** Generating `mailer_service.py` does not register it. List it in a module's `providers`
   (and `exports`) like any other provider.
 
@@ -167,7 +167,7 @@ Add more top-level folders as the app needs them, for example `src/config/` (typ
 <Callout type="info">
   **Existing projects keep working.** Projects created before this layout have a flat `src/app_module.py` and
   `src/modules/`. The CLI finds and patches whichever layout the project has (`src/app/app_module.py` with `src/app/modules/`,
-  or the flat one), generated imports follow it, and `austial graph`, `austial repl` and `austial build` default to the right root
+  or the flat one), generated imports follow it (a project that already has a `src/modules/` folder keeps using it), and `austial graph`, `austial repl` and `austial build` default to the right root
   module. Move to the modular layout whenever you like: create `src/app/`, move `app_module.py`, `app_controller.py`,
   `app_service.py` and `modules/` into it, and update their imports.
 </Callout>
@@ -194,10 +194,10 @@ Every Austial app boots from `src/main.py`:
 
 ```python
 from austial import AustialFactory
-from austial.common.exceptions import AllExceptionsFilter
+from austial.common.filters import AllExceptionsFilter
 from austial.common.pipes import ValidationPipe
 
-from .app.app_module import AppModule
+from src.app.app_module import AppModule
 
 
 def _build():

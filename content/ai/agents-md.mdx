@@ -70,7 +70,7 @@ src/
 │       ├── entities/<name>_entity.py
 │       └── dto/create_<name>_dto.py, update_<name>_dto.py
 ├── shared/                          # used by more than one module
-│   ├── guards/ services/ pipes/ interceptors/ filters/ decorators/ dto/
+│   ├── guards/ services/ pipes/ interceptors/ filters/ middleware/ decorators/ dto/
 └── templates/                       # non-Python assets
     └── email/
 tests/unit/, tests/e2e/      # files named *_spec.py
@@ -79,8 +79,7 @@ tests/unit/, tests/e2e/      # files named *_spec.py
 - One folder per feature. File names use underscore suffixes
   (`cats_controller.py`), never dots.
 - Code used by two or more modules goes in `src/shared/<kind>/`, not in a feature
-  folder another module imports from. Feature folders never import each other's internals;
-  they go through the other module's exported provider.
+  folder another module imports from.
 - Imports are absolute from the project root: `from src.app.modules.cats...`,
   `from src.shared.guards...`.
 - Prefer `uv run austial g resource <name>` over hand-writing a feature. It
