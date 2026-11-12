@@ -28,6 +28,7 @@
 
 <p align="center">
   <a href="https://docs.austial.com"><b>Documentation</b></a> &middot;
+  <a href="https://austial.com/guides">Guides</a> &middot;
   <a href="#austial-in-one-file">Example</a> &middot;
   <a href="#quickstart">Quickstart</a> &middot;
   <a href="https://github.com/austial/austial-py/discussions">Discussions</a> &middot;
@@ -55,6 +56,10 @@ the "hello world" app, kept separate from the framework's own source tree.
 <p align="center">
   <img src="https://raw.githubusercontent.com/austial/austial-py/main/assets/austial-request-lifecycle.jpg" alt="The Austial request lifecycle in order: guards, pipes, interceptors, handler, then exception filters." width="720">
 </p>
+
+Coming from NestJS? Read the [NestJS to Austial concept map](https://austial.com/nestjs-for-python), the
+[NestJS vs FastAPI comparison](https://austial.com/nestjs-vs-fastapi) or the
+[migration guide](https://austial.com/nestjs-to-python-migration).
 
 ## Austial in one file
 
