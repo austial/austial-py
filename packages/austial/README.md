@@ -51,6 +51,10 @@ the "hello world" app, kept separate from the framework's own source tree.
 > dependency injection, with the whole request lifecycle, on FastAPI and Pydantic. If it saves you from
 > hand-rolling architecture, a star helps other Python developers find it.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/austial/austial-py/main/assets/austial-request-lifecycle.jpg" alt="The Austial request lifecycle in order: guards, pipes, interceptors, handler, then exception filters." width="720">
+</p>
+
 ## Austial in one file
 
 ```python
