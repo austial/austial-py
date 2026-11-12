@@ -77,6 +77,38 @@ uv run austial serve
 - `/docs` — FastAPI's Swagger UI, free from FastAPI since every route is
   registered as a real `APIRouter`
 
+## Install the Austial plugin and skills
+
+<Callout type="info">
+  **Recommended if you build with an AI coding tool.** Install the Austial
+  plugin for [Claude Code](https://claude.com/claude-code) *before* you write
+  your first feature. It teaches the agent the framework's rules and the
+  recommended design patterns, so it generates idiomatic Austial code instead
+  of hand-rolling FastAPI routers.
+</Callout>
+
+Run this once inside Claude Code:
+
+```text
+/plugin marketplace add austial/austial-py
+/plugin install austial@austial
+```
+
+That installs the skills below. They load on their own when your project
+imports `austial`, or you can call them directly:
+
+| Skill | Command | Use it to |
+|---|---|---|
+| `austial-framework` | automatic | Keep the agent on the framework's mental model, import map and do/don't list |
+| `austial:build-app` | `/austial:build-app a bookstore API with users and orders` | Go from an idea to a scaffolded, tested app that follows the recommended module layout |
+| `austial:add-feature` | `/austial:add-feature websocket chat` | Add one capability (auth, tenancy, jobs, GraphQL, cache, ...) the recommended way |
+| `austial:review-app` | `/austial:review-app` | Check your changes against the [production checklist](/ai/production) |
+
+Not using Claude Code? `austial new` already writes an `AGENTS.md` for every
+other tool, and [Tool Setup](/ai/setup) links it for existing projects. See the
+[Claude Code plugin](/ai/claude-plugin) page for the full list, updating, and a
+sample session.
+
 ## Project structure
 
 ```

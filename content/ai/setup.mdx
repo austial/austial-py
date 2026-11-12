@@ -2,9 +2,24 @@
 title: Tool Setup
 ---
 
-import { Tabs } from "@/components/mdx";
+import { Callout, Tabs } from "@/components/mdx";
 
 # Tool setup
+
+<Callout type="info">
+  **Using Claude Code? Install the Austial plugin and skills first.** They give
+  the agent the framework's rules, the recommended design patterns, and
+  ready-made workflows (`/austial:build-app`, `/austial:add-feature`,
+  `/austial:review-app`):
+
+  ```text
+  /plugin marketplace add austial/austial-py
+  /plugin install austial@austial
+  ```
+
+  See [Claude Code plugin](/ai/claude-plugin) for details. The `AGENTS.md`
+  setup below still applies for every other tool, and works alongside the plugin.
+</Callout>
 
 Every AI coding tool looks for its own instructions file. Maintaining nine
 copies of the same rules guarantees they drift. The setup below keeps **one**
