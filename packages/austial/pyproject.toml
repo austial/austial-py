@@ -1,13 +1,17 @@
 [project]
 name = "austial"
 dynamic = ["version"]
-description = "A NestJS-inspired, production-ready web framework for Python, built on top of FastAPI."
+description = "A NestJS-like web framework for Python on FastAPI: modules, controllers, dependency injection, guards, pipes, an ORM, auth and a CLI."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Aayush Solanki" }]
 keywords = [
     "austial",
     "nestjs",
+    "nestjs-like",
+    "nestjs-style",
+    "nestjs-for-python",
+    "python-nestjs",
     "fastapi",
     "python",
     "web-framework",
@@ -25,6 +29,10 @@ keywords = [
     "microservices",
     "orm",
     "authentication",
+    "jwt",
+    "multi-tenancy",
+    "guards",
+    "modules",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -70,8 +78,9 @@ pymongo = ["austial-orm[pymongo]"]
 austial = "austial.cli.main:run"
 
 [project.urls]
-Homepage = "https://github.com/austial/austial-py"
+Homepage = "https://austial.com"
 Documentation = "https://docs.austial.com"
+Guides = "https://austial.com/guides"
 Repository = "https://github.com/austial/austial-py"
 Issues = "https://github.com/austial/austial-py/issues"
 Changelog = "https://github.com/austial/austial-py/releases"
