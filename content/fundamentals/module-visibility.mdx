@@ -62,8 +62,8 @@ graph.to_mermaid()       # a Mermaid flowchart; an arrow A --> B means A imports
 The same from the shell, without starting the app:
 
 ```bash
-austial graph                                  # mermaid, for src.app_module:AppModule
-austial graph src.app_module:AppModule --format json
+austial graph                                  # mermaid, for src.app.app_module:AppModule
+austial graph src.app.app_module:AppModule --format json
 ```
 
 Paste the Mermaid output into any Mermaid renderer (GitHub renders it in a fenced `mermaid` block) to see your architecture.

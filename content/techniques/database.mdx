@@ -373,7 +373,7 @@ directly. `DataSource.get_metadata()` returns the `sqlalchemy.MetaData` describi
 
 ```python
 # migrations/env.py
-from src.app_module import entities  # whatever list you pass OrmModule.for_root(entities=...)
+from src.app.app_module import entities  # whatever list you pass OrmModule.for_root(entities=...)
 from austial.orm import DataSource, SQLiteDriver
 
 data_source = DataSource(SQLiteDriver("sqlite+aiosqlite:///./austial.db"), entities)

@@ -119,24 +119,58 @@ my-app/
 ├── .pre-commit-config.yaml   # ruff + mypy + pytest hooks, same as this framework's own repo
 ├── src/
 │   ├── main.py                # AustialFactory.create(AppModule) -> app.listen(8000)
-│   ├── app_module.py            # root @Module(...): imports, controllers, providers, configure()
-│   ├── app_controller.py         # GET / -> {"message": "Hello from my-app, built with Austial!"}
-│   ├── app_service.py
-│   └── modules/
-│       └── health/
-│           ├── health_module.py
-│           ├── health_controller.py     # GET /health, GET /health/protected
-│           ├── health_service.py         # HealthCheckService + MemoryHealthIndicator
-│           ├── health_dto.py
-│           └── guards/api_key_guard.py    # ApiKeyGuard(CanActivate)
+│   ├── app/
+│   │   ├── app_module.py        # root @Module(...): imports, controllers, providers, configure()
+│   │   ├── app_controller.py      # GET / -> {"message": "Hello from my-app, built with Austial!"}
+│   │   ├── app_service.py
+│   │   └── modules/               # one folder per feature
+│   │       └── health/
+│   │           ├── health_module.py
+│   │           ├── health_controller.py    # GET /health, GET /health/protected
+│   │           ├── health_service.py        # HealthCheckService + MemoryHealthIndicator
+│   │           └── health_dto.py
+│   ├── shared/                    # used by more than one module
+│   │   ├── guards/api_key_guard.py    # ApiKeyGuard(CanActivate)
+│   │   └── services/  pipes/  interceptors/  filters/  middleware/  decorators/  dto/    # empty, ready for your code
+│   └── templates/                 # non-Python assets
+│       └── email/
 └── tests/
     ├── unit/health_service_spec.py
     └── e2e/app_e2e_spec.py
 ```
 
-This is a one-folder-per-feature layout under `src/`, using
-underscore-suffixed file names (see
-[the note on file names](/#a-note-on-file-names)).
+The layout is modular: each folder under `src/` has one job, so a project can grow from this starting point without being
+reorganised. File names use underscore suffixes (see [the note on file names](/#a-note-on-file-names)), and imports are
+absolute from the project root (`from src.app.modules.health.health_module import HealthModule`).
+
+### Where things go
+
+| Folder | Holds | Create it with |
+|---|---|---|
+| `src/app/` | The root module, which imports every feature module, plus the app-level controller and service | `austial new` |
+| `src/app/modules/<feature>/` | One feature: its module, controller, service, DTOs and entities. Every feature module hangs off the root module, so they live under it | `austial g resource <name>` |
+| `src/shared/guards/`, `pipes/`, `interceptors/`, `filters/`, `decorators/` | Cross-cutting pieces used by several modules | `austial g guard roles --shared` |
+| `src/shared/services/` | Services several modules use (a mailer, a clock, an audit helper) | `austial g service mailer --shared` |
+| `src/shared/dto/` | DTOs more than one module returns or accepts | by hand |
+| `src/templates/` | Non-Python assets such as `email/welcome.html`. It is not a Python package | by hand |
+
+Two rules keep the structure healthy as it grows:
+
+- **Shared means two or more modules.** Start code inside the feature that uses it, and move it to `src/shared/` when a second
+  module needs it.
+- **A shared service is still a provider.** Generating `mailer_service.py` does not register it. List it in a module's `providers`
+  (and `exports`) like any other provider.
+
+Add more top-level folders as the app needs them, for example `src/config/` (typed settings), `src/database/`
+(entities and migrations), `src/jobs/` or `src/events/`, and follow the same one-folder-per-concern rule.
+
+<Callout type="info">
+  **Existing projects keep working.** Projects created before this layout have a flat `src/app_module.py` and
+  `src/modules/`. The CLI finds and patches whichever layout the project has (`src/app/app_module.py` with `src/app/modules/`,
+  or the flat one), generated imports follow it (a project that already has a `src/modules/` folder keeps using it), and `austial graph`, `austial repl` and `austial build` default to the right root
+  module. Move to the modular layout whenever you like: create `src/app/`, move `app_module.py`, `app_controller.py`,
+  `app_service.py` and `modules/` into it, and update their imports.
+</Callout>
 
 ## Running the app
 
@@ -151,7 +185,7 @@ uv run uvicorn src.main:app --reload
 ```
 
 `austial serve` just locates your project root (by walking up for
-`src/app_module.py`), puts it on `sys.path`, and calls
+`src/app/app_module.py`), puts it on `sys.path`, and calls
 `uvicorn.run("src.main:app", reload=True)` for you.
 
 ## The bootstrap file
@@ -160,10 +194,10 @@ Every Austial app boots from `src/main.py`:
 
 ```python
 from austial import AustialFactory
-from austial.common.exceptions import AllExceptionsFilter
+from austial.common.filters import AllExceptionsFilter
 from austial.common.pipes import ValidationPipe
 
-from .app_module import AppModule
+from src.app.app_module import AppModule
 
 
 def _build():

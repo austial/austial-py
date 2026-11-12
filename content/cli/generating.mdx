@@ -4,9 +4,11 @@ title: Generating Resources
 
 # Generating Resources
 
-Every schematic writes into `src/modules/<snake_case_name>/`, following the
+Every schematic writes into `src/app/modules/<snake_case_name>/` (`src/modules/` in projects with the older flat
+layout), following the
 same one-folder-per-feature convention the rest of the framework uses (see
-[Modules](/overview/modules)).
+[Modules](/overview/modules)). Pieces that several modules use go to `src/shared/` instead:
+see [Shared code](#shared-code).
 
 ## `module` / `controller` / `service`
 
@@ -17,7 +19,7 @@ a full feature:
 austial generate module cats
 ```
 ```python
-# src/modules/cats/cats_module.py
+# src/app/modules/cats/cats_module.py
 @Module()
 class CatsModule:
     pass
@@ -27,7 +29,7 @@ class CatsModule:
 austial generate controller cats
 ```
 ```python
-# src/modules/cats/cats_controller.py
+# src/app/modules/cats/cats_controller.py
 @Controller("cats")
 class CatsController:
     @Get()
@@ -39,7 +41,7 @@ class CatsController:
 austial generate service cats
 ```
 ```python
-# src/modules/cats/cats_service.py
+# src/app/modules/cats/cats_service.py
 @Injectable()
 class CatsService:
     pass
@@ -54,8 +56,8 @@ array — see [App module patching](#app-module-patching) below.
 One file each, with a working skeleton:
 
 ```bash
-austial generate guard auth            # src/modules/auth/auth_guard.py          -> class AuthGuard(CanActivate)
-austial generate pipe slugify          # src/modules/slugify/slugify_pipe.py     -> class SlugifyPipe(PipeTransform)
+austial generate guard auth            # src/app/modules/auth/auth_guard.py      -> class AuthGuard(CanActivate)
+austial generate pipe slugify          # src/app/modules/slugify/slugify_pipe.py -> class SlugifyPipe(PipeTransform)
 austial generate interceptor timing    # .../timing_interceptor.py               -> class TimingInterceptor(NestInterceptor)
 austial generate filter database       # .../database_filter.py                  -> class DatabaseFilter(ExceptionFilter), @Catch(HttpException)
 austial generate middleware audit      # .../audit_middleware.py                 -> class AuditMiddleware(NestMiddleware)
@@ -68,19 +70,39 @@ austial generate class money           # .../money.py                           
 austial generate provider mailer       # same as `service`
 ```
 
-A name may carry a path, which becomes the folder structure under `src/modules/`:
+A name may carry a path, which becomes the folder structure under `src/app/modules/`:
 
 ```bash
 austial generate guard auth/api-key
-# src/modules/auth/api_key/api_key_guard.py       (every folder gets an __init__.py)
+# src/app/modules/auth/api_key/api_key_guard.py       (every folder gets an __init__.py)
 
 austial generate guard auth/api-key --flat
-# src/modules/auth/api_key_guard.py               (no folder for the file itself)
+# src/app/modules/auth/api_key_guard.py               (no folder for the file itself)
 ```
 
 These schematics create only the file; they don't register anything in a module. Reference the class where you use
 it (`@UseGuards(AuthGuard)`, `providers=[...]`, `{"provide": APP_GUARD, "useClass": AuthGuard}`). Existing files are
 never overwritten.
+
+## Shared code
+
+Add `--shared` to put a cross-cutting piece in `src/shared/` instead of a feature folder. The file is always flat, in a folder named
+after its kind:
+
+```bash
+austial generate guard roles --shared        # src/shared/guards/roles_guard.py
+austial generate pipe slugify --shared       # src/shared/pipes/slugify_pipe.py
+austial generate interceptor timing --shared # src/shared/interceptors/timing_interceptor.py
+austial generate filter domain --shared      # src/shared/filters/domain_filter.py
+austial generate middleware request-id --shared    # src/shared/middleware/request_id_middleware.py
+austial generate decorator roles --shared    # src/shared/decorators/roles_decorator.py
+austial generate service mailer --shared     # src/shared/services/mailer_service.py
+```
+
+A name may carry a path, which becomes a subfolder (`austial g pipe auth/slug --shared` writes `src/shared/pipes/auth/slug_pipe.py`).
+Every folder gets an `__init__.py`. `--shared` applies to `guard`, `pipe`, `interceptor`, `filter`, `middleware`, `decorator`, `service`
+and `provider`, and cannot be combined with `--flat`. Like the other component schematics it only creates the file: register a shared
+service in a module's `providers` and `exports` yourself.
 
 ## Libraries and extra applications
 
@@ -111,7 +133,7 @@ austial generate resource cats
 generates a complete feature module:
 
 ```
-src/modules/cats/
+src/app/modules/cats/
 ├── __init__.py
 ├── cats_module.py
 ├── cats_controller.py
@@ -233,9 +255,9 @@ generated names before committing.
 ## App module patching
 
 `module` and `resource` both call the same text-based patcher
-(`register_module`) against your project's `src/app_module.py`:
+(`register_module`) against your project's `src/app/app_module.py`:
 
-1. Inserts `from src.modules.cats.cats_module import CatModule` into the
+1. Inserts `from src.app.modules.cats.cats_module import CatModule` into the
    existing same-package import block, re-sorted alphabetically.
 2. Appends `CatModule` into the `imports=[...]` array literal on the
    `@Module(...)` decorator.
