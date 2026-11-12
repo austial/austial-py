@@ -122,13 +122,13 @@ my-app/
 │   ├── app/
 │   │   ├── app_module.py        # root @Module(...): imports, controllers, providers, configure()
 │   │   ├── app_controller.py      # GET / -> {"message": "Hello from my-app, built with Austial!"}
-│   │   └── app_service.py
-│   ├── modules/                   # one folder per feature
-│   │   └── health/
-│   │       ├── health_module.py
-│   │       ├── health_controller.py    # GET /health, GET /health/protected
-│   │       ├── health_service.py        # HealthCheckService + MemoryHealthIndicator
-│   │       └── health_dto.py
+│   │   ├── app_service.py
+│   │   └── modules/               # one folder per feature
+│   │       └── health/
+│   │           ├── health_module.py
+│   │           ├── health_controller.py    # GET /health, GET /health/protected
+│   │           ├── health_service.py        # HealthCheckService + MemoryHealthIndicator
+│   │           └── health_dto.py
 │   ├── shared/                    # used by more than one module
 │   │   ├── guards/api_key_guard.py    # ApiKeyGuard(CanActivate)
 │   │   └── services/  pipes/  interceptors/  filters/  decorators/  dto/    # empty, ready for your code
@@ -141,14 +141,14 @@ my-app/
 
 The layout is modular: each folder under `src/` has one job, so a project can grow from this starting point without being
 reorganised. File names use underscore suffixes (see [the note on file names](/#a-note-on-file-names)), and imports are
-absolute from the project root (`from src.modules.health.health_module import HealthModule`).
+absolute from the project root (`from src.app.modules.health.health_module import HealthModule`).
 
 ### Where things go
 
 | Folder | Holds | Create it with |
 |---|---|---|
 | `src/app/` | The root module, which imports every feature module, plus the app-level controller and service | `austial new` |
-| `src/modules/<feature>/` | One feature: its module, controller, service, DTOs and entities | `austial g resource <name>` |
+| `src/app/modules/<feature>/` | One feature: its module, controller, service, DTOs and entities. Every feature module hangs off the root module, so they live under it | `austial g resource <name>` |
 | `src/shared/guards/`, `pipes/`, `interceptors/`, `filters/`, `decorators/` | Cross-cutting pieces used by several modules | `austial g guard roles --shared` |
 | `src/shared/services/` | Services several modules use (a mailer, a clock, an audit helper) | `austial g service mailer --shared` |
 | `src/shared/dto/` | DTOs more than one module returns or accepts | by hand |
@@ -165,10 +165,11 @@ Add more top-level folders as the app needs them, for example `src/config/` (typ
 (entities and migrations), `src/jobs/` or `src/events/`, and follow the same one-folder-per-concern rule.
 
 <Callout type="info">
-  **Existing projects keep working.** Projects created before this layout have a flat `src/app_module.py`. The CLI
-  finds and patches whichever of `src/app/app_module.py` or `src/app_module.py` the project has, and `austial graph`,
-  `austial repl` and `austial build` default to it. Move to the modular layout whenever you like: create `src/app/`, move
-  `app_module.py`, `app_controller.py` and `app_service.py` into it, and update their imports.
+  **Existing projects keep working.** Projects created before this layout have a flat `src/app_module.py` and
+  `src/modules/`. The CLI finds and patches whichever layout the project has (`src/app/app_module.py` with `src/app/modules/`,
+  or the flat one), generated imports follow it, and `austial graph`, `austial repl` and `austial build` default to the right root
+  module. Move to the modular layout whenever you like: create `src/app/`, move `app_module.py`, `app_controller.py`,
+  `app_service.py` and `modules/` into it, and update their imports.
 </Callout>
 
 ## Running the app

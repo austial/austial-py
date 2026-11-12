@@ -80,8 +80,8 @@ because Node resolves modules by explicit relative path strings. Python's
 literal file `health.controller.py` isn't importable via a normal `import`
 statement. So Austial uses underscore suffixes instead: `health_controller.py`,
 `health_service.py`, `health_module.py`, `health_dto.py`. The directory
-layout is one folder per feature under `src/modules/`, with the root module in `src/app/`, shared code in `src/shared/`, and
-non-Python assets in `src/templates/`.
+layout is one folder per feature under `src/app/modules/`, next to the root module in `src/app/`, with shared code in
+`src/shared/` and non-Python assets in `src/templates/`.
 
 ## What's not (yet) implemented
 

@@ -4,7 +4,8 @@ title: Generating Resources
 
 # Generating Resources
 
-Every schematic writes into `src/modules/<snake_case_name>/`, following the
+Every schematic writes into `src/app/modules/<snake_case_name>/` (`src/modules/` in projects with the older flat
+layout), following the
 same one-folder-per-feature convention the rest of the framework uses (see
 [Modules](/overview/modules)). Pieces that several modules use go to `src/shared/` instead:
 see [Shared code](#shared-code).
@@ -18,7 +19,7 @@ a full feature:
 austial generate module cats
 ```
 ```python
-# src/modules/cats/cats_module.py
+# src/app/modules/cats/cats_module.py
 @Module()
 class CatsModule:
     pass
@@ -28,7 +29,7 @@ class CatsModule:
 austial generate controller cats
 ```
 ```python
-# src/modules/cats/cats_controller.py
+# src/app/modules/cats/cats_controller.py
 @Controller("cats")
 class CatsController:
     @Get()
@@ -40,7 +41,7 @@ class CatsController:
 austial generate service cats
 ```
 ```python
-# src/modules/cats/cats_service.py
+# src/app/modules/cats/cats_service.py
 @Injectable()
 class CatsService:
     pass
@@ -55,8 +56,8 @@ array — see [App module patching](#app-module-patching) below.
 One file each, with a working skeleton:
 
 ```bash
-austial generate guard auth            # src/modules/auth/auth_guard.py          -> class AuthGuard(CanActivate)
-austial generate pipe slugify          # src/modules/slugify/slugify_pipe.py     -> class SlugifyPipe(PipeTransform)
+austial generate guard auth            # src/app/modules/auth/auth_guard.py          -> class AuthGuard(CanActivate)
+austial generate pipe slugify          # src/app/modules/slugify/slugify_pipe.py     -> class SlugifyPipe(PipeTransform)
 austial generate interceptor timing    # .../timing_interceptor.py               -> class TimingInterceptor(NestInterceptor)
 austial generate filter database       # .../database_filter.py                  -> class DatabaseFilter(ExceptionFilter), @Catch(HttpException)
 austial generate middleware audit      # .../audit_middleware.py                 -> class AuditMiddleware(NestMiddleware)
@@ -69,14 +70,14 @@ austial generate class money           # .../money.py                           
 austial generate provider mailer       # same as `service`
 ```
 
-A name may carry a path, which becomes the folder structure under `src/modules/`:
+A name may carry a path, which becomes the folder structure under `src/app/modules/`:
 
 ```bash
 austial generate guard auth/api-key
-# src/modules/auth/api_key/api_key_guard.py       (every folder gets an __init__.py)
+# src/app/modules/auth/api_key/api_key_guard.py       (every folder gets an __init__.py)
 
 austial generate guard auth/api-key --flat
-# src/modules/auth/api_key_guard.py               (no folder for the file itself)
+# src/app/modules/auth/api_key_guard.py               (no folder for the file itself)
 ```
 
 These schematics create only the file; they don't register anything in a module. Reference the class where you use
@@ -132,7 +133,7 @@ austial generate resource cats
 generates a complete feature module:
 
 ```
-src/modules/cats/
+src/app/modules/cats/
 ├── __init__.py
 ├── cats_module.py
 ├── cats_controller.py
@@ -256,7 +257,7 @@ generated names before committing.
 `module` and `resource` both call the same text-based patcher
 (`register_module`) against your project's `src/app/app_module.py`:
 
-1. Inserts `from src.modules.cats.cats_module import CatModule` into the
+1. Inserts `from src.app.modules.cats.cats_module import CatModule` into the
    existing same-package import block, re-sorted alphabetically.
 2. Appends `CatModule` into the `imports=[...]` array literal on the
    `@Module(...)` decorator.
