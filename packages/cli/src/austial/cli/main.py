@@ -56,7 +56,7 @@ _SCHEMATICS = {
 _FLAT_SCHEMATICS = set(COMPONENT_KINDS)
 
 # Schematics that accept `--shared` (cross-cutting pieces that live in `src/shared/` rather than a feature folder).
-_SHARED_SCHEMATICS = {*SHARED_FOLDERS, "service", "provider"}
+_SHARED_SCHEMATICS = {*SHARED_FOLDERS, "provider"}
 
 # `nest g` short aliases.
 _ALIASES = {

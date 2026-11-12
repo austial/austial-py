@@ -94,6 +94,16 @@ def app_module_ref(root: Path) -> str:
     return APP_MODULE_REFS[1] if legacy else APP_MODULE_REFS[0]
 
 
+def ensure_packages(directory: Path, root: Path) -> None:
+    """Writes an ``__init__.py`` into `directory` and every parent below ``<root>/src``, so each folder on the way
+    to a generated file is importable (existing files are left alone)."""
+    src = root / "src"
+    for folder in (directory, *directory.parents):
+        if folder == src:
+            break
+        write_file(folder / "__init__.py", "")
+
+
 def modules_dir(root: Path) -> Path:
     """Where feature modules live: ``src/app/modules/`` in the modular layout, ``src/modules/`` in the older flat one.
     An existing folder wins; for a project with neither yet, the root module's layout decides."""

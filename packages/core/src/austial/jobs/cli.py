@@ -12,9 +12,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import importlib
-import importlib.util
 import json
 import signal
+from pathlib import Path
 from typing import Any
 
 import typer
@@ -46,13 +46,12 @@ def _resolve_module(path: str) -> type:
 
 
 def _default_module_path() -> str:
-    """The project's root module: ``src/app/app_module.py`` (the layout `austial new` writes), else the older flat
-    ``src/app_module.py``."""
-    try:
-        modular = importlib.util.find_spec("src.app.app_module") is not None
-    except (ImportError, ValueError):
-        modular = False
-    return "src.app.app_module:AppModule" if modular else "src.app_module:AppModule"
+    """The project's root module: ``src/app/app_module.py`` (the layout `austial new` writes), or the older flat
+    ``src/app_module.py`` when that is all the current directory has. Looks at files, not imports: a console script
+    doesn't put the working directory on ``sys.path`` until the module is imported."""
+    src = Path("src")
+    legacy_only = (src / "app_module.py").exists() and not (src / "app" / "app_module.py").exists()
+    return "src.app_module:AppModule" if legacy_only else "src.app.app_module:AppModule"
 
 
 def _bootstrap(module_cls: type) -> tuple[JobQueue, Worker, JobRegistry]:

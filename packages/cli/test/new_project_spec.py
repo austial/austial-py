@@ -79,7 +79,7 @@ def test_new_project_uses_the_modular_layout(tmp_path):
     assert (src / "app" / "modules" / "health" / "health_module.py").exists()
     assert not (src / "modules").exists()  # feature modules live under src/app/
     assert (src / "shared" / "guards" / "api_key_guard.py").exists()
-    for folder in ("guards", "services", "pipes", "interceptors", "filters", "decorators", "dto"):
+    for folder in ("guards", "services", "pipes", "interceptors", "filters", "middleware", "decorators", "dto"):
         assert (src / "shared" / folder / "__init__.py").exists(), folder
     assert (src / "templates" / "email" / ".gitkeep").exists()
     assert not (src / "app" / "modules" / "health" / "guards").exists()  # the guard moved to shared/

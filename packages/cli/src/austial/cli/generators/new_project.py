@@ -7,10 +7,11 @@ from pathlib import Path
 
 from austial.cli.generators.agent_files import link_agent_files
 from austial.cli.generators.base import render, write_file
+from austial.cli.generators.component_gen import SHARED_FOLDERS
 from austial.cli.naming import to_kebab_case
 
-# Folders created under src/shared/ (each an importable package). `austial g <kind> <name> --shared` fills them.
-SHARED_FOLDERS_SCAFFOLD = ("guards", "services", "pipes", "interceptors", "filters", "decorators", "dto")
+# Folders created under src/shared/ (each an importable package): one per `--shared` kind, plus dto/.
+SHARED_FOLDERS_SCAFFOLD = (*SHARED_FOLDERS.values(), "dto")
 
 
 def create_new_project(

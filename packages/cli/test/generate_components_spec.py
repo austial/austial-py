@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +13,7 @@ import pytest
 from typer.testing import CliRunner
 
 from austial.cli.generators import COMPONENT_KINDS, create_new_project, generate_component
+from austial.cli.generators.base import app_module_file, app_module_ref, find_project_root, modules_dir, modules_package
 from austial.cli.main import app
 
 runner = CliRunner(env={"COLUMNS": "400"})  # keep long paths on one line so assertions can match them
@@ -225,13 +227,10 @@ def test_cli_shared_flag_validation(project: Path) -> None:
 def _to_flat_layout(root: Path) -> None:
     """Turns a freshly scaffolded project into the older flat layout (src/app_module.py)."""
     src = root / "src"
-    import shutil
-
     shutil.move(str(src / "app" / "modules"), str(src / "modules"))
-    for path in (*src.rglob("*.py"),):
-        if "app" in path.relative_to(src).parts[:1]:
-            continue
-        path.write_text(path.read_text().replace("src.app.modules.", "src.modules."))
+    for path in src.rglob("*.py"):
+        if path.relative_to(src).parts[0] != "app":
+            path.write_text(path.read_text().replace("src.app.modules.", "src.modules."))
     for name in ("app_module.py", "app_controller.py", "app_service.py"):
         text = (src / "app" / name).read_text().replace("src.app.modules.", "src.modules.").replace("src.app.", "src.")
         (src / name).write_text(text)
@@ -240,8 +239,6 @@ def _to_flat_layout(root: Path) -> None:
 
 
 def test_legacy_flat_projects_still_work(project: Path) -> None:
-    from austial.cli.generators.base import app_module_file, app_module_ref, find_project_root
-
     _to_flat_layout(project)
 
     assert app_module_file(project) == project / "src" / "app_module.py"
@@ -255,8 +252,6 @@ def test_legacy_flat_projects_still_work(project: Path) -> None:
 
 
 def test_modular_project_resolves_to_the_app_folder(project: Path) -> None:
-    from austial.cli.generators.base import app_module_file, app_module_ref
-
     assert app_module_file(project) == project / "src" / "app" / "app_module.py"
     assert app_module_ref(project) == "src.app.app_module:AppModule"
 
@@ -266,8 +261,6 @@ def test_modular_project_resolves_to_the_app_folder(project: Path) -> None:
 
 
 def test_modules_dir_follows_the_layout(project: Path) -> None:
-    from austial.cli.generators.base import modules_dir, modules_package
-
     assert modules_dir(project) == project / "src" / "app" / "modules"
     assert modules_package(project) == "src.app.modules"
 
@@ -296,3 +289,32 @@ def test_resource_in_a_flat_project_keeps_src_modules_imports(project: Path) -> 
     assert "from src.modules.dogs.dogs_controller import DogsController" in module_file.read_text()
     assert "from src.modules.dogs.dogs_module import DogsModule" in (project / "src" / "app_module.py").read_text()
     assert not (project / "src" / "app").exists()
+
+
+def test_shared_service_paths_and_packages(project: Path) -> None:
+    result = runner.invoke(app, ["generate", "provider", "auth/mailer", "--shared"])
+
+    assert result.exit_code == 0
+    folder = project / "src" / "shared" / "services" / "auth"
+    assert (folder / "mailer_service.py").exists()
+    assert (folder / "__init__.py").exists() and (project / "src" / "shared" / "services" / "__init__.py").exists()
+    assert "class MailerService" in (folder / "mailer_service.py").read_text()
+
+
+def test_missing_parent_packages_are_created(project: Path) -> None:
+    shutil.rmtree(project / "src" / "app" / "modules")  # a hand-made project with no modules folder yet
+
+    result = runner.invoke(app, ["generate", "module", "cats"])
+
+    assert result.exit_code == 0
+    assert (project / "src" / "app" / "modules" / "__init__.py").exists()
+    assert (project / "src" / "app" / "modules" / "cats" / "__init__.py").exists()
+
+
+def test_mixed_project_keeps_using_its_existing_modules_folder(project: Path) -> None:
+    """A modular root module next to an existing src/modules/ (an in-between layout): new features go where the
+    existing ones are."""
+    shutil.move(str(project / "src" / "app" / "modules"), str(project / "src" / "modules"))
+
+    assert modules_dir(project) == project / "src" / "modules"
+    assert modules_package(project) == "src.modules"

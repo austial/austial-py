@@ -9,6 +9,7 @@ from pathlib import Path
 from austial.cli.generators.app_module_patcher import register_module
 from austial.cli.generators.base import (
     app_module_file,
+    ensure_packages,
     find_project_root,
     is_dry_run,
     modules_dir,
@@ -31,7 +32,7 @@ def generate_resource(name: str, *, project_root: Path | None = None) -> Path:
     }
 
     module_dir = modules_dir(root) / snake_name
-    write_file(module_dir / "__init__.py", "")
+    ensure_packages(module_dir, root)
     write_file(module_dir / "dto" / "__init__.py", "")
     write_file(module_dir / "entities" / "__init__.py", "")
 

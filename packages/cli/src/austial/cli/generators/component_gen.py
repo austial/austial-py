@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from austial.cli.generators.base import find_project_root, modules_dir, render, write_file
+from austial.cli.generators.base import ensure_packages, find_project_root, modules_dir, render, write_file
 from austial.cli.naming import to_kebab_case, to_pascal_case, to_snake_case
 
 # kind -> (template, file suffix)
@@ -39,6 +39,7 @@ SHARED_FOLDERS: dict[str, str] = {
     "filter": "filters",
     "middleware": "middleware",
     "decorator": "decorators",
+    "service": "services",
 }
 
 
@@ -58,22 +59,13 @@ def generate_component(
         "constant_name": snake_name.upper(),
     }
 
-    src = root / "src"
-    if shared:
-        # Shared pieces are always flat: src/shared/guards/roles_guard.py (a name path adds subfolders).
-        base = src / "shared" / SHARED_FOLDERS[kind]
-        directory = base.joinpath(*(to_snake_case(f) for f in folders))
-    else:
-        base = modules_dir(root)
-        directory = base.joinpath(*(to_snake_case(f) for f in folders))
-        if not flat:
-            directory = directory / snake_name
+    # Shared pieces are always flat: src/shared/guards/roles_guard.py (a name path adds subfolders).
+    base = root / "src" / "shared" / SHARED_FOLDERS[kind] if shared else modules_dir(root)
+    directory = base.joinpath(*(to_snake_case(f) for f in folders))
+    if not shared and not flat:
+        directory = directory / snake_name
 
-    # Every folder between src/ and the file is a package.
-    for folder in (directory, *directory.parents):
-        if folder == src:
-            break
-        write_file(folder / "__init__.py", "")
+    ensure_packages(directory, root)
 
     file_name = f"{snake_name}_{suffix}.py" if suffix else f"{snake_name}.py"
     file_path = directory / file_name

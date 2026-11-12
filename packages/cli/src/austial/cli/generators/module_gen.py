@@ -7,6 +7,7 @@ from pathlib import Path
 from austial.cli.generators.app_module_patcher import register_module
 from austial.cli.generators.base import (
     app_module_file,
+    ensure_packages,
     find_project_root,
     is_dry_run,
     modules_dir,
@@ -24,7 +25,7 @@ def generate_module(name: str, *, project_root: Path | None = None) -> Path:
     ctx = {"snake_name": snake_name, "class_name": class_name, "kebab_name": to_kebab_case(name)}
 
     module_dir = modules_dir(root) / snake_name
-    write_file(module_dir / "__init__.py", "")
+    ensure_packages(module_dir, root)
     file_path = module_dir / f"{snake_name}_module.py"
     write_file(file_path, render("module/module.py.j2", **ctx))
 
