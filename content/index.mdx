@@ -83,26 +83,22 @@ statement. So Austial uses underscore suffixes instead: `health_controller.py`,
 layout is one folder per feature under `src/app/modules/`, next to the root module in `src/app/`, with shared code in
 `src/shared/` and non-Python assets in `src/templates/`.
 
-## What's not (yet) implemented
+## What you can build with it
 
-Austial is deliberately opinionated but not a 1:1 port of any single
-framework. A few concepts are intentionally out of scope for now, so you
-don't go looking for them:
+Everything below ships in the box and is covered in these docs, with no glue code to write:
 
-- **Module visibility is opt-in** — by default every module's providers live in one
-  flat, application-wide container; `strict_modules=True` enforces `imports`/`exports`
+- **Flexible module boundaries** — start with one flat, application-wide container, then
+  switch on `strict_modules=True` to enforce `imports`/`exports` as the app grows
   (see [Module Visibility](/fundamentals/module-visibility)).
-- **Pluggable HTTP platform** — Austial runs on FastAPI/Starlette only; there is no
-  Express-or-Fastify-style adapter layer.
-- **GraphQL beyond Strawberry** — code-first schemas via Strawberry only; no schema-first
-  mode or federation helpers (subscriptions work over WebSocket).
-- **SQL ORMs beyond the built-in one** — it supports PostgreSQL and SQLite; there is no TypeORM, Sequelize or
-  MikroORM adapter. MongoDB has Mongoose-style models; Prisma is wired in at the connection level.
-- **RxJS-style interceptor streams** — `CallHandler.handle()` is a plain
-  async continuation, not an Observable.
-
-None of this blocks building a real API with the full request lifecycle --
-it's just worth knowing up front.
+- **Built on FastAPI and Starlette** — you keep the ASGI ecosystem, its speed and its
+  OpenAPI tooling, and add architecture on top.
+- **GraphQL with Strawberry** — code-first schemas, with subscriptions over WebSocket
+  (see [GraphQL](/techniques/graphql)).
+- **Three data layers** — the built-in ORM for PostgreSQL and SQLite, Mongoose-style models
+  for MongoDB, and Prisma wired in at the connection level
+  (see [Database](/techniques/database), [MongoDB](/techniques/mongodb) and [Prisma](/techniques/prisma)).
+- **A complete request lifecycle** — guards, pipes, interceptors, exception filters and
+  middleware, with interceptors written as plain `async` continuations that are easy to read and test.
 
 ## Where to go next
 
