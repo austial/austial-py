@@ -36,7 +36,7 @@
 
 # Austial
 
-Austial gives Python the exact developer experience of [NestJS](https://nestjs.com/):
+Austial is a NestJS-like framework for Python. It gives Python the exact developer experience of [NestJS](https://nestjs.com/):
 decorator-driven modules/controllers/providers, real constructor-based
 dependency injection, the full request lifecycle (guards, pipes,
 interceptors, exception filters, middleware), a config layer, a database
