@@ -58,7 +58,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # Optional integrations: each is imported lazily and raises an install hint when its library is missing.
-strawberry = ["strawberry-graphql[fastapi]>=0.250"]      # austial.graphql
+strawberry = ["strawberry-graphql[fastapi]>=0.341.2"]      # austial.graphql
 socketio = ["python-socketio>=5.11"]                     # austial.websockets: SocketIoAdapter
 lambda = ["mangum>=0.17"]                                # create_lambda_handler
 
