@@ -54,7 +54,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-pymongo = ["pymongo>=4.9"]                               # austial.mongo
+pymongo = ["pymongo>=4.20.0"]                               # austial.mongo
 
 [project.urls]
 Homepage = "https://github.com/austial/austial-py"
