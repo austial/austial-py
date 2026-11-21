@@ -43,7 +43,7 @@ classifiers = [
 dependencies = [
     "jinja2>=3.1.0",
     "rich>=13.7.0",
-    "typer>=0.27.3",
+    "typer>=0.29.2",
 ]
 
 [project.urls]

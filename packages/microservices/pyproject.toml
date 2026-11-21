@@ -50,7 +50,7 @@ dependencies = [
 [project.optional-dependencies]
 # Each broker library is imported lazily and raises an install hint when missing.
 redis = ["redis>=5.0"]
-nats = ["nats-py>=2.9"]
+nats = ["nats-py>=2.17.0"]
 kafka = ["aiokafka>=0.11"]
 mqtt = ["aiomqtt>=2.3"]
 rabbitmq = ["aio-pika>=9.4"]
